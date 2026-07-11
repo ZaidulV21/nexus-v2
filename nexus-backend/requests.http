@@ -1,0 +1,248 @@
+### Nexus API - manual test flow
+### Requires the "REST Client" VS Code extension (humao.rest-client).
+### Run requests top to bottom with the "Send Request" link that appears
+### above each one. Variables auto-chain between requests.
+
+@baseUrl = http://localhost:4000/api
+
+### 0. Health check (no auth)
+GET http://localhost:4000/health
+
+### 1. Admin login (use the credentials printed by `npm run prisma:seed`)
+# @name login
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@nexus.local",
+  "password": "ChangeMe123!",
+  "actorType": "ADMIN"
+}
+
+###
+@adminToken = {{login.response.body.data.token}}
+
+### 2. View the category tree (public - powers the enquiry wizard)
+GET {{baseUrl}}/categories
+
+### 3. View active services (public)
+# @name listServices
+GET {{baseUrl}}/services
+
+###
+@serviceId1 = {{listServices.response.body.data[0].id}}
+@serviceId2 = {{listServices.response.body.data[1].id}}
+
+### 4. Submit a multi-service public enquiry (no auth - this is the wizard submission)
+# @name createLead
+POST {{baseUrl}}/leads
+Content-Type: application/json
+
+{
+  "contactName": "John Doe",
+  "phone": "9999999999",
+  "email": "john.doe@example.com",
+  "companyName": "Doe Enterprises",
+  "services": [
+    { "serviceId": "{{serviceId1}}", "questionnaireAnswers": { "notes": "Need a full interior redo" } },
+    { "serviceId": "{{serviceId2}}", "questionnaireAnswers": { "notes": "Rooftop solar, 5kW" } }
+  ]
+}
+
+###
+@leadId = {{createLead.response.body.data.lead.id}}
+
+### 5. Admin views the lead (should show 2 independent Lead Services)
+GET {{baseUrl}}/leads/{{leadId}}
+Authorization: Bearer {{adminToken}}
+
+### 6. Progress a Lead Service through the workflow (repeat with different toStatus values)
+# First get a leadServiceId from step 5's response, then:
+@leadServiceId = REPLACE_WITH_LEAD_SERVICE_ID_FROM_STEP_5
+
+PATCH {{baseUrl}}/leads/{{leadServiceId}}/status
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "toStatus": "QUALIFIED"
+}
+
+### 7. Create a Quotation for the Lead
+# @name createQuotation
+POST {{baseUrl}}/quotations
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "leadId": "{{leadId}}",
+  "discount": 0,
+  "transportation": 500,
+  "installation": 1000,
+  "items": [
+    { "serviceId": "{{serviceId1}}", "description": "Interior Design - Full Package", "quantity": 1, "unitPrice": 150000, "taxRate": 18 },
+    { "serviceId": "{{serviceId2}}", "description": "Solar 5kW Installation", "quantity": 1, "unitPrice": 250000, "taxRate": 12 }
+  ]
+}
+
+###
+@quotationId = {{createQuotation.response.body.data.quotation.id}}
+@quotationVersionId = {{createQuotation.response.body.data.version.id}}
+
+### 8. Approve the Quotation (Admin records how the client confirmed)
+POST {{baseUrl}}/quotations/versions/{{quotationVersionId}}/approve
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "approvalMethod": "PHONE"
+}
+
+### 9. Convert the Lead to a Client (generates login + emails credentials)
+# @name convertClient
+POST {{baseUrl}}/clients/convert/{{leadId}}
+Authorization: Bearer {{adminToken}}
+
+###
+@clientId = {{convertClient.response.body.data.id}}
+
+### 10. Create a Project from the converted Lead
+# @name createProject
+POST {{baseUrl}}/projects
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "leadId": "{{leadId}}",
+  "clientId": "{{clientId}}",
+  "quotationVersionId": "{{quotationVersionId}}"
+}
+
+###
+@projectId = {{createProject.response.body.data.id}}
+
+### 11. View the Project - check the derived aggregateStatus field
+GET {{baseUrl}}/projects/{{projectId}}
+Authorization: Bearer {{adminToken}}
+
+### 12. Issue an Invoice against the Project (freeform - GST per line item)
+POST {{baseUrl}}/invoices
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "projectId": "{{projectId}}",
+  "clientId": "{{clientId}}",
+  "label": "Advance Payment",
+  "items": [
+    { "description": "Advance - 40%", "quantity": 1, "unitPrice": 160000, "hsnSacCode": "9954", "taxRate": 18 }
+  ]
+}
+
+### 13. Check the Project's financial summary
+GET {{baseUrl}}/invoices/project/{{projectId}}/financial-summary
+Authorization: Bearer {{adminToken}}
+
+### 14. Global search (try a phone number, lead number, or service name)
+GET {{baseUrl}}/search?q=9999999999
+Authorization: Bearer {{adminToken}}
+
+### 15. Admin dashboard summary
+GET {{baseUrl}}/dashboard/admin/summary
+Authorization: Bearer {{adminToken}}
+
+### =========================================================================
+### EDGE CASE / "BREAK IT ON PURPOSE" CHECKS
+### These are NOT covered by the golden path above. Run after step 15.
+### Each one should FAIL with the stated error - if it succeeds instead,
+### that module has a real bug.
+### =========================================================================
+
+### E1. Illegal status transition - should reject with 400
+### (Try jumping straight to COMPLETED from a fresh Lead Service status of NEW)
+PATCH {{baseUrl}}/leads/{{leadServiceId}}/status
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "toStatus": "COMPLETED"
+}
+
+### E2. Multi-service enquiry atomicity - one bad serviceId should roll back the WHOLE lead
+### Expect: 400 error, and NO new Lead created (check via GET /leads afterward - count unchanged)
+POST {{baseUrl}}/leads
+Content-Type: application/json
+
+{
+  "contactName": "Atomicity Test",
+  "phone": "8888888888",
+  "services": [
+    { "serviceId": "{{serviceId1}}" },
+    { "serviceId": "00000000-0000-0000-0000-000000000000" }
+  ]
+}
+
+### E3. Converting an already-converted Lead - should reject with 409
+POST {{baseUrl}}/clients/convert/{{leadId}}
+Authorization: Bearer {{adminToken}}
+
+### E4. Completing a Project while services are NOT all COMPLETED - should reject with 400
+POST {{baseUrl}}/projects/{{projectId}}/complete
+Authorization: Bearer {{adminToken}}
+
+### E5. Cancelling an invoice - number must be PRESERVED, not deleted or reused
+# Replace {{invoiceId}} with the id from step 12's response
+@invoiceId = REPLACE_WITH_INVOICE_ID_FROM_STEP_12
+
+PATCH {{baseUrl}}/invoices/{{invoiceId}}/cancel
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "reason": "Testing cancellation - invoice number should survive this"
+}
+
+### E5b. Fetch the same invoice - confirm status=CANCELLED, invoiceNumber unchanged, record still exists
+GET {{baseUrl}}/invoices/{{invoiceId}}
+Authorization: Bearer {{adminToken}}
+
+### E6. Overpayment - should reject if payment would exceed outstanding balance
+POST {{baseUrl}}/invoices/{{invoiceId}}/payments
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "amount": 99999999,
+  "method": "Bank Transfer"
+}
+
+### E7. Quotation revision - old version must remain readable after revising
+POST {{baseUrl}}/quotations/{{quotationId}}/revise
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "transportation": 500,
+  "installation": 1000,
+  "items": [
+    { "serviceId": "{{serviceId1}}", "description": "Interior Design - REVISED scope", "quantity": 1, "unitPrice": 175000, "taxRate": 18 }
+  ]
+}
+
+### E7b. Fetch the quotation - confirm BOTH version 1 and version 2 appear in the response
+GET {{baseUrl}}/quotations/{{quotationId}}
+Authorization: Bearer {{adminToken}}
+
+### E8. Unauthenticated request to an Admin route - should reject with 401
+GET {{baseUrl}}/leads
+
+### E9. Client trying to read another Client's conversation - should reject with 403
+### (Requires two client logins to test properly - see checklist doc for setup)
+
+### E10. Public route should NOT leak inactive/disabled services
+### First disable a service as Admin, then confirm it disappears from the public list:
+PATCH {{baseUrl}}/services/{{serviceId2}}/disable
+Authorization: Bearer {{adminToken}}
+
+###
+GET {{baseUrl}}/services

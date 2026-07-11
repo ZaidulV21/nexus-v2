@@ -1,0 +1,20 @@
+version: '3.8'
+
+# Local Postgres for development only. Run: docker compose up -d
+# Matches the DATABASE_URL in .env.example - no changes needed to connect.
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: nexus-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: nexus
+      POSTGRES_PASSWORD: nexus_password
+      POSTGRES_DB: nexus_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - nexus_pgdata:/var/lib/postgresql/data
+
+volumes:
+  nexus_pgdata:
