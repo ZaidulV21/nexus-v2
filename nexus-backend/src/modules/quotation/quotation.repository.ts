@@ -19,6 +19,8 @@ export const quotationRepository = {
     return prisma.quotation.findFirst({
       where: { id },
       include: {
+        lead: { include: { client: true } },
+        client: true,
         versions: { include: { items: true, approvals: true }, orderBy: { versionNumber: 'desc' } },
       },
     });

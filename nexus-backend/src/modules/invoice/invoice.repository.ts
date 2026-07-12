@@ -26,7 +26,23 @@ export const invoiceRepository = {
   findById(id: string) {
     return prisma.invoice.findFirst({
       where: { id },
-      include: { items: true, payments: true },
+      include: {
+        items: true,
+        payments: true,
+        client: true,
+        project: {
+          include: {
+            lead: true,
+            projectServices: {
+              include: {
+                assignedQuotationVersion: {
+                  include: { quotation: true, approvals: true },
+                },
+              },
+            },
+          },
+        },
+      },
     });
   },
 
@@ -39,7 +55,12 @@ export const invoiceRepository = {
   async list(pagination: PaginationParams) {
     const where: any = {};
     if (pagination.search) {
-      where.invoiceNumber = { contains: pagination.search, mode: 'insensitive' };
+      where.OR = [
+        { invoiceNumber: { contains: pagination.search, mode: 'insensitive' } },
+        { client: { contactName: { contains: pagination.search, mode: 'insensitive' } } },
+        { client: { companyName: { contains: pagination.search, mode: 'insensitive' } } },
+        { project: { projectNumber: { contains: pagination.search, mode: 'insensitive' } } },
+      ];
     }
     const [items, total] = await Promise.all([
       prisma.invoice.findMany({
@@ -47,7 +68,22 @@ export const invoiceRepository = {
         skip: pagination.skip,
         take: pagination.take,
         orderBy: { [pagination.sortBy || 'issuedAt']: pagination.sortOrder },
-        include: { payments: true },
+        include: {
+          payments: true,
+          client: true,
+          project: {
+            include: {
+              lead: true,
+              projectServices: {
+                include: {
+                  assignedQuotationVersion: {
+                    include: { quotation: true, approvals: true },
+                  },
+                },
+              },
+            },
+          },
+        },
       }),
       prisma.invoice.count({ where }),
     ]);
@@ -55,11 +91,33 @@ export const invoiceRepository = {
   },
 
   listForProject(projectId: string) {
-    return prisma.invoice.findMany({ where: { projectId }, include: { items: true, payments: true } });
+    return prisma.invoice.findMany({
+      where: { projectId },
+      include: {
+        items: true,
+        payments: true,
+        client: true,
+        project: {
+          include: {
+            lead: true,
+            projectServices: {
+              include: {
+                assignedQuotationVersion: {
+                  include: { quotation: true, approvals: true },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
   },
 
   listForClient(clientId: string) {
-    return prisma.invoice.findMany({ where: { clientId }, include: { items: true, payments: true } });
+    return prisma.invoice.findMany({
+      where: { clientId },
+      include: { items: true, payments: true, client: true, project: true },
+    });
   },
 };
 

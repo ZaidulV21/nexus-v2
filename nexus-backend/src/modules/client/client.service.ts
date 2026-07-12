@@ -40,24 +40,37 @@ export const clientService = {
       throw new ValidationError('Lead must have an email address on file to create a Client login');
     }
 
+    const existingEmailClient = await clientRepository.findByEmail(lead.email);
+    if (existingEmailClient) {
+      throw new ConflictError('A client account already exists for this email address');
+    }
+
     const tempPassword = generateTempPassword();
     const passwordHash = await bcrypt.hash(tempPassword, env.bcryptSaltRounds);
 
-    const client = await runInTransaction(async (tx) => {
-      const created = await clientRepository.create(
-        {
-          companyName: lead.companyName ?? undefined,
-          contactName: lead.contactName,
-          phone: lead.phone,
-          email: lead.email as string,
-          passwordHash,
-          sourceLeadId: lead.id,
-        },
-        tx
-      );
-      await leadRepository.markConverted(lead.id, tx);
-      return created;
-    });
+    let client;
+    try {
+      client = await runInTransaction(async (tx) => {
+        const created = await clientRepository.create(
+          {
+            companyName: lead.companyName ?? undefined,
+            contactName: lead.contactName,
+            phone: lead.phone,
+            email: lead.email as string,
+            passwordHash,
+            sourceLeadId: lead.id,
+          },
+          tx
+        );
+        await leadRepository.markConverted(lead.id, tx);
+        return created;
+      });
+    } catch (error: any) {
+      if (error?.code === 'P2002') {
+        throw new ConflictError('A client account already exists for this email address');
+      }
+      throw error;
+    }
 
     await timelineService.recordEvent({
       entityType: 'LEAD',

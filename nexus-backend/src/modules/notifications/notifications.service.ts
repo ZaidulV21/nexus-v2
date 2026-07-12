@@ -6,6 +6,8 @@ const KNOWN_EVENT_TYPES = new Set([
   'lead.created',
   'quotation.sent',
   'quotation.approved',
+  'quotation.accepted',
+  'quotation.rejected',
   'client.account.created',
   'invoice.issued',
   'invoice.cancelled',

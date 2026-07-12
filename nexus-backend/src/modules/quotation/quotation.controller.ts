@@ -42,6 +42,36 @@ export const quotationController = {
     }
   },
 
+  async send(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.user) throw new UnauthorizedError();
+      const quotation = await quotationService.send(req.params.id, req.user.id, !!req.body?.resend);
+      return ok(res, quotation);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async accept(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.user || req.user.type !== 'CLIENT') throw new UnauthorizedError();
+      const result = await quotationService.accept(req.params.id, req.user.id);
+      return created(res, result);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async reject(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.user || req.user.type !== 'CLIENT') throw new UnauthorizedError();
+      const quotation = await quotationService.reject(req.params.id, req.user.id, req.body?.reason);
+      return ok(res, quotation);
+    } catch (err) {
+      next(err);
+    }
+  },
+
   async getById(req: Request, res: Response, next: NextFunction) {
     try {
       const quotation = await quotationService.getById(req.params.id);

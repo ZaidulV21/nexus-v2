@@ -4,6 +4,7 @@ import { leadRepository } from '../lead/lead.repository';
 import { timelineService } from '../timeline/timeline.service';
 import { auditService } from '../audit/audit.service';
 import { notificationsService } from '../notifications/notifications.service';
+import { projectService } from '../project/project.service';
 import { CreateQuotationInput, ReviseQuotationInput, ApproveQuotationInput, QuotationItemInput } from './quotation.types';
 import { NotFoundError, ValidationError } from '../../core/errors/AppError';
 
@@ -179,6 +180,136 @@ export const quotationService = {
     });
 
     return quotationRepository.findById(version.quotationId);
+  },
+
+  async send(quotationId: string, actorUserId: string, resend = false) {
+    const quotation = await quotationRepository.findById(quotationId);
+    if (!quotation) throw new NotFoundError('Quotation not found');
+    if (quotation.status !== 'APPROVED') {
+      throw new ValidationError('Only approved quotations can be sent to the client');
+    }
+
+    const recipient = quotation.client?.email ?? quotation.lead?.email;
+    if (!recipient) throw new ValidationError('Quotation has no client email recipient');
+
+    await timelineService.recordEvent({
+      entityType: 'QUOTATION',
+      entityId: quotationId,
+      eventType: resend ? 'QUOTATION_RESENT' : 'QUOTATION_SENT',
+      description: `Quotation ${quotation.quotationNumber} ${resend ? 'resent' : 'sent'} to client`,
+      actorUserId,
+    });
+
+    await auditService.recordAudit({
+      entityType: 'QUOTATION',
+      entityId: quotationId,
+      action: resend ? 'RESEND' : 'SEND',
+      afterState: { quotationId, recipient },
+      actorUserId,
+    });
+
+    await notificationsService.emitEvent({
+      eventType: 'quotation.sent',
+      entityType: 'QUOTATION',
+      entityId: quotationId,
+      recipient,
+      payload: { quotationId, quotationNumber: quotation.quotationNumber, resend },
+    });
+
+    return quotationRepository.findById(quotationId);
+  },
+
+  async accept(quotationId: string, clientId: string) {
+    const quotation = await quotationRepository.findById(quotationId);
+    if (!quotation) throw new NotFoundError('Quotation not found');
+    if (quotation.status !== 'APPROVED') {
+      throw new ValidationError('Only approved quotations can be accepted');
+    }
+
+    const quotationClientId = quotation.clientId ?? quotation.lead?.client?.id;
+    if (!quotationClientId || quotationClientId !== clientId) {
+      throw new ValidationError('Quotation does not belong to this Client');
+    }
+
+    const activeVersion = quotation.versions.find((version: any) => version.id === quotation.activeVersionId) ?? quotation.versions[0];
+    if (!activeVersion || !activeVersion.approvals?.length) {
+      throw new ValidationError('Only internally approved quotation versions can be accepted');
+    }
+
+    const project = await projectService.create(
+      {
+        leadId: quotation.leadId,
+        clientId,
+        quotationVersionId: activeVersion.id,
+      },
+      clientId
+    );
+
+    await timelineService.recordEvent({
+      entityType: 'QUOTATION',
+      entityId: quotationId,
+      eventType: 'QUOTATION_ACCEPTED',
+      description: `Quotation ${quotation.quotationNumber} accepted by client`,
+      actorUserId: clientId,
+      metadata: { projectId: project.id },
+    });
+
+    await auditService.recordAudit({
+      entityType: 'QUOTATION',
+      entityId: quotationId,
+      action: 'CLIENT_ACCEPT',
+      afterState: { quotationId, projectId: project.id },
+      actorUserId: clientId,
+    });
+
+    await notificationsService.emitEvent({
+      eventType: 'quotation.accepted',
+      entityType: 'QUOTATION',
+      entityId: quotationId,
+      recipient: quotation.client?.email ?? quotation.lead?.email ?? 'client-on-file',
+      payload: { quotationId, projectId: project.id },
+    });
+
+    return { quotation: await quotationRepository.findById(quotationId), project };
+  },
+
+  async reject(quotationId: string, clientId: string, reason?: string) {
+    const quotation = await quotationRepository.findById(quotationId);
+    if (!quotation) throw new NotFoundError('Quotation not found');
+
+    const quotationClientId = quotation.clientId ?? quotation.lead?.client?.id;
+    if (!quotationClientId || quotationClientId !== clientId) {
+      throw new ValidationError('Quotation does not belong to this Client');
+    }
+
+    await quotationRepository.updateStatus(quotationId, 'REJECTED');
+
+    await timelineService.recordEvent({
+      entityType: 'QUOTATION',
+      entityId: quotationId,
+      eventType: 'QUOTATION_REJECTED',
+      description: `Quotation ${quotation.quotationNumber} rejected by client${reason ? `: ${reason}` : ''}`,
+      actorUserId: clientId,
+    });
+
+    await auditService.recordAudit({
+      entityType: 'QUOTATION',
+      entityId: quotationId,
+      action: 'CLIENT_REJECT',
+      beforeState: { status: quotation.status },
+      afterState: { status: 'REJECTED', reason },
+      actorUserId: clientId,
+    });
+
+    await notificationsService.emitEvent({
+      eventType: 'quotation.rejected',
+      entityType: 'QUOTATION',
+      entityId: quotationId,
+      recipient: quotation.client?.email ?? quotation.lead?.email ?? 'client-on-file',
+      payload: { quotationId, reason },
+    });
+
+    return quotationRepository.findById(quotationId);
   },
 
   async getById(id: string) {

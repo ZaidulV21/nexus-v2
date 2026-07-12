@@ -5,6 +5,7 @@ jest.mock('../client.repository', () => ({
   clientRepository: {
     create: jest.fn(),
     findBySourceLeadId: jest.fn(),
+    findByEmail: jest.fn(),
     findById: jest.fn(),
     update: jest.fn(),
     list: jest.fn(),
@@ -40,6 +41,23 @@ describe('clientService.convertLeadToClient', () => {
     await expect(clientService.convertLeadToClient('lead1')).rejects.toThrow('already been converted');
   });
 
+  it('rejects converting a Lead when the email already belongs to another client', async () => {
+    (leadRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'lead1',
+      email: 'john@example.com',
+      contactName: 'John',
+      phone: '999',
+      companyName: null,
+    });
+    (clientRepository.findBySourceLeadId as jest.Mock).mockResolvedValue(null);
+    (clientRepository.findByEmail as jest.Mock).mockResolvedValue({ id: 'existing-client' });
+    (leadServiceRepository.listForLead as jest.Mock).mockResolvedValue([{ status: 'APPROVED' }]);
+
+    await expect(clientService.convertLeadToClient('lead1', 'admin1')).rejects.toThrow(
+      'already exists for this email address'
+    );
+  });
+
   it('converts a Lead with an approved service and creates a Client', async () => {
     (leadRepository.findById as jest.Mock).mockResolvedValue({
       id: 'lead1',
@@ -49,6 +67,7 @@ describe('clientService.convertLeadToClient', () => {
       companyName: null,
     });
     (clientRepository.findBySourceLeadId as jest.Mock).mockResolvedValue(null);
+    (clientRepository.findByEmail as jest.Mock).mockResolvedValue(null);
     (leadServiceRepository.listForLead as jest.Mock).mockResolvedValue([{ status: 'APPROVED' }]);
     (clientRepository.create as jest.Mock).mockResolvedValue({
       id: 'client1',

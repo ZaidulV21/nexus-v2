@@ -1,0 +1,59 @@
+import { Outlet, NavLink } from 'react-router-dom';
+import { LayoutDashboard, FolderKanban, Receipt, MessageSquare, FolderOpen } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { ROUTES } from '@/routes/routes';
+import { NexusLogo } from '@/components/layout/NexusLogo';
+import { Avatar } from '@/components/ui/Avatar';
+
+const PORTAL_NAV = [
+  { label: 'Dashboard', icon: LayoutDashboard, to: ROUTES.portal.dashboard },
+  { label: 'My Projects', icon: FolderKanban, to: ROUTES.portal.projects },
+  { label: 'Invoices', icon: Receipt, to: ROUTES.portal.invoices },
+  { label: 'Messages', icon: MessageSquare, to: ROUTES.portal.messages },
+  { label: 'Documents', icon: FolderOpen, to: ROUTES.portal.documents },
+];
+
+/** Client Portal is intentionally a separate, lighter shell from the Admin
+ *  app - fewer nav items, no command palette/audit logs, matching the PRD's
+ *  distinction between Admin and Client-facing surfaces. */
+export function PortalLayout() {
+  return (
+    <div className="flex min-h-screen flex-col bg-canvas">
+      <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-border bg-surface/80 px-4 backdrop-blur-md lg:px-6">
+        <div className="flex items-center gap-2">
+          <NexusLogo className="h-5 w-5" />
+          <span className="text-sm font-semibold text-ink">Nexus</span>
+          <span className="ml-1 rounded-sm bg-canvas px-1.5 py-0.5 text-xs text-ink-faint ring-1 ring-border">
+            Client Portal
+          </span>
+        </div>
+        <Avatar name="Client User" size={28} />
+      </header>
+
+      <nav className="sticky top-14 z-20 flex gap-1 overflow-x-auto border-b border-border bg-surface px-4 py-2 lg:px-6">
+        {PORTAL_NAV.map((item) => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            end={item.to === ROUTES.portal.dashboard}
+            className={({ isActive }) =>
+              cn(
+                'flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                isActive ? 'bg-accent-subtle text-accent' : 'text-ink-muted hover:bg-canvas hover:text-ink'
+              )
+            }
+          >
+            <item.icon className="h-3.5 w-3.5" strokeWidth={1.75} />
+            {item.label}
+          </NavLink>
+        ))}
+      </nav>
+
+      <main className="flex-1 px-4 py-6 lg:px-6 lg:py-8">
+        <div className="mx-auto max-w-6xl">
+          <Outlet />
+        </div>
+      </main>
+    </div>
+  );
+}

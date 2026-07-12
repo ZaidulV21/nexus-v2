@@ -7,11 +7,63 @@ import { auditService } from '../audit/audit.service';
 import { statusEngineService } from '../status-engine/statusEngine.service';
 import { computeAggregateStatus } from './project.aggregateStatus';
 import { CreateProjectInput, AddServiceToProjectInput, UpdateProjectServiceStatusInput } from './project.types';
-import { NotFoundError, ValidationError } from '../../core/errors/AppError';
+import { ConflictError, NotFoundError, ValidationError } from '../../core/errors/AppError';
+
+const COMPLETED_SERVICE_STATUSES = new Set(['COMPLETED', 'CLOSED', 'ARCHIVED']);
+
+function completionPercentage(status: string) {
+  return COMPLETED_SERVICE_STATUSES.has(status) ? 100 : 0;
+}
+
+function buildQuotationSummaries(projectServices: any[]) {
+  const byQuotationId = new Map<string, any>();
+  projectServices.forEach((projectService) => {
+    const version = projectService.assignedQuotationVersion;
+    const quotation = version?.quotation;
+    if (!version || !quotation || byQuotationId.has(quotation.id)) return;
+
+    byQuotationId.set(quotation.id, {
+      id: quotation.id,
+      quotationNumber: quotation.quotationNumber,
+      status: quotation.status,
+      activeVersionId: quotation.activeVersionId,
+      versionId: version.id,
+      versionNumber: version.versionNumber,
+      grandTotal: version.grandTotal,
+      approvalStatus: version.approvals?.length ? 'APPROVED' : quotation.status,
+    });
+  });
+  return Array.from(byQuotationId.values());
+}
 
 async function attachAggregateStatus(project: any) {
   if (!project) return project;
-  return { ...project, aggregateStatus: computeAggregateStatus(project.projectServices || []) };
+  const projectServices = project.projectServices || [];
+  const statusHistory = await projectRepository.listStatusHistoryForServiceIds(projectServices.map((ps: any) => ps.id));
+  const historyByServiceId = new Map<string, any[]>();
+  statusHistory.forEach((entry: any) => {
+    const entries = historyByServiceId.get(entry.entityId) || [];
+    entries.push(entry);
+    historyByServiceId.set(entry.entityId, entries);
+  });
+
+  const completedServices = projectServices.filter((ps: any) => COMPLETED_SERVICE_STATUSES.has(ps.status)).length;
+  const totalServices = projectServices.length;
+  const enrichedServices = projectServices.map((ps: any) => ({
+    ...ps,
+    progressPercentage: completionPercentage(ps.status),
+    statusHistory: historyByServiceId.get(ps.id) || [],
+  }));
+
+  return {
+    ...project,
+    projectServices: enrichedServices,
+    quotations: buildQuotationSummaries(projectServices),
+    aggregateStatus: computeAggregateStatus(projectServices),
+    completedServices,
+    totalServices,
+    completionPercentage: totalServices ? Math.round((completedServices / totalServices) * 100) : 0,
+  };
 }
 
 export const projectService = {
@@ -20,6 +72,11 @@ export const projectService = {
   async create(input: CreateProjectInput, actorUserId: string) {
     const lead = await leadRepository.findById(input.leadId);
     if (!lead) throw new NotFoundError('Lead not found');
+
+    const existingProject = await projectRepository.findByLeadAndClient(input.leadId, input.clientId);
+    if (existingProject) {
+      throw new ConflictError('A Project already exists for this Lead and Client');
+    }
 
     const leadServices = await leadServiceRepository.listForLead(input.leadId);
     const approvedServices = leadServices.filter((ls) =>
@@ -141,7 +198,7 @@ export const projectService = {
 
   async list(pagination: any) {
     const { items, total } = await projectRepository.list(pagination);
-    const withStatus = items.map((p: any) => ({ ...p, aggregateStatus: computeAggregateStatus(p.projectServices || []) }));
+    const withStatus = await Promise.all(items.map(attachAggregateStatus));
     return { items: withStatus, total };
   },
 

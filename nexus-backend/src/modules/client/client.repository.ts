@@ -14,6 +14,10 @@ export const clientRepository = {
     return prisma.client.findFirst({ where: { sourceLeadId: leadId } });
   },
 
+  findByEmail(email: string) {
+    return prisma.client.findFirst({ where: { email, deletedAt: null } });
+  },
+
   findById(id: string) {
     return prisma.client.findFirst({ where: { id, deletedAt: null } });
   },

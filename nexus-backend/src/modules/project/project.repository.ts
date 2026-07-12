@@ -7,17 +7,55 @@ export const projectRepository = {
     return tx.project.create({ data });
   },
 
+  findByLeadAndClient(leadId: string, clientId: string) {
+    return prisma.project.findFirst({
+      where: { leadId, clientId, deletedAt: null },
+      include: {
+        projectServices: {
+          include: {
+            service: true,
+            assignedQuotationVersion: { include: { quotation: true, approvals: true } },
+          },
+        },
+        client: true,
+        lead: true,
+      },
+    });
+  },
+
   findById(id: string) {
     return prisma.project.findFirst({
       where: { id, deletedAt: null },
-      include: { projectServices: { include: { service: true } }, client: true },
+      include: {
+        projectServices: {
+          include: {
+            service: true,
+            leadService: { include: { service: true } },
+            assignedQuotationVersion: {
+              include: {
+                quotation: true,
+                items: true,
+                approvals: true,
+              },
+            },
+          },
+        },
+        client: true,
+        lead: true,
+      },
     });
   },
 
   async list(pagination: PaginationParams) {
     const where: any = { deletedAt: null };
     if (pagination.search) {
-      where.projectNumber = { contains: pagination.search, mode: 'insensitive' };
+      where.OR = [
+        { projectNumber: { contains: pagination.search, mode: 'insensitive' } },
+        { client: { contactName: { contains: pagination.search, mode: 'insensitive' } } },
+        { client: { companyName: { contains: pagination.search, mode: 'insensitive' } } },
+        { lead: { leadNumber: { contains: pagination.search, mode: 'insensitive' } } },
+        { lead: { contactName: { contains: pagination.search, mode: 'insensitive' } } },
+      ];
     }
     const [items, total] = await Promise.all([
       prisma.project.findMany({
@@ -25,17 +63,43 @@ export const projectRepository = {
         skip: pagination.skip,
         take: pagination.take,
         orderBy: { [pagination.sortBy || 'createdAt']: pagination.sortOrder },
-        include: { projectServices: true },
+        include: {
+          projectServices: {
+            include: {
+              service: true,
+              assignedQuotationVersion: { include: { quotation: true, approvals: true } },
+            },
+          },
+          client: true,
+          lead: true,
+        },
       }),
       prisma.project.count({ where }),
     ]);
     return { items, total };
   },
 
+  listStatusHistoryForServiceIds(projectServiceIds: string[]) {
+    if (projectServiceIds.length === 0) return Promise.resolve([]);
+    return prisma.statusTransitionLog.findMany({
+      where: { entityType: 'PROJECT_SERVICE', entityId: { in: projectServiceIds } },
+      orderBy: { createdAt: 'asc' },
+    });
+  },
+
   listForClient(clientId: string) {
     return prisma.project.findMany({
       where: { clientId, deletedAt: null },
-      include: { projectServices: { include: { service: true } } },
+      include: {
+        projectServices: {
+          include: {
+            service: true,
+            assignedQuotationVersion: { include: { quotation: true, approvals: true } },
+          },
+        },
+        client: true,
+        lead: true,
+      },
     });
   },
 

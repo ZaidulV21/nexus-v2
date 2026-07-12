@@ -30,6 +30,16 @@ export const invoiceController = {
     }
   },
 
+  async send(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.user) throw new UnauthorizedError();
+      const invoice = await invoiceService.send(req.params.id, req.user.id, !!req.body?.resend);
+      return ok(res, invoice);
+    } catch (err) {
+      next(err);
+    }
+  },
+
   async recordPayment(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.user) throw new UnauthorizedError();
@@ -56,6 +66,15 @@ export const invoiceController = {
       const pagination = parsePagination(req);
       const { items, total } = await invoiceService.list(pagination);
       return paginated(res, items, { page: pagination.page, pageSize: pagination.pageSize, total });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async listForProject(req: Request, res: Response, next: NextFunction) {
+    try {
+      const invoices = await invoiceService.listForProject(req.params.projectId);
+      return ok(res, invoices);
     } catch (err) {
       next(err);
     }

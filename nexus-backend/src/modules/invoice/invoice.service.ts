@@ -21,11 +21,64 @@ function computeInvoiceTotals(items: InvoiceItemInput[]) {
   return { computedItems, subtotal, gstAmount, grandTotal: subtotal + gstAmount };
 }
 
+function getRelatedQuotation(invoice: any) {
+  const versions = invoice.project?.projectServices
+    ?.map((projectService: any) => projectService.assignedQuotationVersion)
+    .filter(Boolean);
+  const version = versions?.[0];
+  const quotation = version?.quotation;
+  if (!version || !quotation) return null;
+
+  return {
+    id: quotation.id,
+    quotationNumber: quotation.quotationNumber,
+    status: quotation.status,
+    versionId: version.id,
+    versionNumber: version.versionNumber,
+    grandTotal: version.grandTotal,
+    approvalStatus: version.approvals?.length ? 'APPROVED' : quotation.status,
+  };
+}
+
+function enrichInvoice(invoice: any) {
+  const paidAmount = invoice.payments?.reduce((sum: number, payment: any) => sum + Number(payment.amount), 0) ?? 0;
+  const grandTotal = Number(invoice.grandTotal);
+  const outstandingAmount = invoice.status === 'CANCELLED' ? 0 : grandTotal - paidAmount;
+  const displayStatus =
+    invoice.status === 'CANCELLED'
+      ? 'CANCELLED'
+      : outstandingAmount <= 0
+        ? 'PAID'
+        : paidAmount > 0
+          ? 'PARTIALLY PAID'
+          : invoice.status;
+
+  return {
+    ...invoice,
+    dueDate: null,
+    paidAmount,
+    outstandingAmount,
+    displayStatus,
+    relatedQuotation: getRelatedQuotation(invoice),
+  };
+}
+
 export const invoiceService = {
   // Freeform: any number of invoices per project, any label/amount.
   async create(input: CreateInvoiceInput, actorUserId: string) {
     const project = await projectRepository.findById(input.projectId);
     if (!project) throw new NotFoundError('Project not found');
+    if (project.clientId !== input.clientId) {
+      throw new ValidationError('Invoice client must match the Project client');
+    }
+
+    const hasApprovedQuotation = project.projectServices?.some((projectService: any) => {
+      const version = projectService.assignedQuotationVersion;
+      return version?.quotation?.status === 'APPROVED' || version?.approvals?.length > 0;
+    });
+    if (!hasApprovedQuotation) {
+      throw new ValidationError('Invoices can only be generated for Projects linked to an approved quotation');
+    }
 
     const { computedItems, subtotal, gstAmount, grandTotal } = computeInvoiceTotals(input.items);
 
@@ -75,7 +128,47 @@ export const invoiceService = {
       payload: { invoiceNumber: invoice.invoiceNumber, grandTotal },
     });
 
-    return invoiceRepository.findById(invoice.id);
+    return this.getById(invoice.id);
+  },
+
+  async send(id: string, actorUserId: string, resend = false) {
+    const invoice = await invoiceRepository.findById(id);
+    if (!invoice) throw new NotFoundError('Invoice not found');
+    if (invoice.status === 'CANCELLED') throw new ValidationError('Cannot send a cancelled invoice');
+
+    const recipient = invoice.client?.email;
+    if (!recipient) throw new ValidationError('Invoice client does not have an email address');
+
+    await timelineService.recordEvent({
+      entityType: 'INVOICE',
+      entityId: id,
+      eventType: resend ? 'INVOICE_RESENT' : 'INVOICE_SENT',
+      description: `Invoice ${invoice.invoiceNumber} ${resend ? 'resent' : 'sent'} to client`,
+      actorUserId,
+    });
+
+    await auditService.recordAudit({
+      entityType: 'INVOICE',
+      entityId: id,
+      action: resend ? 'RESEND' : 'SEND',
+      afterState: { invoiceId: id, recipient },
+      actorUserId,
+    });
+
+    await notificationsService.emitEvent({
+      eventType: 'invoice.issued',
+      entityType: 'INVOICE',
+      entityId: id,
+      recipient,
+      payload: {
+        invoiceId: id,
+        invoiceNumber: invoice.invoiceNumber,
+        grandTotal: invoice.grandTotal,
+        resend,
+      },
+    });
+
+    return this.getById(id);
   },
 
   // Never deletes, never mutates financial fields - only ever flips status.
@@ -91,6 +184,15 @@ export const invoiceService = {
       entityId: id,
       eventType: 'INVOICE_CANCELLED',
       description: `Invoice ${invoice.invoiceNumber} cancelled: ${input.reason}`,
+      actorUserId,
+    });
+
+    await auditService.recordAudit({
+      entityType: 'INVOICE',
+      entityId: id,
+      action: 'CANCEL',
+      beforeState: invoice,
+      afterState: cancelled,
       actorUserId,
     });
 
@@ -136,6 +238,14 @@ export const invoiceService = {
       actorUserId,
     });
 
+    await auditService.recordAudit({
+      entityType: 'INVOICE',
+      entityId: invoiceId,
+      action: 'PAYMENT_RECORDED',
+      afterState: payment,
+      actorUserId,
+    });
+
     await notificationsService.emitEvent({
       eventType: 'payment.recorded',
       entityType: 'INVOICE',
@@ -150,15 +260,24 @@ export const invoiceService = {
   async getById(id: string) {
     const invoice = await invoiceRepository.findById(id);
     if (!invoice) throw new NotFoundError('Invoice not found');
-    return invoice;
+    return enrichInvoice(invoice);
   },
 
   async list(pagination: any) {
-    return invoiceRepository.list(pagination);
+    const { items, total } = await invoiceRepository.list(pagination);
+    return { items: items.map(enrichInvoice), total };
   },
 
   async listForClient(clientId: string) {
-    return invoiceRepository.listForClient(clientId);
+    const invoices = await invoiceRepository.listForClient(clientId);
+    return invoices.map(enrichInvoice);
+  },
+
+  async listForProject(projectId: string) {
+    const project = await projectRepository.findById(projectId);
+    if (!project) throw new NotFoundError('Project not found');
+    const invoices = await invoiceRepository.listForProject(projectId);
+    return invoices.map(enrichInvoice);
   },
 
   // Project Total / Total Invoiced / Total Paid / Outstanding - always
