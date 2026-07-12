@@ -1,5 +1,5 @@
 import { useParams } from 'react-router-dom';
-import { CheckCircle2, PencilLine } from 'lucide-react';
+import { CheckCircle2, PencilLine, Send } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent } from '@/components/ui/Card';
@@ -10,7 +10,9 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { EntityTimeline } from '@/components/common/EntityTimeline';
 import { EntityAuditLog } from '@/components/common/EntityAuditLog';
 import { useDisclosure } from '@/hooks/useDisclosure';
-import { useQuotation } from '@/queries/useQuotations';
+import { useToast } from '@/hooks/useToast';
+import { useQuotation, useSendQuotation } from '@/queries/useQuotations';
+import { ApiError } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { QuotationFormDrawer } from './components/QuotationFormDrawer';
 import { ApproveQuotationDialog } from './components/ApproveQuotationDialog';
@@ -20,6 +22,8 @@ export function QuotationDetailPage() {
   const { data: quotation, isLoading, isError, refetch } = useQuotation(id);
   const reviseModal = useDisclosure(false);
   const approveModal = useDisclosure(false);
+  const sendQuotation = useSendQuotation(id ?? '');
+  const { toast } = useToast();
 
   if (isLoading) {
     return (
@@ -36,6 +40,19 @@ export function QuotationDetailPage() {
 
   const activeVersion = quotation.versions.find((version) => version.id === quotation.activeVersionId) ?? quotation.versions[0];
 
+  async function handleSend(resend: boolean) {
+    try {
+      await sendQuotation.mutateAsync(resend);
+      toast({ title: resend ? 'Quotation resent' : 'Quotation sent', variant: 'success' });
+    } catch (err) {
+      toast({
+        title: resend ? 'Could not resend quotation' : 'Could not send quotation',
+        description: err instanceof ApiError ? err.message : 'Something went wrong.',
+        variant: 'danger',
+      });
+    }
+  }
+
   return (
     <div>
       <PageHeader
@@ -48,6 +65,15 @@ export function QuotationDetailPage() {
             </Button>
             <Button size="sm" onClick={approveModal.open} disabled={!activeVersion || quotation.status === 'APPROVED'}>
               <CheckCircle2 className="h-3.5 w-3.5" /> Approve
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => handleSend(quotation.status === 'SENT')}
+              disabled={quotation.status !== 'APPROVED' && quotation.status !== 'SENT'}
+              loading={sendQuotation.isPending}
+            >
+              <Send className="h-3.5 w-3.5" /> {quotation.status === 'SENT' ? 'Resend' : 'Send'}
             </Button>
           </div>
         }

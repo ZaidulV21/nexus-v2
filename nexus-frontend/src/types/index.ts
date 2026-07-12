@@ -164,7 +164,7 @@ export interface QuotationVersion {
   createdAt: string;
 }
 
-export type QuotationStatus = 'DRAFT' | 'SENT' | 'NEGOTIATION' | 'APPROVED' | 'REJECTED';
+export type QuotationStatus = 'DRAFT' | 'SENT' | 'NEGOTIATION' | 'APPROVED' | 'ACCEPTED' | 'REJECTED';
 
 export interface Quotation {
   id: string;

@@ -26,9 +26,11 @@ jest.mock('../../lead/lead.repository', () => ({
 jest.mock('../../timeline/timeline.service', () => ({ timelineService: { recordEvent: jest.fn() } }));
 jest.mock('../../audit/audit.service', () => ({ auditService: { recordAudit: jest.fn() } }));
 jest.mock('../../notifications/notifications.service', () => ({ notificationsService: { emitEvent: jest.fn() } }));
+jest.mock('../../project/project.service', () => ({ projectService: { create: jest.fn() } }));
 
 import { leadRepository } from '../../lead/lead.repository';
 import { quotationRepository, quotationVersionRepository } from '../quotation.repository';
+import { projectService } from '../../project/project.service';
 import { quotationService } from '../quotation.service';
 
 describe('quotationService.create - server-side total calculation', () => {
@@ -87,5 +89,55 @@ describe('quotationService.approve', () => {
     await expect(
       quotationService.approve('ver1', { approvalMethod: 'PHONE' }, 'admin1')
     ).rejects.toThrow('Only the active version');
+  });
+});
+
+describe('quotationService.send and accept', () => {
+  it('marks an approved quotation as sent before client actions are allowed', async () => {
+    (quotationRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'quo1',
+      quotationNumber: 'Q-00001',
+      status: 'APPROVED',
+      lead: { email: 'lead@example.com' },
+      client: null,
+    });
+
+    await quotationService.send('quo1', 'admin1');
+
+    expect(quotationRepository.updateStatus).toHaveBeenCalledWith('quo1', 'SENT', expect.any(Object));
+  });
+
+  it('creates a project only after the client accepts a sent quotation', async () => {
+    (quotationRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'quo1',
+      leadId: 'lead1',
+      clientId: 'client1',
+      quotationNumber: 'Q-00001',
+      status: 'SENT',
+      lead: { client: { id: 'client1' }, email: 'lead@example.com' },
+      client: { email: 'client@example.com' },
+      activeVersionId: 'ver1',
+      versions: [{ id: 'ver1', approvals: [{ id: 'ap1' }] }],
+    });
+    (projectService.create as jest.Mock).mockResolvedValue({ id: 'proj1' });
+    (quotationRepository.findById as jest.Mock).mockResolvedValueOnce({
+      id: 'quo1',
+      leadId: 'lead1',
+      clientId: 'client1',
+      quotationNumber: 'Q-00001',
+      status: 'SENT',
+      lead: { client: { id: 'client1' }, email: 'lead@example.com' },
+      client: { email: 'client@example.com' },
+      activeVersionId: 'ver1',
+      versions: [{ id: 'ver1', approvals: [{ id: 'ap1' }] }],
+    });
+
+    await quotationService.accept('quo1', 'client1');
+
+    expect(projectService.create).toHaveBeenCalledWith(
+      { leadId: 'lead1', clientId: 'client1', quotationVersionId: 'ver1' },
+      'client1'
+    );
+    expect(quotationRepository.updateStatus).toHaveBeenCalledWith('quo1', 'ACCEPTED');
   });
 });

@@ -20,7 +20,9 @@ export const queryKeys = {
   quotations: {
     all: ['quotations'] as const,
     list: (params: unknown) => ['quotations', 'list', params] as const,
+    clientList: (clientId: string, params: unknown) => ['quotations', 'client-list', clientId, params] as const,
     detail: (id: string) => ['quotations', 'detail', id] as const,
+    clientDetail: (id: string) => ['quotations', 'client-detail', id] as const,
   },
   projects: {
     all: ['projects'] as const,

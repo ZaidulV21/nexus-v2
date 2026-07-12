@@ -12,6 +12,19 @@ export interface AdminDashboardSummary {
   invoicesAwaitingFirstPayment: number;
 }
 
+export interface ClientDashboardProjectSummary {
+  id: string;
+  projectNumber: string;
+  aggregateStatus: string;
+  totalInvoiced: number;
+  totalPaid: number;
+}
+
+export interface ClientDashboardSummary {
+  projects: ClientDashboardProjectSummary[];
+}
+
 export const dashboardService = {
   getAdminSummary: () => api.get<AdminDashboardSummary>('/dashboard/admin/summary'),
+  getClientSummary: () => api.get<ClientDashboardSummary>('/dashboard/client/summary'),
 };

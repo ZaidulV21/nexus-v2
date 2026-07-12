@@ -25,3 +25,7 @@ export interface ReviseQuotationInput {
 export interface ApproveQuotationInput {
   approvalMethod: 'PHONE' | 'WHATSAPP' | 'EMAIL' | 'IN_PERSON';
 }
+
+export interface RequestQuotationRevisionInput {
+  reason: string;
+}

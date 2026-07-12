@@ -30,6 +30,14 @@ export interface ApproveQuotationInput {
   approvalMethod: 'PHONE' | 'WHATSAPP' | 'EMAIL' | 'IN_PERSON';
 }
 
+export interface RejectQuotationInput {
+  reason: string;
+}
+
+export interface RequestQuotationRevisionInput {
+  reason: string;
+}
+
 export const quotationService = {
   list: (params: QuotationListParams) =>
     api.getPaginated<Quotation>('/quotations', {
@@ -40,7 +48,21 @@ export const quotationService = {
       sortOrder: params.sortOrder,
     }),
   getById: (id: string) => api.get<Quotation>(`/quotations/${id}`),
+  getForClient: (id: string) => api.get<Quotation>(`/quotations/me/${id}`),
+  listForClient: (params: QuotationListParams) =>
+    api.getPaginated<Quotation>('/quotations/me', {
+      page: params.page,
+      pageSize: params.pageSize,
+      search: params.search,
+      sortBy: params.sortBy,
+      sortOrder: params.sortOrder,
+    }),
   create: (input: CreateQuotationInput) => api.post<Quotation>('/quotations', input),
   revise: (id: string, input: ReviseQuotationInput) => api.post<Quotation>(`/quotations/${id}/revise`, input),
   approve: (versionId: string, input: ApproveQuotationInput) => api.post<Quotation>(`/quotations/versions/${versionId}/approve`, input),
+  send: (id: string, resend = false) => api.post<Quotation>(`/quotations/${id}/send`, { resend }),
+  accept: (id: string) => api.post<{ quotation: Quotation; project: { id: string } }>(`/quotations/${id}/accept`, {}),
+  reject: (id: string, input: RejectQuotationInput) => api.post<Quotation>(`/quotations/${id}/reject`, input),
+  requestRevision: (id: string, input: RequestQuotationRevisionInput) =>
+    api.post<Quotation>(`/quotations/${id}/request-revision`, input),
 };

@@ -1,6 +1,13 @@
 import { Request, Response, NextFunction } from 'express';
 import { quotationService } from './quotation.service';
-import { createQuotationSchema, reviseQuotationSchema, approveQuotationSchema } from './quotation.validation';
+import {
+  createQuotationSchema,
+  reviseQuotationSchema,
+  approveQuotationSchema,
+  sendQuotationSchema,
+  rejectQuotationSchema,
+  requestQuotationRevisionSchema,
+} from './quotation.validation';
 import { ok, created, paginated } from '../../core/utils/response';
 import { parsePagination } from '../../core/utils/pagination';
 import { ValidationError, UnauthorizedError } from '../../core/errors/AppError';
@@ -45,7 +52,9 @@ export const quotationController = {
   async send(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.user) throw new UnauthorizedError();
-      const quotation = await quotationService.send(req.params.id, req.user.id, !!req.body?.resend);
+      const parsed = sendQuotationSchema.safeParse(req.body ?? {});
+      if (!parsed.success) throw new ValidationError('Invalid payload', parsed.error.flatten());
+      const quotation = await quotationService.send(req.params.id, req.user.id, !!parsed.data.resend);
       return ok(res, quotation);
     } catch (err) {
       next(err);
@@ -65,7 +74,21 @@ export const quotationController = {
   async reject(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.user || req.user.type !== 'CLIENT') throw new UnauthorizedError();
-      const quotation = await quotationService.reject(req.params.id, req.user.id, req.body?.reason);
+      const parsed = rejectQuotationSchema.safeParse(req.body);
+      if (!parsed.success) throw new ValidationError('Invalid payload', parsed.error.flatten());
+      const quotation = await quotationService.reject(req.params.id, req.user.id, parsed.data.reason);
+      return ok(res, quotation);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async requestRevision(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.user || req.user.type !== 'CLIENT') throw new UnauthorizedError();
+      const parsed = requestQuotationRevisionSchema.safeParse(req.body);
+      if (!parsed.success) throw new ValidationError('Invalid payload', parsed.error.flatten());
+      const quotation = await quotationService.requestRevision(req.params.id, req.user.id, parsed.data.reason);
       return ok(res, quotation);
     } catch (err) {
       next(err);
@@ -86,6 +109,27 @@ export const quotationController = {
       const pagination = parsePagination(req);
       const { items, total } = await quotationService.list(pagination);
       return paginated(res, items, { page: pagination.page, pageSize: pagination.pageSize, total });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async listForClient(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.user || req.user.type !== 'CLIENT') throw new UnauthorizedError();
+      const pagination = parsePagination(req);
+      const { items, total } = await quotationService.listForClient(req.user.id, pagination);
+      return paginated(res, items, { page: pagination.page, pageSize: pagination.pageSize, total });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async getForClient(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.user || req.user.type !== 'CLIENT') throw new UnauthorizedError();
+      const quotation = await quotationService.getForClient(req.params.id, req.user.id);
+      return ok(res, quotation);
     } catch (err) {
       next(err);
     }

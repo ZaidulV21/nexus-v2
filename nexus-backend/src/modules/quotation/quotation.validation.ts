@@ -22,3 +22,15 @@ export const reviseQuotationSchema = createQuotationSchema.omit({ leadId: true, 
 export const approveQuotationSchema = z.object({
   approvalMethod: z.enum(['PHONE', 'WHATSAPP', 'EMAIL', 'IN_PERSON']),
 });
+
+export const sendQuotationSchema = z.object({
+  resend: z.boolean().optional(),
+});
+
+export const rejectQuotationSchema = z.object({
+  reason: z.string().min(1, 'A reason is required to reject a quotation'),
+});
+
+export const requestQuotationRevisionSchema = z.object({
+  reason: z.string().min(1, 'A reason is required to request a revision'),
+});

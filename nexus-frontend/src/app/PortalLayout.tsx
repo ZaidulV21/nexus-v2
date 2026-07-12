@@ -1,12 +1,15 @@
-import { Outlet, NavLink } from 'react-router-dom';
-import { LayoutDashboard, FolderKanban, Receipt, MessageSquare, FolderOpen } from 'lucide-react';
+import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import { LayoutDashboard, FolderKanban, Receipt, MessageSquare, FolderOpen, FileText, LogOut } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ROUTES } from '@/routes/routes';
 import { NexusLogo } from '@/components/layout/NexusLogo';
 import { Avatar } from '@/components/ui/Avatar';
+import { Button } from '@/components/ui/Button';
+import { useAuth } from '@/app/AuthContext';
 
 const PORTAL_NAV = [
   { label: 'Dashboard', icon: LayoutDashboard, to: ROUTES.portal.dashboard },
+  { label: 'Quotations', icon: FileText, to: ROUTES.portal.quotations },
   { label: 'My Projects', icon: FolderKanban, to: ROUTES.portal.projects },
   { label: 'Invoices', icon: Receipt, to: ROUTES.portal.invoices },
   { label: 'Messages', icon: MessageSquare, to: ROUTES.portal.messages },
@@ -17,6 +20,16 @@ const PORTAL_NAV = [
  *  app - fewer nav items, no command palette/audit logs, matching the PRD's
  *  distinction between Admin and Client-facing surfaces. */
 export function PortalLayout() {
+  const { actor, logout } = useAuth();
+  const navigate = useNavigate();
+
+  function handleLogout() {
+    logout();
+    navigate(ROUTES.login, { replace: true });
+  }
+
+  const userName = actor?.email.split('@')[0] ?? 'Client';
+
   return (
     <div className="flex min-h-screen flex-col bg-canvas">
       <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-border bg-surface/80 px-4 backdrop-blur-md lg:px-6">
@@ -27,7 +40,17 @@ export function PortalLayout() {
             Client Portal
           </span>
         </div>
-        <Avatar name="Client User" size={28} />
+        <div className="flex items-center gap-2">
+          <div className="hidden text-right sm:block">
+            <p className="text-sm font-medium text-ink">{userName}</p>
+            <p className="text-xs text-ink-faint">Signed in</p>
+          </div>
+          <Avatar name={userName} size={28} />
+          <Button variant="secondary" size="sm" onClick={handleLogout} className="ml-1">
+            <LogOut className="h-3.5 w-3.5" />
+            Logout
+          </Button>
+        </div>
       </header>
 
       <nav className="sticky top-14 z-20 flex gap-1 overflow-x-auto border-b border-border bg-surface px-4 py-2 lg:px-6">

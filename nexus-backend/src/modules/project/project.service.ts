@@ -1,9 +1,11 @@
 import { runInTransaction } from '../../core/utils/transaction';
 import { projectRepository, projectServiceRepository } from './project.repository';
-import { leadRepository, leadServiceRepository } from '../lead/lead.repository';
+import { leadRepository } from '../lead/lead.repository';
 import { serviceRepository } from '../catalog/service.repository';
+import { quotationVersionRepository } from '../quotation/quotation.repository';
 import { timelineService } from '../timeline/timeline.service';
 import { auditService } from '../audit/audit.service';
+import { notificationsService } from '../notifications/notifications.service';
 import { statusEngineService } from '../status-engine/statusEngine.service';
 import { computeAggregateStatus } from './project.aggregateStatus';
 import { CreateProjectInput, AddServiceToProjectInput, UpdateProjectServiceStatusInput } from './project.types';
@@ -34,6 +36,16 @@ function buildQuotationSummaries(projectServices: any[]) {
     });
   });
   return Array.from(byQuotationId.values());
+}
+
+function uniqueServiceRecordsFromQuotationVersion(version: any): Array<{ serviceId: string }> {
+  const seen = new Set<string>();
+  return (version?.items ?? []).reduce((services: any[], item: any) => {
+    if (!item.serviceId || seen.has(item.serviceId)) return services;
+    seen.add(item.serviceId);
+    services.push({ serviceId: item.serviceId });
+    return services;
+  }, []);
 }
 
 async function attachAggregateStatus(project: any) {
@@ -67,23 +79,42 @@ async function attachAggregateStatus(project: any) {
 }
 
 export const projectService = {
-  // Converts an approved Lead into a Project, carrying over every approved
-  // Lead Service as its own independently-tracked Project Service.
+  // Converts an accepted quotation into a Project, copying the active
+  // quotation version's services into Project Services.
   async create(input: CreateProjectInput, actorUserId: string) {
+    if (!input.quotationVersionId) {
+      throw new ValidationError('A quotation version is required to create a Project');
+    }
+
     const lead = await leadRepository.findById(input.leadId);
     if (!lead) throw new NotFoundError('Lead not found');
 
-    const existingProject = await projectRepository.findByLeadAndClient(input.leadId, input.clientId);
+    const quotationVersion = await quotationVersionRepository.findById(input.quotationVersionId);
+    if (!quotationVersion || quotationVersion.quotation.leadId !== input.leadId) {
+      throw new ValidationError('Quotation version does not belong to this Lead');
+    }
+    if (!quotationVersion.isActive) {
+      throw new ValidationError('Only the active quotation version can be used to create a Project');
+    }
+
+    const quotation = quotationVersion.quotation;
+    if (quotation.status !== 'SENT') {
+      throw new ValidationError('Only sent quotations can be converted into a Project');
+    }
+
+    const existingProject = await projectRepository.findByQuotationVersionId(input.quotationVersionId);
     if (existingProject) {
+      throw new ConflictError('A Project already exists for this quotation version');
+    }
+
+    const existingProjectForLeadAndClient = await projectRepository.findByLeadAndClient(input.leadId, input.clientId);
+    if (existingProjectForLeadAndClient) {
       throw new ConflictError('A Project already exists for this Lead and Client');
     }
 
-    const leadServices = await leadServiceRepository.listForLead(input.leadId);
-    const approvedServices = leadServices.filter((ls) =>
-      ['APPROVED', 'PROJECT CREATED', 'IN PROGRESS', 'ON HOLD', 'COMPLETED', 'CLOSED', 'ARCHIVED'].includes(ls.status)
-    );
-    if (approvedServices.length === 0) {
-      throw new ValidationError('Lead has no approved services to convert into a Project');
+    const projectServicesFromQuotation = uniqueServiceRecordsFromQuotationVersion(quotationVersion);
+    if (projectServicesFromQuotation.length === 0) {
+      throw new ValidationError('Quotation version has no services to convert into a Project');
     }
 
     const result = await runInTransaction(async (tx) => {
@@ -95,9 +126,9 @@ export const projectService = {
 
       const projectServices = await projectServiceRepository.createMany(
         project.id,
-        approvedServices.map((ls) => ({
-          serviceId: ls.serviceId,
-          leadServiceId: ls.id,
+        projectServicesFromQuotation.map((serviceRecord: { serviceId: string }) => ({
+          serviceId: serviceRecord.serviceId,
+          leadServiceId: lead.leadServices?.find((leadService) => leadService.serviceId === serviceRecord.serviceId)?.id,
           assignedQuotationVersionId: input.quotationVersionId,
         })),
         tx
@@ -120,6 +151,19 @@ export const projectService = {
       action: 'CREATE',
       afterState: result,
       actorUserId,
+    });
+
+    await notificationsService.emitEvent({
+      eventType: 'project.created',
+      entityType: 'PROJECT',
+      entityId: result.project.id,
+      recipient: lead.email ?? 'client-on-file',
+      payload: {
+        projectId: result.project.id,
+        projectNumber: result.project.projectNumber,
+        quotationId: quotation.id,
+        quotationVersionId: input.quotationVersionId,
+      },
     });
 
     return this.getById(result.project.id);

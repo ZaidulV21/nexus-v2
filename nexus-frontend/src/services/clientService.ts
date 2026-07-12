@@ -21,6 +21,7 @@ export interface UpdateClientInput {
 // officially created", initiated from the Lead's own detail page.
 export const clientService = {
   convertLead: (leadId: string) => api.post<Client>(`/clients/convert/${leadId}`),
+  getCurrent: () => api.get<Client>('/clients/me'),
   list: (params: ClientListParams) =>
     api.getPaginated<Client>('/clients', {
       page: params.page,

@@ -23,6 +23,27 @@ export const projectRepository = {
     });
   },
 
+  findByQuotationVersionId(quotationVersionId: string) {
+    return prisma.project.findFirst({
+      where: {
+        deletedAt: null,
+        projectServices: {
+          some: { assignedQuotationVersionId: quotationVersionId },
+        },
+      },
+      include: {
+        projectServices: {
+          include: {
+            service: true,
+            assignedQuotationVersion: { include: { quotation: true, approvals: true } },
+          },
+        },
+        client: true,
+        lead: true,
+      },
+    });
+  },
+
   findById(id: string) {
     return prisma.project.findFirst({
       where: { id, deletedAt: null },

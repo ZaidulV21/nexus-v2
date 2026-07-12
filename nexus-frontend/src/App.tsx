@@ -23,6 +23,8 @@ import { SettingsPage } from '@/pages/settings/SettingsPage';
 import { DesignSystemPage } from '@/pages/design-system/DesignSystemPage';
 
 import { PortalDashboardPage } from '@/pages/portal/PortalDashboardPage';
+import { PortalQuotationsPage } from '@/pages/portal/PortalQuotationsPage';
+import { PortalQuotationDetailPage } from '@/pages/portal/PortalQuotationDetailPage';
 import { PortalProjectsPage } from '@/pages/portal/PortalProjectsPage';
 import { PortalInvoicesPage } from '@/pages/portal/PortalInvoicesPage';
 import { PortalMessagesPage } from '@/pages/portal/PortalMessagesPage';
@@ -67,6 +69,8 @@ export default function App() {
 
         <Route path="/portal" element={<PortalLayout />}>
           <Route index element={<PortalDashboardPage />} />
+          <Route path="quotations" element={<PortalQuotationsPage />} />
+          <Route path="quotations/:id" element={<PortalQuotationDetailPage />} />
           <Route path="projects" element={<PortalProjectsPage />} />
           <Route path="projects/:id" element={<PortalProjectsPage />} />
           <Route path="invoices" element={<PortalInvoicesPage />} />

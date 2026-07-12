@@ -11,8 +11,9 @@ export const quotationRepository = {
     return tx.quotation.update({ where: { id }, data: { activeVersionId: versionId } });
   },
 
-  updateStatus(id: string, status: any) {
-    return prisma.quotation.update({ where: { id }, data: { status } });
+  updateStatus(id: string, status: any, tx?: Prisma.TransactionClient) {
+    const client = tx ?? prisma;
+    return client.quotation.update({ where: { id }, data: { status } });
   },
 
   findById(id: string) {
@@ -44,13 +45,27 @@ export const quotationRepository = {
     return { items, total };
   },
 
-  listForClient(clientId: string, pagination: PaginationParams) {
-    return prisma.quotation.findMany({
-      where: { clientId },
-      skip: pagination.skip,
-      take: pagination.take,
-      include: { versions: { where: { isActive: true }, include: { items: true } } },
-    });
+  async listForClient(clientId: string, pagination: PaginationParams) {
+    const where: any = { clientId };
+    if (pagination.search) {
+      where.OR = [
+        { quotationNumber: { contains: pagination.search, mode: 'insensitive' } },
+        { lead: { leadNumber: { contains: pagination.search, mode: 'insensitive' } } },
+      ];
+    }
+
+    const [items, total] = await Promise.all([
+      prisma.quotation.findMany({
+        where,
+        skip: pagination.skip,
+        take: pagination.take,
+        orderBy: { [pagination.sortBy || 'createdAt']: pagination.sortOrder },
+        include: { versions: { where: { isActive: true }, include: { items: true } } },
+      }),
+      prisma.quotation.count({ where }),
+    ]);
+
+    return { items, total };
   },
 
   async generateQuotationNumber(tx: Prisma.TransactionClient): Promise<string> {

@@ -24,6 +24,8 @@ export const ROUTES = {
   // Client portal (separate shell/auth context from the Admin app)
   portal: {
     dashboard: '/portal',
+    quotations: '/portal/quotations',
+    quotationDetail: (id: string) => `/portal/quotations/${id}`,
     projects: '/portal/projects',
     projectDetail: (id: string) => `/portal/projects/${id}`,
     invoices: '/portal/invoices',

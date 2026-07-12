@@ -8,6 +8,7 @@ import { Card, CardContent } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { FormField } from '@/components/ui/FormField';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
 import { NexusLogo } from '@/components/layout/NexusLogo';
 import { useAuth } from '@/app/AuthContext';
 import { useToast } from '@/hooks/useToast';
@@ -17,12 +18,13 @@ import { ROUTES } from '@/routes/routes';
 const loginSchema = z.object({
   email: z.string().min(1, 'Email is required').email('Enter a valid email address'),
   password: z.string().min(1, 'Password is required'),
+  actorType: z.enum(['ADMIN', 'CLIENT']),
 });
 
 type LoginFormValues = z.infer<typeof loginSchema>;
 
 export function LoginPage() {
-  const { login, isAuthenticated, isInitializing } = useAuth();
+  const { login, isAuthenticated, isInitializing, actor } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
@@ -30,21 +32,31 @@ export function LoginPage() {
 
   const {
     register,
+    watch,
+    setValue,
     handleSubmit,
     formState: { errors, isSubmitting },
-  } = useForm<LoginFormValues>({ resolver: zodResolver(loginSchema) });
+  } = useForm<LoginFormValues>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: { actorType: 'ADMIN' },
+  });
+  const actorType = watch('actorType');
 
   if (!isInitializing && isAuthenticated) {
-    const from = (location.state as { from?: string } | null)?.from ?? ROUTES.dashboard;
+    const from =
+      (location.state as { from?: string } | null)?.from ??
+      (actor?.type === 'CLIENT' ? ROUTES.portal.dashboard : ROUTES.dashboard);
     return <Navigate to={from} replace />;
   }
 
   async function onSubmit(values: LoginFormValues) {
     setServerError(null);
     try {
-      await login({ ...values, actorType: 'ADMIN' });
+      await login(values);
       toast({ title: 'Welcome back', variant: 'success' });
-      const from = (location.state as { from?: string } | null)?.from ?? ROUTES.dashboard;
+      const from =
+        (location.state as { from?: string } | null)?.from ??
+        (values.actorType === 'CLIENT' ? ROUTES.portal.dashboard : ROUTES.dashboard);
       navigate(from, { replace: true });
     } catch (err) {
       setServerError(err instanceof ApiError ? err.message : 'Something went wrong. Try again.');
@@ -63,6 +75,21 @@ export function LoginPage() {
         <Card>
           <CardContent className="pt-6">
             <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4" noValidate>
+              <FormField label="Login as" htmlFor="actorType" required error={errors.actorType?.message}>
+                <Select
+                  value={actorType}
+                  onValueChange={(value) => setValue('actorType', value as 'ADMIN' | 'CLIENT', { shouldValidate: true })}
+                >
+                  <SelectTrigger id="actorType">
+                    <SelectValue placeholder="Select account type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ADMIN">Admin</SelectItem>
+                    <SelectItem value="CLIENT">Client</SelectItem>
+                  </SelectContent>
+                </Select>
+              </FormField>
+
               <FormField label="Email" htmlFor="email" error={errors.email?.message} required>
                 <Input
                   id="email"
@@ -92,7 +119,7 @@ export function LoginPage() {
               )}
 
               <Button type="submit" loading={isSubmitting} className="mt-1 w-full">
-                Sign in
+                {actorType === 'CLIENT' ? 'Sign in to Client Portal' : 'Sign in to Admin'}
               </Button>
             </form>
           </CardContent>

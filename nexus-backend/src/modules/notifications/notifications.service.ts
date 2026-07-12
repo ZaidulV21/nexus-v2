@@ -4,11 +4,13 @@ import { EmitEventInput } from './notifications.types';
 
 const KNOWN_EVENT_TYPES = new Set([
   'lead.created',
-  'quotation.sent',
   'quotation.approved',
+  'quotation.sent',
+  'quotation.revision_requested',
   'quotation.accepted',
   'quotation.rejected',
   'client.account.created',
+  'project.created',
   'invoice.issued',
   'invoice.cancelled',
   'payment.recorded',

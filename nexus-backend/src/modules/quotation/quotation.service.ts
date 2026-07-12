@@ -33,6 +33,14 @@ function computeTotals(items: QuotationItemInput[], discount: number, transporta
   return { computedItems, subtotal, gstAmount, grandTotal };
 }
 
+function getQuotationRecipient(quotation: any) {
+  return quotation.client?.email ?? quotation.lead?.email ?? null;
+}
+
+function getActiveVersion(quotation: any) {
+  return quotation.versions.find((version: any) => version.id === quotation.activeVersionId) ?? quotation.versions[0];
+}
+
 export const quotationService = {
   async create(input: CreateQuotationInput, actorUserId: string) {
     const lead = await leadRepository.findById(input.leadId);
@@ -132,6 +140,7 @@ export const quotationService = {
 
       await quotationVersionRepository.createItems(version.id, computedItems, tx);
       await quotationRepository.setActiveVersion(quotationId, version.id, tx);
+      await quotationRepository.updateStatus(quotationId, 'DRAFT', tx);
 
       return version;
     });
@@ -144,12 +153,13 @@ export const quotationService = {
       actorUserId,
     });
 
-    await notificationsService.emitEvent({
-      eventType: 'quotation.sent',
+    await auditService.recordAudit({
       entityType: 'QUOTATION',
       entityId: quotationId,
-      recipient: 'client-on-file',
-      payload: { quotationId, version: newVersion.versionNumber, grandTotal },
+      action: 'REVISE',
+      beforeState: { activeVersionId: quotation.activeVersionId, status: quotation.status },
+      afterState: { activeVersionId: newVersion.id, status: 'DRAFT', versionNumber: newVersion.versionNumber },
+      actorUserId,
     });
 
     return quotationRepository.findById(quotationId);
@@ -185,12 +195,17 @@ export const quotationService = {
   async send(quotationId: string, actorUserId: string, resend = false) {
     const quotation = await quotationRepository.findById(quotationId);
     if (!quotation) throw new NotFoundError('Quotation not found');
-    if (quotation.status !== 'APPROVED') {
+    if (quotation.status !== 'APPROVED' && quotation.status !== 'SENT') {
       throw new ValidationError('Only approved quotations can be sent to the client');
     }
 
-    const recipient = quotation.client?.email ?? quotation.lead?.email;
+    const recipient = getQuotationRecipient(quotation);
     if (!recipient) throw new ValidationError('Quotation has no client email recipient');
+
+    const statusBefore = quotation.status;
+    await runInTransaction(async (tx) => {
+      await quotationRepository.updateStatus(quotationId, 'SENT', tx);
+    });
 
     await timelineService.recordEvent({
       entityType: 'QUOTATION',
@@ -204,7 +219,8 @@ export const quotationService = {
       entityType: 'QUOTATION',
       entityId: quotationId,
       action: resend ? 'RESEND' : 'SEND',
-      afterState: { quotationId, recipient },
+      beforeState: { status: statusBefore },
+      afterState: { quotationId, recipient, status: 'SENT' },
       actorUserId,
     });
 
@@ -219,11 +235,53 @@ export const quotationService = {
     return quotationRepository.findById(quotationId);
   },
 
+  async requestRevision(quotationId: string, actorUserId: string, reason: string) {
+    const quotation = await quotationRepository.findById(quotationId);
+    if (!quotation) throw new NotFoundError('Quotation not found');
+    if (quotation.status !== 'SENT') {
+      throw new ValidationError('Only sent quotations can request a revision');
+    }
+
+    const recipient = 'admin-on-file';
+
+    await runInTransaction(async (tx) => {
+      await quotationRepository.updateStatus(quotationId, 'NEGOTIATION', tx);
+    });
+
+    await timelineService.recordEvent({
+      entityType: 'QUOTATION',
+      entityId: quotationId,
+      eventType: 'QUOTATION_REVISION_REQUESTED',
+      description: `Revision requested for quotation ${quotation.quotationNumber}: ${reason}`,
+      actorUserId,
+      metadata: { reason },
+    });
+
+    await auditService.recordAudit({
+      entityType: 'QUOTATION',
+      entityId: quotationId,
+      action: 'REVISION_REQUEST',
+      beforeState: { status: quotation.status },
+      afterState: { status: 'NEGOTIATION', reason },
+      actorUserId,
+    });
+
+    await notificationsService.emitEvent({
+      eventType: 'quotation.revision_requested',
+      entityType: 'QUOTATION',
+      entityId: quotationId,
+      recipient,
+      payload: { quotationId, quotationNumber: quotation.quotationNumber, reason },
+    });
+
+    return quotationRepository.findById(quotationId);
+  },
+
   async accept(quotationId: string, clientId: string) {
     const quotation = await quotationRepository.findById(quotationId);
     if (!quotation) throw new NotFoundError('Quotation not found');
-    if (quotation.status !== 'APPROVED') {
-      throw new ValidationError('Only approved quotations can be accepted');
+    if (quotation.status !== 'SENT') {
+      throw new ValidationError('Only sent quotations can be accepted');
     }
 
     const quotationClientId = quotation.clientId ?? quotation.lead?.client?.id;
@@ -231,7 +289,7 @@ export const quotationService = {
       throw new ValidationError('Quotation does not belong to this Client');
     }
 
-    const activeVersion = quotation.versions.find((version: any) => version.id === quotation.activeVersionId) ?? quotation.versions[0];
+    const activeVersion = getActiveVersion(quotation);
     if (!activeVersion || !activeVersion.approvals?.length) {
       throw new ValidationError('Only internally approved quotation versions can be accepted');
     }
@@ -244,6 +302,8 @@ export const quotationService = {
       },
       clientId
     );
+
+    await quotationRepository.updateStatus(quotationId, 'ACCEPTED');
 
     await timelineService.recordEvent({
       entityType: 'QUOTATION',
@@ -258,7 +318,8 @@ export const quotationService = {
       entityType: 'QUOTATION',
       entityId: quotationId,
       action: 'CLIENT_ACCEPT',
-      afterState: { quotationId, projectId: project.id },
+      beforeState: { status: quotation.status },
+      afterState: { quotationId, projectId: project.id, status: 'ACCEPTED' },
       actorUserId: clientId,
     });
 
@@ -266,7 +327,7 @@ export const quotationService = {
       eventType: 'quotation.accepted',
       entityType: 'QUOTATION',
       entityId: quotationId,
-      recipient: quotation.client?.email ?? quotation.lead?.email ?? 'client-on-file',
+      recipient: 'admin-on-file',
       payload: { quotationId, projectId: project.id },
     });
 
@@ -280,6 +341,10 @@ export const quotationService = {
     const quotationClientId = quotation.clientId ?? quotation.lead?.client?.id;
     if (!quotationClientId || quotationClientId !== clientId) {
       throw new ValidationError('Quotation does not belong to this Client');
+    }
+
+    if (quotation.status !== 'SENT' && quotation.status !== 'NEGOTIATION') {
+      throw new ValidationError('Only sent quotations can be rejected');
     }
 
     await quotationRepository.updateStatus(quotationId, 'REJECTED');
@@ -305,7 +370,7 @@ export const quotationService = {
       eventType: 'quotation.rejected',
       entityType: 'QUOTATION',
       entityId: quotationId,
-      recipient: quotation.client?.email ?? quotation.lead?.email ?? 'client-on-file',
+      recipient: 'admin-on-file',
       payload: { quotationId, reason },
     });
 
@@ -324,5 +389,15 @@ export const quotationService = {
 
   async listForClient(clientId: string, pagination: any) {
     return quotationRepository.listForClient(clientId, pagination);
+  },
+
+  async getForClient(id: string, clientId: string) {
+    const quotation = await quotationRepository.findById(id);
+    if (!quotation) throw new NotFoundError('Quotation not found');
+    const quotationClientId = quotation.clientId ?? quotation.lead?.client?.id;
+    if (!quotationClientId || quotationClientId !== clientId) {
+      throw new ValidationError('Quotation does not belong to this Client');
+    }
+    return quotation;
   },
 };
