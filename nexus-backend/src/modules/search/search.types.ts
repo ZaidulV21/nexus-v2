@@ -5,4 +5,5 @@ export interface SearchResults {
   quotations: unknown[];
   invoices: unknown[];
   services: unknown[];
+  documents: unknown[];
 }

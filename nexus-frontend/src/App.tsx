@@ -26,13 +26,16 @@ import { PortalDashboardPage } from '@/pages/portal/PortalDashboardPage';
 import { PortalQuotationsPage } from '@/pages/portal/PortalQuotationsPage';
 import { PortalQuotationDetailPage } from '@/pages/portal/PortalQuotationDetailPage';
 import { PortalProjectsPage } from '@/pages/portal/PortalProjectsPage';
+import { PortalProjectDetailPage } from '@/pages/portal/PortalProjectDetailPage';
 import { PortalInvoicesPage } from '@/pages/portal/PortalInvoicesPage';
+import { PortalInvoiceDetailPage } from '@/pages/portal/PortalInvoiceDetailPage';
 import { PortalMessagesPage } from '@/pages/portal/PortalMessagesPage';
 import { PortalDocumentsPage } from '@/pages/portal/PortalDocumentsPage';
 
 import { LoginPage } from '@/pages/auth/LoginPage';
 import { NotFoundPage } from '@/pages/errors/NotFoundPage';
 import { ProtectedRoute } from '@/app/ProtectedRoute';
+import { PortalProtectedRoute } from '@/app/PortalProtectedRoute';
 
 export default function App() {
   return (
@@ -67,13 +70,21 @@ export default function App() {
           <Route path="/design-system" element={<DesignSystemPage />} />
         </Route>
 
-        <Route path="/portal" element={<PortalLayout />}>
+        <Route
+          path="/portal"
+          element={
+            <PortalProtectedRoute>
+              <PortalLayout />
+            </PortalProtectedRoute>
+          }
+        >
           <Route index element={<PortalDashboardPage />} />
           <Route path="quotations" element={<PortalQuotationsPage />} />
           <Route path="quotations/:id" element={<PortalQuotationDetailPage />} />
           <Route path="projects" element={<PortalProjectsPage />} />
-          <Route path="projects/:id" element={<PortalProjectsPage />} />
+          <Route path="projects/:id" element={<PortalProjectDetailPage />} />
           <Route path="invoices" element={<PortalInvoicesPage />} />
+          <Route path="invoices/:id" element={<PortalInvoiceDetailPage />} />
           <Route path="messages" element={<PortalMessagesPage />} />
           <Route path="documents" element={<PortalDocumentsPage />} />
         </Route>

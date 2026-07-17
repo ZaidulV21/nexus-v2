@@ -17,7 +17,7 @@ export const searchService = {
     const q = query.trim();
     const insensitive = { contains: q, mode: 'insensitive' as const };
 
-    const [leads, clients, projects, quotations, invoices, services] = await Promise.all([
+    const [leads, clients, projects, quotations, invoices, services, documents] = await Promise.all([
       prisma.lead.findMany({
         where: {
           deletedAt: null,
@@ -54,8 +54,12 @@ export const searchService = {
         where: { name: insensitive },
         take: 20,
       }),
+      prisma.document.findMany({
+        where: { deletedAt: null, fileName: insensitive },
+        take: 20,
+      }),
     ]);
 
-    return { leads, clients, projects, quotations, invoices, services };
+    return { leads, clients, projects, quotations, invoices, services, documents };
   },
 };

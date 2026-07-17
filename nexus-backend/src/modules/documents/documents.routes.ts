@@ -8,6 +8,8 @@ const upload = multer({ storage: multer.memoryStorage() });
 const router = Router();
 
 router.post('/', authenticate, authorize('document.upload'), upload.single('file'), documentsController.upload);
+router.get('/me', authenticate, documentsController.listForClient);
+router.get('/all', authenticate, authorize('document.upload'), documentsController.listAll);
 router.get('/', authenticate, documentsController.listForEntity);
 router.get('/:id/download', authenticate, documentsController.download);
 router.delete('/:id', authenticate, authorize('document.delete'), documentsController.remove);

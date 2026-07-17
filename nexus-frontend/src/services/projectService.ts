@@ -26,6 +26,11 @@ export const projectService = {
 
   getById: (id: string) => api.get<Project>(`/projects/${id}`),
 
+  /** Client-portal: only the authenticated client's own projects. */
+  listMine: () => api.get<Project[]>('/projects/me'),
+
+  getMine: (id: string) => api.get<Project>(`/projects/me/${id}`),
+
   updateServiceStatus: (projectServiceId: string, input: UpdateProjectServiceStatusInput) =>
     api.patch<{ id: string; status: string }>(`/projects/services/${projectServiceId}/status`, input),
 

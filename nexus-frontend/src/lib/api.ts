@@ -94,6 +94,31 @@ export async function apiRequestPaginated<T>(
   return { items: (json.data ?? []) as T[], meta: json.meta as PaginationMeta };
 }
 
+/** Multipart upload (file + metadata fields). Deliberately does NOT set
+ *  Content-Type - the browser adds the correct multipart boundary itself. */
+export async function apiUpload<T>(path: string, formData: FormData): Promise<T> {
+  const res = await fetch(buildUrl(path), {
+    method: 'POST',
+    headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+    body: formData,
+  });
+
+  let json: any = null;
+  try {
+    json = await res.json();
+  } catch {
+    /* no JSON body */
+  }
+
+  if (!res.ok) {
+    if (res.status === 401) onUnauthorized?.();
+    const message = json?.error?.message || `Upload failed with status ${res.status}`;
+    throw new ApiError(message, res.status, json?.error?.details);
+  }
+
+  return (json?.data ?? json) as T;
+}
+
 export const api = {
   get: <T>(path: string, query?: RequestOptions['query']) => apiRequest<T>(path, { method: 'GET', query }),
   getPaginated: <T>(path: string, query?: RequestOptions['query']) => apiRequestPaginated<T>(path, query),
@@ -101,4 +126,5 @@ export const api = {
   patch: <T>(path: string, body?: unknown) => apiRequest<T>(path, { method: 'PATCH', body }),
   put: <T>(path: string, body?: unknown) => apiRequest<T>(path, { method: 'PUT', body }),
   delete: <T>(path: string) => apiRequest<T>(path, { method: 'DELETE' }),
+  upload: <T>(path: string, formData: FormData) => apiUpload<T>(path, formData),
 };

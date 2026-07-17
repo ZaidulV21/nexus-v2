@@ -59,7 +59,14 @@ export const documentsService = {
     return document;
   },
 
-  async listForEntity(entityType: DocumentEntityType, entityId: string) {
+  async listForEntity(entityType: DocumentEntityType, entityId: string, actor?: { id: string; type: string }) {
+    if (actor?.type === 'CLIENT') {
+      // Clients may only list documents on a Project that belongs to them -
+      // Lead-stage documents are pre-conversion and never client-visible.
+      if (entityType !== 'PROJECT') return [];
+      const project = await projectRepository.findById(entityId);
+      if (!project || project.clientId !== actor.id) return [];
+    }
     return documentsRepository.listForEntity(entityType, entityId);
   },
 
@@ -67,9 +74,23 @@ export const documentsService = {
     return documentsRepository.listForClient(clientId);
   },
 
-  async getDownloadUrl(id: string) {
+  async listAll(params: {
+    skip: number;
+    take: number;
+    search?: string;
+    documentType?: string;
+    entityType?: string;
+  }) {
+    return documentsRepository.listAll(params);
+  },
+
+  async getDownloadUrl(id: string, actor?: { id: string; type: string }) {
     const doc = await documentsRepository.findById(id);
     if (!doc) throw new NotFoundError('Document not found');
+    if (actor?.type === 'CLIENT' && doc.clientId !== actor.id) {
+      // Clients may only download documents attached to their own records.
+      throw new NotFoundError('Document not found');
+    }
     return { document: doc, url: storageProvider.getUrl(doc.fileUrl) };
   },
 

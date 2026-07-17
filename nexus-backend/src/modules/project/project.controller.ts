@@ -68,4 +68,24 @@ export const projectController = {
       next(err);
     }
   },
+
+  async listForClient(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.user || req.user.type !== 'CLIENT') throw new UnauthorizedError();
+      const projects = await projectService.listForClient(req.user.id);
+      return ok(res, projects);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async getForClient(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.user || req.user.type !== 'CLIENT') throw new UnauthorizedError();
+      const project = await projectService.getForClient(req.params.id, req.user.id);
+      return ok(res, project);
+    } catch (err) {
+      next(err);
+    }
+  },
 };

@@ -1,4 +1,5 @@
 import { runInTransaction } from '../../core/utils/transaction';
+import { Prisma } from '@prisma/client';
 import { projectRepository, projectServiceRepository } from './project.repository';
 import { leadRepository } from '../lead/lead.repository';
 import { serviceRepository } from '../catalog/service.repository';
@@ -81,7 +82,16 @@ async function attachAggregateStatus(project: any) {
 export const projectService = {
   // Converts an accepted quotation into a Project, copying the active
   // quotation version's services into Project Services.
-  async create(input: CreateProjectInput, actorUserId: string) {
+  //
+  // `inSameTransaction` (optional) runs inside the same DB transaction as
+  // the project creation, after the project rows are written - used by
+  // quotationService.accept to flip the quotation status atomically with
+  // project creation: if either write fails, both roll back.
+  async create(
+    input: CreateProjectInput,
+    actorUserId: string,
+    inSameTransaction?: (tx: Prisma.TransactionClient) => Promise<void>
+  ) {
     if (!input.quotationVersionId) {
       throw new ValidationError('A quotation version is required to create a Project');
     }
@@ -133,6 +143,8 @@ export const projectService = {
         })),
         tx
       );
+
+      if (inSameTransaction) await inSameTransaction(tx);
 
       return { project, projectServices };
     });
@@ -249,5 +261,14 @@ export const projectService = {
   async listForClient(clientId: string) {
     const projects = await projectRepository.listForClient(clientId);
     return Promise.all(projects.map(attachAggregateStatus));
+  },
+
+  async getForClient(id: string, clientId: string) {
+    const project = await projectRepository.findById(id);
+    if (!project) throw new NotFoundError('Project not found');
+    if (project.clientId !== clientId) {
+      throw new NotFoundError('Project not found');
+    }
+    return attachAggregateStatus(project);
   },
 };

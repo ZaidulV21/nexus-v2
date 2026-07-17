@@ -297,6 +297,7 @@ enum QuotationStatus {
   SENT
   NEGOTIATION
   APPROVED
+  ACCEPTED
   REJECTED
 }
 

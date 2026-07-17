@@ -11,4 +11,8 @@ export const timelineService = {
   async getTimelineFor(entityType: string, entityId: string) {
     return timelineRepository.listForEntity(entityType, entityId);
   },
+
+  async getGlobalTimeline(params: { skip: number; take: number; entityType?: string; search?: string }) {
+    return timelineRepository.listGlobal(params);
+  },
 };

@@ -29,6 +29,7 @@ export const ROUTES = {
     projects: '/portal/projects',
     projectDetail: (id: string) => `/portal/projects/${id}`,
     invoices: '/portal/invoices',
+    invoiceDetail: (id: string) => `/portal/invoices/${id}`,
     messages: '/portal/messages',
     documents: '/portal/documents',
   },

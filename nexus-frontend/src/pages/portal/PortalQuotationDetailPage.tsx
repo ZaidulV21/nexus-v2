@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { CheckCircle2, CornerDownLeft, CornerDownRight } from 'lucide-react';
+import { CheckCircle2, CornerDownLeft, CornerDownRight, History } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
@@ -9,7 +9,7 @@ import { ErrorState } from '@/components/ui/ErrorState';
 import { FormField } from '@/components/ui/FormField';
 import { Modal, ModalClose, ModalContent } from '@/components/ui/Modal';
 import { Skeleton } from '@/components/ui/Skeleton';
-import { StatusBadge } from '@/components/ui/StatusBadge';
+import { StatusBadge, Badge } from '@/components/ui/StatusBadge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/Tabs';
 import { Textarea } from '@/components/ui/Textarea';
 import { EntityTimeline } from '@/components/common/EntityTimeline';
@@ -19,6 +19,53 @@ import { useToast } from '@/hooks/useToast';
 import { ApiError } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { ROUTES } from '@/routes/routes';
+import type { QuotationVersion } from '@/types';
+
+function PricingBreakdown({ version }: { version: QuotationVersion }) {
+  const rows: Array<{ label: string; value: string; emphasize?: boolean }> = [
+    { label: 'Subtotal', value: formatCurrency(version.subtotal) },
+    { label: 'Discount', value: `- ${formatCurrency(version.discount)}` },
+    { label: 'GST', value: formatCurrency(version.gstAmount) },
+    { label: 'Transportation', value: formatCurrency(version.transportation) },
+    { label: 'Installation', value: formatCurrency(version.installation) },
+    { label: 'Grand total', value: formatCurrency(version.grandTotal), emphasize: true },
+  ];
+
+  return (
+    <dl className="divide-y divide-border rounded-lg border border-border">
+      {rows.map((row) => (
+        <div key={row.label} className="flex items-center justify-between px-4 py-2.5">
+          <dt className={row.emphasize ? 'text-sm font-medium text-ink' : 'text-sm text-ink-muted'}>{row.label}</dt>
+          <dd className={row.emphasize ? 'font-mono text-base font-semibold text-ink' : 'font-mono text-sm text-ink'}>
+            {row.value}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function VersionItems({ version }: { version: QuotationVersion }) {
+  if (version.items.length === 0) {
+    return <EmptyState title="No quotation items" description="Quotation line items will appear here." />;
+  }
+  return (
+    <ul className="divide-y divide-border rounded-lg border border-border">
+      {version.items.map((item) => (
+        <li key={item.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-medium text-ink">{item.description}</p>
+            <p className="text-xs text-ink-faint">
+              {Number(item.quantity)} × {formatCurrency(item.unitPrice)} · Tax {Number(item.taxRate)}% (
+              {formatCurrency(item.taxAmount)})
+            </p>
+          </div>
+          <span className="text-sm font-medium text-ink">{formatCurrency(item.lineTotal)}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 function DecisionDialog({
   open,
@@ -112,7 +159,12 @@ export function PortalQuotationDetailPage() {
     try {
       const result = await acceptQuotation.mutateAsync();
       toast({ title: 'Quotation accepted', variant: 'success' });
-      navigate(ROUTES.portal.projectDetail(result.project.id));
+      // Redirect to the newly created project; if the payload ever lacks
+      // one, stay here - the cache was already updated with the ACCEPTED
+      // quotation, so the page reflects the new state either way.
+      if (result.project?.id) {
+        navigate(ROUTES.portal.projectDetail(result.project.id));
+      }
     } catch (err) {
       toast({
         title: 'Could not accept quotation',
@@ -148,6 +200,7 @@ export function PortalQuotationDetailPage() {
           <Tabs defaultValue="overview">
             <TabsList>
               <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="versions">Version History</TabsTrigger>
               <TabsTrigger value="timeline">Timeline</TabsTrigger>
             </TabsList>
 
@@ -159,8 +212,8 @@ export function PortalQuotationDetailPage() {
                     <p className="mt-1 font-medium text-ink"><StatusBadge status={quotation.status} /></p>
                   </div>
                   <div className="rounded-lg border border-border bg-canvas p-4">
-                    <p className="text-xs uppercase tracking-wide text-ink-faint">Lead</p>
-                    <p className="mt-1 font-medium text-ink">{quotation.leadId}</p>
+                    <p className="text-xs uppercase tracking-wide text-ink-faint">Active version</p>
+                    <p className="mt-1 font-medium text-ink">{activeVersion ? `v${activeVersion.versionNumber}` : '-'}</p>
                   </div>
                   <div className="rounded-lg border border-border bg-canvas p-4">
                     <p className="text-xs uppercase tracking-wide text-ink-faint">Created</p>
@@ -168,47 +221,59 @@ export function PortalQuotationDetailPage() {
                   </div>
                 </div>
 
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Active version</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {activeVersion ? (
-                      <div className="space-y-3">
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                          <div>
-                            <p className="font-medium text-ink">Version {activeVersion.versionNumber}</p>
-                            <p className="text-sm text-ink-muted">
-                              Subtotal {formatCurrency(activeVersion.subtotal)} · Grand total {formatCurrency(activeVersion.grandTotal)}
-                            </p>
-                          </div>
-                          <StatusBadge status={activeVersion.isActive ? 'APPROVED' : 'DRAFT'} />
-                        </div>
-
-                        {activeVersion.items.length === 0 ? (
-                          <EmptyState title="No quotation items" description="Quotation line items will appear here." />
-                        ) : (
-                          <ul className="divide-y divide-border rounded-lg border border-border">
-                            {activeVersion.items.map((item) => (
-                              <li key={item.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                                <div>
-                                  <p className="text-sm font-medium text-ink">{item.description}</p>
-                                  <p className="text-xs text-ink-faint">
-                                    {item.quantity} × {formatCurrency(item.unitPrice)} · Tax {item.taxRate}%
-                                  </p>
-                                </div>
-                                <span className="text-sm font-medium text-ink">{formatCurrency(item.lineTotal)}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-                    ) : (
-                      <EmptyState title="No active version" description="A quotation version will appear here once the business creates one." />
-                    )}
-                  </CardContent>
-                </Card>
+                {activeVersion ? (
+                  <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Line items (v{activeVersion.versionNumber})</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <VersionItems version={activeVersion} />
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Pricing</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <PricingBreakdown version={activeVersion} />
+                      </CardContent>
+                    </Card>
+                  </div>
+                ) : (
+                  <EmptyState title="No active version" description="A quotation version will appear here once the business creates one." />
+                )}
               </div>
+            </TabsContent>
+
+            <TabsContent value="versions" className="pt-5">
+              {quotation.versions.length === 0 ? (
+                <EmptyState
+                  icon={History}
+                  title="No versions yet"
+                  description="Every revision of this quotation stays permanently viewable here."
+                />
+              ) : (
+                <div className="space-y-4">
+                  {quotation.versions.map((version) => (
+                    <Card key={version.id}>
+                      <CardHeader>
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <CardTitle>Version {version.versionNumber}</CardTitle>
+                          <div className="flex items-center gap-2">
+                            {version.isActive && <Badge tone="success">Active</Badge>}
+                            <span className="text-xs text-ink-faint">{formatDate(version.createdAt)}</span>
+                          </div>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+                        <VersionItems version={version} />
+                        <PricingBreakdown version={version} />
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
             </TabsContent>
 
             <TabsContent value="timeline" className="pt-5">

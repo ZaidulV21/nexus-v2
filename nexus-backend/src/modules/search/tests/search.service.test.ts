@@ -6,6 +6,7 @@ jest.mock('../../../config/database', () => ({
     quotation: { findMany: jest.fn().mockResolvedValue([]) },
     invoice: { findMany: jest.fn().mockResolvedValue([]) },
     service: { findMany: jest.fn().mockResolvedValue([]) },
+    document: { findMany: jest.fn().mockResolvedValue([]) },
   },
 }));
 
@@ -28,5 +29,6 @@ describe('searchService.search', () => {
     expect(results).toHaveProperty('quotations');
     expect(results).toHaveProperty('invoices');
     expect(results).toHaveProperty('services');
+    expect(results).toHaveProperty('documents');
   });
 });

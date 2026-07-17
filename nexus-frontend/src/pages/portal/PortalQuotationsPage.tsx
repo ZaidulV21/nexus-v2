@@ -5,14 +5,19 @@ import { FileText, RefreshCw } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { DataTable } from '@/components/ui/DataTable';
 import { SearchInput } from '@/components/ui/SearchInput';
+import { StatusBadge } from '@/components/ui/StatusBadge';
 import { useDebounce } from '@/hooks/useDebounce';
 import { useAuth } from '@/app/AuthContext';
 import { useClientQuotationsList } from '@/queries/useQuotations';
-import { formatDate } from '@/lib/format';
+import { formatCurrency, formatDate } from '@/lib/format';
 import { ROUTES } from '@/routes/routes';
 import type { Quotation } from '@/types';
 
 const PAGE_SIZE = 20;
+
+function getActiveVersion(quotation: Quotation) {
+  return quotation.versions?.find((version) => version.isActive) ?? quotation.versions?.[0];
+}
 
 export function PortalQuotationsPage() {
   const navigate = useNavigate();
@@ -37,14 +42,32 @@ export function PortalQuotationsPage() {
         cell: (info) => (
           <div>
             <p className="font-mono text-sm font-medium text-ink">{info.getValue()}</p>
-            <p className="text-xs text-ink-faint">{info.row.original.status}</p>
+            <p className="text-xs text-ink-faint">{info.row.original.lead?.leadNumber ?? info.row.original.leadId}</p>
           </div>
         ),
       },
       {
-        accessorKey: 'leadId',
-        header: 'Lead',
-        cell: (info) => <span className="font-mono text-ink-muted">{info.getValue()}</span>,
+        id: 'version',
+        header: 'Version',
+        cell: (info) => {
+          const version = getActiveVersion(info.row.original);
+          return <span className="text-ink-muted">{version ? `v${version.versionNumber}` : '-'}</span>;
+        },
+      },
+      {
+        id: 'amount',
+        header: 'Amount',
+        cell: (info) => {
+          const version = getActiveVersion(info.row.original);
+          return (
+            <span className="font-medium text-ink">{version ? formatCurrency(version.grandTotal) : '-'}</span>
+          );
+        },
+      },
+      {
+        id: 'status',
+        header: 'Status',
+        cell: (info) => <StatusBadge status={info.row.original.status} />,
       },
       {
         accessorKey: 'createdAt',

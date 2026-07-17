@@ -114,11 +114,17 @@ export function useAcceptQuotation(quotationId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () => quotationService.accept(quotationId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.quotations.detail(quotationId) });
+    onSuccess: (result) => {
+      // Write the accepted quotation straight into both detail caches so
+      // the status flips instantly, then invalidate the broader keys so
+      // lists and the projects section refetch in the background.
+      if (result.quotation) {
+        queryClient.setQueryData(queryKeys.quotations.clientDetail(quotationId), result.quotation);
+        queryClient.setQueryData(queryKeys.quotations.detail(quotationId), result.quotation);
+      }
       queryClient.invalidateQueries({ queryKey: queryKeys.quotations.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.quotations.clientDetail(quotationId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.timeline('QUOTATION', quotationId) });
     },
   });
 }

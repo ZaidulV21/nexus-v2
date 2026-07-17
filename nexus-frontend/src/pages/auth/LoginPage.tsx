@@ -43,10 +43,19 @@ export function LoginPage() {
   const actorType = watch('actorType');
 
   if (!isInitializing && isAuthenticated) {
-    const from =
-      (location.state as { from?: string } | null)?.from ??
-      (actor?.type === 'CLIENT' ? ROUTES.portal.dashboard : ROUTES.dashboard);
-    return <Navigate to={from} replace />;
+    const stateFrom = (location.state as { from?: string } | null)?.from;
+    const isClient = actor?.type === 'CLIENT';
+    const fallback = isClient ? ROUTES.portal.dashboard : ROUTES.dashboard;
+    // Only honor `from` when it belongs to this actor's own area. A
+    // role-mismatched `from` (e.g. a CLIENT bounced off an Admin URL)
+    // would otherwise ping-pong between the route guard and this
+    // redirect forever - an infinite <Navigate> loop and a white screen.
+    const fromIsCompatible = stateFrom
+      ? isClient
+        ? stateFrom.startsWith('/portal')
+        : !stateFrom.startsWith('/portal')
+      : false;
+    return <Navigate to={fromIsCompatible ? (stateFrom as string) : fallback} replace />;
   }
 
   async function onSubmit(values: LoginFormValues) {
@@ -54,10 +63,15 @@ export function LoginPage() {
     try {
       await login(values);
       toast({ title: 'Welcome back', variant: 'success' });
-      const from =
-        (location.state as { from?: string } | null)?.from ??
-        (values.actorType === 'CLIENT' ? ROUTES.portal.dashboard : ROUTES.dashboard);
-      navigate(from, { replace: true });
+      const stateFrom = (location.state as { from?: string } | null)?.from;
+      const isClient = values.actorType === 'CLIENT';
+      const fallback = isClient ? ROUTES.portal.dashboard : ROUTES.dashboard;
+      const fromIsCompatible = stateFrom
+        ? isClient
+          ? stateFrom.startsWith('/portal')
+          : !stateFrom.startsWith('/portal')
+        : false;
+      navigate(fromIsCompatible ? (stateFrom as string) : fallback, { replace: true });
     } catch (err) {
       setServerError(err instanceof ApiError ? err.message : 'Something went wrong. Try again.');
     }

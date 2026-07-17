@@ -33,7 +33,11 @@ import { invoiceService } from '../invoice.service';
 
 describe('invoiceService.create - GST totals', () => {
   it('computes GST correctly across line items with different tax rates', async () => {
-    (projectRepository.findById as jest.Mock).mockResolvedValue({ id: 'proj1' });
+    (projectRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'proj1',
+      clientId: 'client1',
+      projectServices: [{ assignedQuotationVersion: { quotation: { status: 'APPROVED' }, approvals: [] } }],
+    });
     (invoiceRepository.create as jest.Mock).mockResolvedValue({ id: 'inv1', invoiceNumber: 'INV/2026-27/00001' });
     (invoiceRepository.findById as jest.Mock).mockResolvedValue({ id: 'inv1' });
 

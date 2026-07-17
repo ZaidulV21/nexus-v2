@@ -119,7 +119,14 @@ describe('quotationService.send and accept', () => {
       activeVersionId: 'ver1',
       versions: [{ id: 'ver1', approvals: [{ id: 'ap1' }] }],
     });
-    (projectService.create as jest.Mock).mockResolvedValue({ id: 'proj1' });
+    (projectService.create as jest.Mock).mockImplementation(
+      async (_input: unknown, _actor: string, inSameTransaction?: (tx: object) => Promise<void>) => {
+        // Mirror the real implementation: the callback runs inside the
+        // project-creation transaction, flipping the quotation status.
+        if (inSameTransaction) await inSameTransaction({});
+        return { id: 'proj1' };
+      }
+    );
     (quotationRepository.findById as jest.Mock).mockResolvedValueOnce({
       id: 'quo1',
       leadId: 'lead1',
@@ -136,8 +143,35 @@ describe('quotationService.send and accept', () => {
 
     expect(projectService.create).toHaveBeenCalledWith(
       { leadId: 'lead1', clientId: 'client1', quotationVersionId: 'ver1' },
-      'client1'
+      'client1',
+      expect.any(Function)
     );
-    expect(quotationRepository.updateStatus).toHaveBeenCalledWith('quo1', 'ACCEPTED');
+    expect(quotationRepository.updateStatus).toHaveBeenCalledWith('quo1', 'ACCEPTED', expect.anything());
+  });
+
+  it('rolls the whole acceptance back if the status update fails inside the transaction', async () => {
+    (quotationRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'quo1',
+      leadId: 'lead1',
+      clientId: 'client1',
+      quotationNumber: 'Q-00001',
+      status: 'SENT',
+      lead: { client: { id: 'client1' }, email: 'lead@example.com' },
+      client: { email: 'client@example.com' },
+      activeVersionId: 'ver1',
+      versions: [{ id: 'ver1', approvals: [{ id: 'ap1' }] }],
+    });
+    // The real projectService.create runs the callback inside its DB
+    // transaction - a throwing callback aborts the transaction, so the
+    // mock rejects the same way the real transaction wrapper would.
+    (projectService.create as jest.Mock).mockImplementation(
+      async (_input: unknown, _actor: string, inSameTransaction?: (tx: object) => Promise<void>) => {
+        if (inSameTransaction) await inSameTransaction({});
+        return { id: 'proj1' };
+      }
+    );
+    (quotationRepository.updateStatus as jest.Mock).mockRejectedValueOnce(new Error('enum mismatch'));
+
+    await expect(quotationService.accept('quo1', 'client1')).rejects.toThrow('enum mismatch');
   });
 });

@@ -170,6 +170,7 @@ export interface Quotation {
   id: string;
   quotationNumber: string;
   leadId: string;
+  lead?: Pick<Lead, 'id' | 'leadNumber'> & Partial<Lead>;
   clientId?: string | null;
   status: QuotationStatus;
   activeVersionId?: string | null;

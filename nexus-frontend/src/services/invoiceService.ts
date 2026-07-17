@@ -42,6 +42,11 @@ export const invoiceService = {
 
   getById: (id: string) => api.get<Invoice>(`/invoices/${id}`),
 
+  /** Client-portal: only the authenticated client's own invoices. */
+  listMine: () => api.get<Invoice[]>('/invoices/me'),
+
+  getMine: (id: string) => api.get<Invoice>(`/invoices/me/${id}`),
+
   send: (invoiceId: string, resend = false) => api.post<Invoice>(`/invoices/${invoiceId}/send`, { resend }),
 
   cancel: (invoiceId: string, reason: string) => api.patch<Invoice>(`/invoices/${invoiceId}/cancel`, { reason }),

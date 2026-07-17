@@ -1,5 +1,5 @@
 import { prisma } from '../../config/database';
-import { Prisma } from '@prisma/client';
+import { Prisma, QuotationStatus } from '@prisma/client';
 import { PaginationParams } from '../../core/utils/pagination';
 
 export const quotationRepository = {
@@ -11,7 +11,10 @@ export const quotationRepository = {
     return tx.quotation.update({ where: { id }, data: { activeVersionId: versionId } });
   },
 
-  updateStatus(id: string, status: any, tx?: Prisma.TransactionClient) {
+  // Typed against the generated Prisma enum (not string/any) so writing a
+  // status value that doesn't exist in the database enum is a compile
+  // error, never a runtime Prisma validation error.
+  updateStatus(id: string, status: QuotationStatus, tx?: Prisma.TransactionClient) {
     const client = tx ?? prisma;
     return client.quotation.update({ where: { id }, data: { status } });
   },
@@ -60,7 +63,10 @@ export const quotationRepository = {
         skip: pagination.skip,
         take: pagination.take,
         orderBy: { [pagination.sortBy || 'createdAt']: pagination.sortOrder },
-        include: { versions: { where: { isActive: true }, include: { items: true } } },
+        include: {
+          lead: { select: { id: true, leadNumber: true } },
+          versions: { where: { isActive: true }, include: { items: true } },
+        },
       }),
       prisma.quotation.count({ where }),
     ]);

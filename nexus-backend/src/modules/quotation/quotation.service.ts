@@ -294,16 +294,20 @@ export const quotationService = {
       throw new ValidationError('Only internally approved quotation versions can be accepted');
     }
 
+    // Project creation and the quotation status flip are one atomic unit:
+    // the status update runs inside project.create's transaction, so if
+    // either write fails, neither is persisted.
     const project = await projectService.create(
       {
         leadId: quotation.leadId,
         clientId,
         quotationVersionId: activeVersion.id,
       },
-      clientId
+      clientId,
+      async (tx) => {
+        await quotationRepository.updateStatus(quotationId, 'ACCEPTED', tx);
+      }
     );
-
-    await quotationRepository.updateStatus(quotationId, 'ACCEPTED');
 
     await timelineService.recordEvent({
       entityType: 'QUOTATION',

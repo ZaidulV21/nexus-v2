@@ -273,6 +273,15 @@ export const invoiceService = {
     return invoices.map(enrichInvoice);
   },
 
+  async getForClient(id: string, clientId: string) {
+    const invoice = await invoiceRepository.findById(id);
+    if (!invoice) throw new NotFoundError('Invoice not found');
+    if (invoice.clientId !== clientId) {
+      throw new NotFoundError('Invoice not found');
+    }
+    return enrichInvoice(invoice);
+  },
+
   async listForProject(projectId: string) {
     const project = await projectRepository.findById(projectId);
     if (!project) throw new NotFoundError('Project not found');

@@ -23,6 +23,22 @@ export function useInvoice(id: string | undefined) {
   });
 }
 
+/** Client-portal: the authenticated client's own invoices. */
+export function useMyInvoices() {
+  return useQuery({
+    queryKey: queryKeys.invoices.clientList,
+    queryFn: () => invoiceService.listMine(),
+  });
+}
+
+export function useMyInvoice(id: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.invoices.clientDetail(id ?? ''),
+    queryFn: () => invoiceService.getMine(id as string),
+    enabled: !!id,
+  });
+}
+
 export function useCreateInvoice() {
   const queryClient = useQueryClient();
   return useMutation({

@@ -36,12 +36,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     setUnauthorizedHandler(logout);
 
-    const storedToken = localStorage.getItem(TOKEN_KEY);
-    const storedActor = localStorage.getItem(ACTOR_KEY);
-    if (storedToken && storedActor) {
-      setAuthToken(storedToken);
-      setToken(storedToken);
-      setActor(JSON.parse(storedActor));
+    // Defensive: a stale/corrupted actor payload from an older build (e.g.
+    // the literal string "undefined") would make JSON.parse throw inside
+    // this effect and white-screen the whole app. Treat any unparseable
+    // session as logged-out and clear it instead.
+    try {
+      const storedToken = localStorage.getItem(TOKEN_KEY);
+      const storedActor = localStorage.getItem(ACTOR_KEY);
+      if (storedToken && storedActor) {
+        const parsedActor = JSON.parse(storedActor);
+        if (parsedActor && typeof parsedActor === 'object' && parsedActor.id && parsedActor.type) {
+          setAuthToken(storedToken);
+          setToken(storedToken);
+          setActor(parsedActor);
+        } else {
+          localStorage.removeItem(TOKEN_KEY);
+          localStorage.removeItem(ACTOR_KEY);
+        }
+      }
+    } catch {
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(ACTOR_KEY);
     }
     setIsInitializing(false);
   }, [logout]);

@@ -12,6 +12,7 @@ const STATUS_TONE_MAP: Record<string, BadgeTone> = {
   'QUOTE SENT': 'accent',
   NEGOTIATION: 'accent',
   APPROVED: 'success',
+  ACCEPTED: 'success',
   'PROJECT CREATED': 'success',
   'IN PROGRESS': 'accent',
   'ON HOLD': 'warning',

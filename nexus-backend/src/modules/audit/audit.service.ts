@@ -11,4 +11,14 @@ export const auditService = {
   async getAuditFor(entityType: string, entityId: string) {
     return auditRepository.listForEntity(entityType, entityId);
   },
+
+  async getGlobalAudit(params: {
+    skip: number;
+    take: number;
+    entityType?: string;
+    action?: string;
+    search?: string;
+  }) {
+    return auditRepository.listGlobal(params);
+  },
 };

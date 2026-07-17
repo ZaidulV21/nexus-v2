@@ -22,6 +22,22 @@ export function useProject(id: string | undefined) {
   });
 }
 
+/** Client-portal: the authenticated client's own projects. */
+export function useMyProjects() {
+  return useQuery({
+    queryKey: queryKeys.projects.clientList,
+    queryFn: () => projectService.listMine(),
+  });
+}
+
+export function useMyProject(id: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.projects.clientDetail(id ?? ''),
+    queryFn: () => projectService.getMine(id as string),
+    enabled: !!id,
+  });
+}
+
 export function useUpdateProjectServiceStatus(projectId: string) {
   const queryClient = useQueryClient();
   return useMutation({

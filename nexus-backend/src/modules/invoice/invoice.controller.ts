@@ -80,6 +80,26 @@ export const invoiceController = {
     }
   },
 
+  async listForClient(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.user || req.user.type !== 'CLIENT') throw new UnauthorizedError();
+      const invoices = await invoiceService.listForClient(req.user.id);
+      return ok(res, invoices);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async getForClient(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.user || req.user.type !== 'CLIENT') throw new UnauthorizedError();
+      const invoice = await invoiceService.getForClient(req.params.id, req.user.id);
+      return ok(res, invoice);
+    } catch (err) {
+      next(err);
+    }
+  },
+
   async projectFinancialSummary(req: Request, res: Response, next: NextFunction) {
     try {
       const summary = await invoiceService.getProjectFinancialSummary(req.params.projectId);

@@ -27,7 +27,9 @@ export const queryKeys = {
   projects: {
     all: ['projects'] as const,
     list: (params: unknown) => ['projects', 'list', params] as const,
+    clientList: ['projects', 'client-list'] as const,
     detail: (id: string) => ['projects', 'detail', id] as const,
+    clientDetail: (id: string) => ['projects', 'client-detail', id] as const,
     invoices: (id: string) => ['projects', 'invoices', id] as const,
     financialSummary: (id: string) => ['projects', 'financial-summary', id] as const,
     documents: (id: string) => ['projects', 'documents', id] as const,
@@ -35,8 +37,26 @@ export const queryKeys = {
   invoices: {
     all: ['invoices'] as const,
     list: (params: unknown) => ['invoices', 'list', params] as const,
+    clientList: ['invoices', 'client-list'] as const,
     detail: (id: string) => ['invoices', 'detail', id] as const,
+    clientDetail: (id: string) => ['invoices', 'client-detail', id] as const,
   },
+  documents: {
+    all: ['documents'] as const,
+    clientList: ['documents', 'client-list'] as const,
+    adminList: (params: unknown) => ['documents', 'admin-list', params] as const,
+  },
+  messages: {
+    all: ['messages'] as const,
+    conversations: ['messages', 'conversations'] as const,
+    thread: (clientId: string) => ['messages', 'thread', clientId] as const,
+  },
+  dashboard: {
+    clientSummary: ['dashboard', 'client-summary'] as const,
+  },
+  globalTimeline: (params: unknown) => ['timeline', 'global', params] as const,
+  globalAuditLogs: (params: unknown) => ['audit-logs', 'global', params] as const,
+  search: (q: string) => ['search', q] as const,
   timeline: (entityType: string, entityId: string) => ['timeline', entityType, entityId] as const,
   auditLogs: (entityType: string, entityId: string) => ['audit-logs', entityType, entityId] as const,
 };
