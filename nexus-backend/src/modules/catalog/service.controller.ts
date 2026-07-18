@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { serviceService } from './service.service';
-import { createServiceSchema, updateServiceSchema } from './service.validation';
+import { createServiceSchema, updateServiceSchema, serviceListFiltersSchema } from './service.validation';
 import { ok, created, paginated } from '../../core/utils/response';
 import { parsePagination } from '../../core/utils/pagination';
 import { ValidationError } from '../../core/errors/AppError';
@@ -37,6 +37,24 @@ export const serviceController = {
     }
   },
 
+  async archive(req: Request, res: Response, next: NextFunction) {
+    try {
+      const service = await serviceService.archive(req.params.id, req.user?.id);
+      return ok(res, service);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async restore(req: Request, res: Response, next: NextFunction) {
+    try {
+      const service = await serviceService.restore(req.params.id, req.user?.id);
+      return ok(res, service);
+    } catch (err) {
+      next(err);
+    }
+  },
+
   async getById(req: Request, res: Response, next: NextFunction) {
     try {
       const service = await serviceService.getById(req.params.id);
@@ -51,7 +69,14 @@ export const serviceController = {
       const pagination = parsePagination(req);
       // Public callers (no req.user) only ever see active services.
       const onlyActive = !req.user;
-      const { items, total } = await serviceService.list(pagination, onlyActive);
+
+      const parsedFilters = serviceListFiltersSchema.safeParse({
+        status: typeof req.query.status === 'string' ? req.query.status : undefined,
+        categoryId: typeof req.query.categoryId === 'string' ? req.query.categoryId : undefined,
+      });
+      if (!parsedFilters.success) throw new ValidationError('Invalid service filters', parsedFilters.error.flatten());
+
+      const { items, total } = await serviceService.list(pagination, onlyActive, parsedFilters.data);
       return paginated(res, items, { page: pagination.page, pageSize: pagination.pageSize, total });
     } catch (err) {
       next(err);

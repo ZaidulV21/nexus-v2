@@ -1,12 +1,13 @@
 import { useEffect } from 'react';
 import { Command } from 'cmdk';
 import { useNavigate } from 'react-router-dom';
-import { FileText, Users, FolderKanban, Receipt, FileSpreadsheet, LayoutDashboard } from 'lucide-react';
+import { FileText, Users, FolderKanban, Receipt, FileSpreadsheet, LayoutDashboard, Layers } from 'lucide-react';
 import { useDisclosure } from '@/hooks/useDisclosure';
 import { ROUTES } from '@/routes/routes';
 
 const NAV_COMMANDS = [
   { label: 'Dashboard', icon: LayoutDashboard, path: ROUTES.dashboard },
+  { label: 'Services', icon: Layers, path: ROUTES.services },
   { label: 'Leads', icon: FileText, path: ROUTES.leads },
   { label: 'Clients', icon: Users, path: ROUTES.clients },
   { label: 'Projects', icon: FolderKanban, path: ROUTES.projects },

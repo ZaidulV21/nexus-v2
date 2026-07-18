@@ -2,6 +2,17 @@ import { prisma } from '../../config/database';
 import { Prisma, QuotationStatus } from '@prisma/client';
 import { PaginationParams } from '../../core/utils/pagination';
 
+// The only statuses a Client may ever see. DRAFT and APPROVED are internal:
+// a quotation becomes visible in the portal exactly when the admin clicks
+// "Send" (SENT), and stays visible through the client's own decisions.
+// A revision-in-progress flips back to DRAFT and disappears until resent.
+export const CLIENT_VISIBLE_QUOTATION_STATUSES: QuotationStatus[] = [
+  'SENT',
+  'NEGOTIATION',
+  'ACCEPTED',
+  'REJECTED',
+];
+
 export const quotationRepository = {
   create(data: { quotationNumber: string; leadId: string; clientId?: string }, tx: Prisma.TransactionClient) {
     return tx.quotation.create({ data });
@@ -49,12 +60,23 @@ export const quotationRepository = {
   },
 
   async listForClient(clientId: string, pagination: PaginationParams) {
-    const where: any = { clientId };
+    // Ownership mirrors getForClient: either a direct clientId link or the
+    // quotation's lead converted into this client. Status is restricted to
+    // post-send states so drafts and internally-approved quotations never
+    // reach the portal.
+    const where: any = {
+      AND: [
+        { OR: [{ clientId }, { lead: { client: { id: clientId } } }] },
+        { status: { in: CLIENT_VISIBLE_QUOTATION_STATUSES } },
+      ],
+    };
     if (pagination.search) {
-      where.OR = [
-        { quotationNumber: { contains: pagination.search, mode: 'insensitive' } },
-        { lead: { leadNumber: { contains: pagination.search, mode: 'insensitive' } } },
-      ];
+      where.AND.push({
+        OR: [
+          { quotationNumber: { contains: pagination.search, mode: 'insensitive' } },
+          { lead: { leadNumber: { contains: pagination.search, mode: 'insensitive' } } },
+        ],
+      });
     }
 
     const [items, total] = await Promise.all([

@@ -1,6 +1,7 @@
 import { runInTransaction } from '../../core/utils/transaction';
-import { quotationRepository, quotationVersionRepository } from './quotation.repository';
+import { quotationRepository, quotationVersionRepository, CLIENT_VISIBLE_QUOTATION_STATUSES } from './quotation.repository';
 import { leadRepository } from '../lead/lead.repository';
+import { serviceRepository } from '../catalog/service.repository';
 import { timelineService } from '../timeline/timeline.service';
 import { auditService } from '../audit/audit.service';
 import { notificationsService } from '../notifications/notifications.service';
@@ -37,6 +38,23 @@ function getQuotationRecipient(quotation: any) {
   return quotation.client?.email ?? quotation.lead?.email ?? null;
 }
 
+// Every quotation line must reference a real catalog service. New quotations
+// require the service to be selectable (active, non-archived); revisions of
+// existing quotations may keep services that were archived since, so a live
+// negotiation is never blocked by a catalog change.
+async function assertItemServicesExist(items: QuotationItemInput[], requireSelectable: boolean) {
+  const uniqueServiceIds = [...new Set(items.map((item) => item.serviceId))];
+  for (const serviceId of uniqueServiceIds) {
+    const service = await serviceRepository.findById(serviceId);
+    if (!service) {
+      throw new ValidationError(`Service ${serviceId} does not exist in the catalog`);
+    }
+    if (requireSelectable && (!service.isActive || service.archivedAt)) {
+      throw new ValidationError(`Service "${service.name}" is not available for new quotations`);
+    }
+  }
+}
+
 function getActiveVersion(quotation: any) {
   return quotation.versions.find((version: any) => version.id === quotation.activeVersionId) ?? quotation.versions[0];
 }
@@ -45,6 +63,8 @@ export const quotationService = {
   async create(input: CreateQuotationInput, actorUserId: string) {
     const lead = await leadRepository.findById(input.leadId);
     if (!lead) throw new NotFoundError('Lead not found');
+
+    await assertItemServicesExist(input.items, true);
 
     const discount = input.discount || 0;
     const transportation = input.transportation || 0;
@@ -108,6 +128,8 @@ export const quotationService = {
   async revise(quotationId: string, input: ReviseQuotationInput, actorUserId: string) {
     const quotation = await quotationRepository.findById(quotationId);
     if (!quotation) throw new NotFoundError('Quotation not found');
+
+    await assertItemServicesExist(input.items, false);
 
     const discount = input.discount || 0;
     const transportation = input.transportation || 0;
@@ -401,6 +423,12 @@ export const quotationService = {
     const quotationClientId = quotation.clientId ?? quotation.lead?.client?.id;
     if (!quotationClientId || quotationClientId !== clientId) {
       throw new ValidationError('Quotation does not belong to this Client');
+    }
+    // DRAFT / APPROVED are internal states - the quotation only exists for
+    // the client once the admin has clicked "Send". 404 (not 403) so the
+    // portal can't even confirm an unsent quotation exists.
+    if (!CLIENT_VISIBLE_QUOTATION_STATUSES.includes(quotation.status)) {
+      throw new NotFoundError('Quotation not found');
     }
     return quotation;
   },

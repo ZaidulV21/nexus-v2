@@ -9,6 +9,8 @@ export const ROUTES = {
   clientDetail: (id: string) => `/clients/${id}`,
   quotations: '/quotations',
   quotationDetail: (id: string) => `/quotations/${id}`,
+  services: '/services',
+  serviceDetail: (id: string) => `/services/${id}`,
   projects: '/projects',
   projectDetail: (id: string) => `/projects/${id}`,
   invoices: '/invoices',

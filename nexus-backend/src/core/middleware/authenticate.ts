@@ -41,6 +41,26 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
   }
 }
 
+// Populates req.user when a valid Bearer token is present but never rejects
+// the request. Used on public routes (e.g. the service catalog list) whose
+// response widens for authenticated admins.
+export function authenticateOptional(req: Request, res: Response, next: NextFunction) {
+  const header = req.headers.authorization;
+  if (!header || !header.startsWith('Bearer ')) {
+    return next();
+  }
+
+  const token = header.slice('Bearer '.length);
+
+  try {
+    const payload = jwt.verify(token, env.jwtSecret) as AuthPayload;
+    req.user = payload;
+  } catch {
+    // Invalid token on an optional route - treat as anonymous.
+  }
+  return next();
+}
+
 // Restricts a route to a specific actor type (ADMIN or CLIENT), used in
 // addition to (not instead of) permission checks for admin-only routes.
 export function requireActorType(type: AuthActorType) {

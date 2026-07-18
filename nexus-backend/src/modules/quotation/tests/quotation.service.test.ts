@@ -2,6 +2,7 @@ jest.mock('../../../core/utils/transaction', () => ({
   runInTransaction: jest.fn((fn) => fn({})),
 }));
 jest.mock('../quotation.repository', () => ({
+  CLIENT_VISIBLE_QUOTATION_STATUSES: ['SENT', 'NEGOTIATION', 'ACCEPTED', 'REJECTED'],
   quotationRepository: {
     create: jest.fn(),
     setActiveVersion: jest.fn(),
@@ -23,15 +24,29 @@ jest.mock('../quotation.repository', () => ({
 jest.mock('../../lead/lead.repository', () => ({
   leadRepository: { findById: jest.fn() },
 }));
+jest.mock('../../catalog/service.repository', () => ({
+  serviceRepository: { findById: jest.fn() },
+}));
 jest.mock('../../timeline/timeline.service', () => ({ timelineService: { recordEvent: jest.fn() } }));
 jest.mock('../../audit/audit.service', () => ({ auditService: { recordAudit: jest.fn() } }));
 jest.mock('../../notifications/notifications.service', () => ({ notificationsService: { emitEvent: jest.fn() } }));
 jest.mock('../../project/project.service', () => ({ projectService: { create: jest.fn() } }));
 
 import { leadRepository } from '../../lead/lead.repository';
+import { serviceRepository } from '../../catalog/service.repository';
 import { quotationRepository, quotationVersionRepository } from '../quotation.repository';
 import { projectService } from '../../project/project.service';
 import { quotationService } from '../quotation.service';
+
+beforeEach(() => {
+  // Every quotation line item must reference a live catalog service.
+  (serviceRepository.findById as jest.Mock).mockImplementation(async (id: string) => ({
+    id,
+    name: `Service ${id}`,
+    isActive: true,
+    archivedAt: null,
+  }));
+});
 
 describe('quotationService.create - server-side total calculation', () => {
   it('computes subtotal, GST, and grand total from line items rather than trusting client input', async () => {
@@ -173,5 +188,45 @@ describe('quotationService.send and accept', () => {
     (quotationRepository.updateStatus as jest.Mock).mockRejectedValueOnce(new Error('enum mismatch'));
 
     await expect(quotationService.accept('quo1', 'client1')).rejects.toThrow('enum mismatch');
+  });
+});
+describe('quotationService.getForClient - portal visibility rules', () => {
+  const baseQuotation = {
+    id: 'quo1',
+    clientId: 'client1',
+    quotationNumber: 'Q-00001',
+    lead: { client: { id: 'client1' } },
+    versions: [],
+  };
+
+  it('hides a DRAFT quotation from its own client (404, not 403)', async () => {
+    (quotationRepository.findById as jest.Mock).mockResolvedValue({ ...baseQuotation, status: 'DRAFT' });
+    await expect(quotationService.getForClient('quo1', 'client1')).rejects.toThrow('Quotation not found');
+  });
+
+  it('hides an internally APPROVED (not yet sent) quotation from the client', async () => {
+    (quotationRepository.findById as jest.Mock).mockResolvedValue({ ...baseQuotation, status: 'APPROVED' });
+    await expect(quotationService.getForClient('quo1', 'client1')).rejects.toThrow('Quotation not found');
+  });
+
+  it('returns a SENT quotation to its client', async () => {
+    (quotationRepository.findById as jest.Mock).mockResolvedValue({ ...baseQuotation, status: 'SENT' });
+    const result = await quotationService.getForClient('quo1', 'client1');
+    expect(result.status).toBe('SENT');
+  });
+
+  it('keeps NEGOTIATION / ACCEPTED / REJECTED quotations visible to the client', async () => {
+    for (const status of ['NEGOTIATION', 'ACCEPTED', 'REJECTED']) {
+      (quotationRepository.findById as jest.Mock).mockResolvedValue({ ...baseQuotation, status });
+      const result = await quotationService.getForClient('quo1', 'client1');
+      expect(result.status).toBe(status);
+    }
+  });
+
+  it('still rejects access by a different client before revealing status', async () => {
+    (quotationRepository.findById as jest.Mock).mockResolvedValue({ ...baseQuotation, status: 'SENT' });
+    await expect(quotationService.getForClient('quo1', 'other-client')).rejects.toThrow(
+      'Quotation does not belong to this Client'
+    );
   });
 });

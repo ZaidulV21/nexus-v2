@@ -20,6 +20,13 @@ export interface Category {
 
 export type SiteVisitRequirement = 'YES' | 'NO' | 'OPTIONAL';
 
+export interface ServiceUsage {
+  leadServices: number;
+  projectServices: number;
+  quotationItems: number;
+  total: number;
+}
+
 export interface Service {
   id: string;
   categoryId: string;
@@ -28,8 +35,14 @@ export interface Service {
   description?: string | null;
   icon?: string | null;
   basePrice?: string | null;
+  estimatedDuration?: string | null;
   requiresSiteVisit: SiteVisitRequirement;
   isActive: boolean;
+  archivedAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  /** Present only on the service detail endpoint. */
+  usage?: ServiceUsage;
 }
 
 export const LEAD_SERVICE_STATUSES = [

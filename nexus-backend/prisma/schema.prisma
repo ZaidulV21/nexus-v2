@@ -177,8 +177,10 @@ model Service {
   description        String?
   icon               String?
   basePrice          Decimal? @db.Decimal(12, 2)
+  estimatedDuration  String?
   requiresSiteVisit  SiteVisitRequirement @default(OPTIONAL)
   isActive           Boolean  @default(true)
+  archivedAt         DateTime?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 

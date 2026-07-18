@@ -31,7 +31,7 @@ export const leadService = {
       const serviceRecords = [];
       for (const s of input.services) {
         const service = await serviceRepository.findById(s.serviceId);
-        if (!service || !service.isActive) {
+        if (!service || !service.isActive || service.archivedAt) {
           throw new ValidationError(`Service ${s.serviceId} is not available`);
         }
         const questionnaire = await serviceRepository.getActiveQuestionnaire(s.serviceId);
@@ -110,7 +110,7 @@ export const leadService = {
     }
 
     const service = await serviceRepository.findById(input.serviceId);
-    if (!service || !service.isActive) throw new ValidationError('Service is not available');
+    if (!service || !service.isActive || service.archivedAt) throw new ValidationError('Service is not available');
 
     const questionnaire = await serviceRepository.getActiveQuestionnaire(input.serviceId);
 

@@ -15,6 +15,8 @@ export const queryKeys = {
   },
   services: {
     all: ['services'] as const,
+    list: (params: unknown) => ['services', 'list', params] as const,
+    detail: (id: string) => ['services', 'detail', id] as const,
     categories: ['services', 'categories'] as const,
   },
   quotations: {

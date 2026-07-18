@@ -6,6 +6,7 @@ import {
   FileSpreadsheet,
   FolderKanban,
   Receipt,
+  Layers,
   MessageSquare,
   FolderOpen,
   History,
@@ -26,6 +27,7 @@ const NAV_SECTIONS = [
   {
     label: 'Pipeline',
     items: [
+      { label: 'Services', icon: Layers, to: ROUTES.services },
       { label: 'Leads', icon: FileText, to: ROUTES.leads },
       { label: 'Clients', icon: Users, to: ROUTES.clients },
       { label: 'Quotations', icon: FileSpreadsheet, to: ROUTES.quotations },

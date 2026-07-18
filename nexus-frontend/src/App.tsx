@@ -10,6 +10,8 @@ import { ClientsPage } from '@/pages/clients/ClientsPage';
 import { ClientDetailPage } from '@/pages/clients/ClientDetailPage';
 import { QuotationsPage } from '@/pages/quotations/QuotationsPage';
 import { QuotationDetailPage } from '@/pages/quotations/QuotationDetailPage';
+import { ServicesPage } from '@/pages/services/ServicesPage';
+import { ServiceDetailPage } from '@/pages/services/ServiceDetailPage';
 import { ProjectsPage } from '@/pages/projects/ProjectsPage';
 import { ProjectDetailPage } from '@/pages/projects/ProjectDetailPage';
 import { InvoicesPage } from '@/pages/invoices/InvoicesPage';
@@ -57,6 +59,8 @@ export default function App() {
           <Route path="/clients/:id" element={<ClientDetailPage />} />
           <Route path="/quotations" element={<QuotationsPage />} />
           <Route path="/quotations/:id" element={<QuotationDetailPage />} />
+          <Route path="/services" element={<ServicesPage />} />
+          <Route path="/services/:id" element={<ServiceDetailPage />} />
           <Route path="/projects" element={<ProjectsPage />} />
           <Route path="/projects/:id" element={<ProjectDetailPage />} />
           <Route path="/invoices" element={<InvoicesPage />} />
