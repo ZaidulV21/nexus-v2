@@ -136,12 +136,13 @@ export const leadService = {
     if (!leadServiceRecord) throw new NotFoundError('Lead Service not found');
 
     // Once the Lead has converted, its services are a read-only sales
-    // record - all further status movement happens on the Project Services
-    // that superseded them.
+    // record - manual status changes are blocked, but automatic updates
+    // from quotation/project workflow events continue to keep the historical
+    // record synchronized.
     const lead = await leadRepository.findById(leadServiceRecord.leadId);
     if (lead?.convertedAt) {
       throw new ValidationError(
-        'This Lead has been converted - its services are read-only. Update the corresponding Project Service instead.'
+        'This Lead has been converted - Lead Services are read-only. Status updates happen automatically from quotation and project events.'
       );
     }
     if (leadServiceRecord.status === 'PROJECT CREATED') {

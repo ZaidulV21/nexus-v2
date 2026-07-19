@@ -29,13 +29,13 @@ import { quotationRepository } from '../../quotation/quotation.repository';
 import { clientService } from '../client.service';
 
 describe('clientService.convertLeadToClient', () => {
-  it('rejects converting a Lead that has no approved services', async () => {
+  it('rejects converting a Lead that has no qualified services', async () => {
     (leadRepository.findById as jest.Mock).mockResolvedValue({ id: 'lead1', email: 'x@y.com' });
     (clientRepository.findBySourceLeadId as jest.Mock).mockResolvedValue(null);
-    (leadServiceRepository.listForLead as jest.Mock).mockResolvedValue([{ status: 'NEW' }]);
+    (leadServiceRepository.listForLead as jest.Mock).mockResolvedValue([{ status: 'NEW' }, { status: 'CONTACTED' }]);
 
     await expect(clientService.convertLeadToClient('lead1')).rejects.toThrow(
-      'must have at least one approved service'
+      'must be qualified'
     );
   });
 
@@ -56,14 +56,14 @@ describe('clientService.convertLeadToClient', () => {
     });
     (clientRepository.findBySourceLeadId as jest.Mock).mockResolvedValue(null);
     (clientRepository.findByEmail as jest.Mock).mockResolvedValue({ id: 'existing-client' });
-    (leadServiceRepository.listForLead as jest.Mock).mockResolvedValue([{ status: 'APPROVED' }]);
+    (leadServiceRepository.listForLead as jest.Mock).mockResolvedValue([{ status: 'QUALIFIED' }]);
 
     await expect(clientService.convertLeadToClient('lead1', 'admin1')).rejects.toThrow(
       'already exists for this email address'
     );
   });
 
-  it('converts a Lead with an approved service and creates a Client', async () => {
+  it('converts a Lead with a qualified service and creates a Client', async () => {
     (leadRepository.findById as jest.Mock).mockResolvedValue({
       id: 'lead1',
       leadNumber: 'L-00001',
@@ -74,7 +74,7 @@ describe('clientService.convertLeadToClient', () => {
     });
     (clientRepository.findBySourceLeadId as jest.Mock).mockResolvedValue(null);
     (clientRepository.findByEmail as jest.Mock).mockResolvedValue(null);
-    (leadServiceRepository.listForLead as jest.Mock).mockResolvedValue([{ status: 'APPROVED' }]);
+    (leadServiceRepository.listForLead as jest.Mock).mockResolvedValue([{ status: 'QUOTE PREPARING' }]);
     (clientRepository.generateClientNumber as jest.Mock).mockResolvedValue('C-00001');
     (quotationRepository.migrateLeadQuotationsToClient as jest.Mock).mockResolvedValue({ count: 2 });
     (clientRepository.create as jest.Mock).mockResolvedValue({

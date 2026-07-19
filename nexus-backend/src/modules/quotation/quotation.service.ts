@@ -83,28 +83,20 @@ function resolveSourceLeadId(quotation: any): string {
 
 export const quotationService = {
   async create(input: CreateQuotationInput, actorUserId: string) {
-    if (!input.leadId && !input.clientId) {
-      throw new ValidationError('Either leadId or clientId is required');
-    }
-    if (input.leadId && input.clientId) {
-      throw new ValidationError('Cannot specify both leadId and clientId');
+    // Single workflow: Quotations are created ONLY for Clients.
+    // Lead must be converted to a Client before quotation creation.
+    if (!input.clientId) {
+      throw new ValidationError(
+        'Quotations must be created for Clients. Convert the Lead to a Client first.'
+      );
     }
 
-    // Verify the owner. A Client-owned quotation remains traceable to its
-    // source Lead through the Client relation when a later workflow event
-    // needs to update the Lead Service statuses.
-    if (input.clientId) {
-      const client = await clientRepository.findById(input.clientId);
-      if (!client) throw new NotFoundError('Client not found');
-      if (!client.sourceLeadId) throw new ValidationError('Client has no source lead');
-    } else {
-      const lead = await leadRepository.findById(input.leadId!);
-      if (!lead) throw new NotFoundError('Lead not found');
-      if (lead.convertedAt) {
-        throw new ValidationError(
-          'This Lead has been converted to a Client - create the quotation against the Client instead'
-        );
-      }
+    // Verify the Client exists and is traceable to a source Lead
+    // (needed for automatic Lead Service status updates)
+    const client = await clientRepository.findById(input.clientId);
+    if (!client) throw new NotFoundError('Client not found');
+    if (!client.sourceLeadId) {
+      throw new ValidationError('Client has no source Lead - cannot create quotation');
     }
 
     await assertItemServicesExist(input.items, true);
@@ -120,12 +112,13 @@ export const quotationService = {
     );
 
     const result = await runInTransaction(async (tx) => {
-      const isFirstQuotationForLead = input.leadId
-        ? (await quotationRepository.countForLead(input.leadId, tx)) === 0
+      // Check if this is the first quotation for this Client (via source Lead)
+      const isFirstQuotationForLead = client.sourceLeadId
+        ? (await quotationRepository.countForLead(client.sourceLeadId, tx)) === 0
         : false;
       const quotationNumber = await quotationRepository.generateQuotationNumber(tx);
       const quotation = await quotationRepository.create(
-        { quotationNumber, leadId: input.leadId, clientId: input.clientId },
+        { quotationNumber, leadId: null, clientId: input.clientId },
         tx
       );
 
@@ -150,13 +143,14 @@ export const quotationService = {
       return { quotation, version, isFirstQuotationForLead };
     });
 
-    // Lead pipeline automation: creating the FIRST quotation for a Lead
-    // moves its quoted services from QUOTE PREPARING to QUOTE SENT.
+    // Lead pipeline automation: creating the FIRST quotation for a Client
+    // (via source Lead) moves its quoted Lead Services from QUOTE PREPARING to QUOTE SENT.
     // Services still earlier in the pipeline are left alone, and subsequent
     // quotations don't re-trigger the move - re-sends are handled by send().
-    if (input.leadId && result.isFirstQuotationForLead) {
+    // This keeps Lead Services synchronized even after conversion.
+    if (client.sourceLeadId && result.isFirstQuotationForLead) {
       await leadService.applyQuotationWorkflowStatus(
-        input.leadId,
+        client.sourceLeadId,
         input.items.map((item) => item.serviceId),
         'QUOTE SENT',
         actorUserId,

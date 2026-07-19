@@ -15,9 +15,10 @@ function generateTempPassword(): string {
 }
 
 export const clientService = {
-  // Implements PRD's Lead -> Client conversion exactly: Admin-triggered,
-  // requires at least one approved Lead Service, generates credentials,
-  // emails them, and links the Lead for future Project creation.
+  // Implements PRD's Lead -> Client conversion: Admin-triggered when the Lead
+  // is qualified and ready for quotation workflow. Requires basic business
+  // validation (qualified status, required data, at least one service).
+  // Quotations are created AFTER conversion for the Client, not before.
   async convertLeadToClient(leadId: string, actorUserId?: string) {
     const lead = await leadRepository.findById(leadId);
     if (!lead) throw new NotFoundError('Lead not found');
@@ -28,12 +29,18 @@ export const clientService = {
     }
 
     const leadServices = await leadServiceRepository.listForLead(leadId);
-    const hasApprovedService = leadServices.some((ls) =>
-      ['APPROVED', 'PROJECT CREATED'].includes(ls.status)
+    if (leadServices.length === 0) {
+      throw new ValidationError('Lead must have at least one service before it can be converted to a Client');
+    }
+
+    // Business validation: Lead should be qualified (past initial contact stages)
+    // but does NOT require approved quotations. Quotations belong to Clients.
+    const hasQualifiedService = leadServices.some((ls) =>
+      !['NEW', 'CONTACTED'].includes(ls.status)
     );
-    if (!hasApprovedService) {
+    if (!hasQualifiedService) {
       throw new ValidationError(
-        'Lead must have at least one approved service before it can be converted to a Client'
+        'Lead must be qualified (at least one service past initial contact stage) before conversion'
       );
     }
 

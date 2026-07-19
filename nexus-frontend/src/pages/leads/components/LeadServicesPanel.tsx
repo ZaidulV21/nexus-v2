@@ -31,8 +31,8 @@ export function LeadServicesPanel({ lead }: { lead: Lead }) {
           {services.map((ls) => {
             // A service's status is locked when (a) it sits at a
             // workflow-controlled stage (QUOTE SENT / PROJECT CREATED), or
-            // (b) the whole Lead has converted - from then on the sales
-            // record is read-only and status lives on the Project Service.
+            // (b) the whole Lead has converted - from then on Lead Services
+            // become read-only and continue auto-updating from quotation/project events.
             const isBackendControlled = !(MANUAL_LEAD_SERVICE_STATUSES as readonly string[]).includes(ls.status);
             const isLocked = isBackendControlled || !!lead.convertedAt;
             return (
@@ -50,11 +50,11 @@ export function LeadServicesPanel({ lead }: { lead: Lead }) {
                       className="flex items-center gap-1 text-xs text-ink-faint"
                       title={
                         lead.convertedAt
-                          ? 'This Lead has converted - the sales record is archived and status updates happen on the Project Service'
+                          ? 'This Lead has converted - Lead Services are read-only. Status updates automatically from quotation and project events.'
                           : 'This status is updated automatically by the quotation/project workflow'
                       }
                     >
-                      <Lock className="h-3 w-3" /> {lead.convertedAt ? 'Archived' : 'Auto'}
+                      <Lock className="h-3 w-3" /> {lead.convertedAt ? 'Read-Only (Auto-Sync)' : 'Auto'}
                     </span>
                   ) : (
                     <button

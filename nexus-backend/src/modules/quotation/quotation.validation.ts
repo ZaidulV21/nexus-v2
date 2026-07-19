@@ -9,25 +9,17 @@ const itemSchema = z.object({
 });
 
 const quotationPayloadSchema = z.object({
-  leadId: z.string().uuid().optional(),
-  clientId: z.string().uuid().optional(),
+  clientId: z.string().uuid('Client ID is required'), // REQUIRED - quotations are Client-only
   discount: z.number().nonnegative().optional(),
   transportation: z.number().nonnegative().optional(),
   installation: z.number().nonnegative().optional(),
   items: z.array(itemSchema).min(1, 'At least one line item is required'),
 });
 
-export const createQuotationSchema = quotationPayloadSchema
-  .refine((data) => data.leadId || data.clientId, {
-    message: 'Either leadId or clientId is required',
-  })
-  .refine((data) => !(data.leadId && data.clientId), {
-    message: 'Cannot specify both leadId and clientId',
-  });
+export const createQuotationSchema = quotationPayloadSchema;
 
-// Omit ownership fields before applying the create-only XOR refinements.
-// ZodEffects (the result of refine) intentionally has no .omit() method.
-export const reviseQuotationSchema = quotationPayloadSchema.omit({ leadId: true, clientId: true });
+// Omit ownership field (clientId) from revision schema - quotations already have ownership
+export const reviseQuotationSchema = quotationPayloadSchema.omit({ clientId: true });
 
 export const approveQuotationSchema = z.object({
   approvalMethod: z.enum(['PHONE', 'WHATSAPP', 'EMAIL', 'IN_PERSON']),

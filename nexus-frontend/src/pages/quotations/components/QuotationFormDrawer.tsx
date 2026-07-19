@@ -9,7 +9,6 @@ import { Input } from '@/components/ui/Input';
 import { FormField } from '@/components/ui/FormField';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/Select';
 import { Skeleton } from '@/components/ui/Skeleton';
-import { useLeadsList } from '@/queries/useLeads';
 import { useClientsList } from '@/queries/useClients';
 import { useActiveServices } from '@/queries/useLeads';
 import { useCreateQuotation, useReviseQuotation } from '@/queries/useQuotations';
@@ -27,18 +26,11 @@ const itemSchema = z.object({
 });
 
 const createSchema = z.object({
-  leadId: z.string().optional(),
-  clientId: z.string().optional(),
+  clientId: z.string().min(1, 'Select a Client'),
   discount: z.string().optional(),
   transportation: z.string().optional(),
   installation: z.string().optional(),
   items: z.array(itemSchema).min(1, 'Add at least one item'),
-}).refine((data) => data.leadId || data.clientId, {
-  message: 'Select either a Lead or a Client',
-  path: ['leadId'],
-}).refine((data) => !(data.leadId && data.clientId), {
-  message: 'Select a Lead or a Client, not both',
-  path: ['clientId'],
 });
 
 const reviseSchema = z.object({
@@ -50,7 +42,6 @@ const reviseSchema = z.object({
 });
 
 type QuotationFormValues = {
-  leadId?: string;
   clientId?: string;
   discount?: string;
   transportation?: string;
@@ -75,7 +66,6 @@ export function QuotationFormDrawer({
   mode: 'create' | 'revise';
   quotation?: Quotation;
 }) {
-  const { data: leads, isLoading: leadsLoading } = useLeadsList({ page: 1, pageSize: 100, sortBy: 'createdAt', sortOrder: 'desc' });
   const { data: clients, isLoading: clientsLoading } = useClientsList({ page: 1, pageSize: 100, sortBy: 'createdAt', sortOrder: 'desc' });
   const { data: services, isLoading: servicesLoading } = useActiveServices();
   const createQuotation = useCreateQuotation();
@@ -88,12 +78,10 @@ export function QuotationFormDrawer({
     control,
     handleSubmit,
     reset,
-    setValue,
     formState: { errors, isSubmitting },
   } = useForm<QuotationFormValues>({
     resolver: zodResolver(schema as z.ZodTypeAny),
     defaultValues: {
-      leadId: '',
       clientId: '',
       discount: '0',
       transportation: '0',
@@ -107,7 +95,6 @@ export function QuotationFormDrawer({
   useEffect(() => {
     if (!open) {
       reset({
-        leadId: '',
         clientId: '',
         discount: '0',
         transportation: '0',
@@ -146,16 +133,18 @@ export function QuotationFormDrawer({
 
     try {
       if (mode === 'create') {
+        if (!values.clientId) {
+          throw new Error('Client selection is required');
+        }
         const payload: CreateQuotationInput = {
-          leadId: values.leadId || undefined,
-          clientId: values.clientId || undefined,
+          clientId: values.clientId,
           discount: Number(values.discount || 0),
           transportation: Number(values.transportation || 0),
           installation: Number(values.installation || 0),
           items: sharedItems,
         };
         await createQuotation.mutateAsync(payload);
-        toast({ title: 'Quotation created', description: 'The quotation was sent to the backend workflow.', variant: 'success' });
+        toast({ title: 'Quotation created', description: 'The quotation was created successfully.', variant: 'success' });
       } else {
         if (!quotation) throw new Error('Missing quotation context');
         const payload: ReviseQuotationInput = {
@@ -179,72 +168,33 @@ export function QuotationFormDrawer({
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
-      <DrawerContent title={mode === 'create' ? 'New quotation' : 'Revise quotation'} description={mode === 'create' ? 'Create a quotation from an approved lead.' : 'Create a new version without overwriting the current one.'}>
+      <DrawerContent title={mode === 'create' ? 'New quotation' : 'Revise quotation'} description={mode === 'create' ? 'Create a quotation for a Client. Lead must be converted to Client first.' : 'Create a new version without overwriting the current one.'}>
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5" noValidate>
           {mode === 'create' && (
-            <div className="grid gap-4 md:grid-cols-2">
-              <FormField label="Lead" htmlFor="leadId" hint="Select a Lead or a Client, not both" error={errors.leadId?.message}>
-                {leadsLoading ? (
-                  <Skeleton className="h-9 w-full" />
-                ) : (
-                  <Controller
-                    control={control}
-                    name="leadId"
-                    render={({ field }) => (
-                      <Select
-                        value={field.value}
-                        onValueChange={(value) => {
-                          field.onChange(value);
-                          if (value) setValue('clientId', '');
-                        }}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a lead" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {leads?.items.map((lead) => (
-                            <SelectItem key={lead.id} value={lead.id}>
-                              {lead.leadNumber} — {lead.contactName}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
-                  />
-                )}
-              </FormField>
-
-              <FormField label="Client" htmlFor="clientId" hint="For converted leads, pick the Client instead" error={errors.clientId?.message}>
-                {clientsLoading ? (
-                  <Skeleton className="h-9 w-full" />
-                ) : (
-                  <Controller
-                    control={control}
-                    name="clientId"
-                    render={({ field }) => (
-                      <Select
-                        value={field.value}
-                        onValueChange={(value) => {
-                          field.onChange(value);
-                          if (value) setValue('leadId', '');
-                        }}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a client" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {clients?.items.map((client) => (
-                            <SelectItem key={client.id} value={client.id}>
-                              {client.clientNumber} — {client.contactName}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
-                  />
-                )}
-              </FormField>
-            </div>
+            <FormField label="Client" htmlFor="clientId" hint="Quotations can only be created for Clients. Convert the Lead first if needed." error={errors.clientId?.message}>
+              {clientsLoading ? (
+                <Skeleton className="h-9 w-full" />
+              ) : (
+                <Controller
+                  control={control}
+                  name="clientId"
+                  render={({ field }) => (
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a client" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {clients?.items.map((client) => (
+                          <SelectItem key={client.id} value={client.id}>
+                            {client.clientNumber} — {client.contactName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+              )}
+            </FormField>
           )}
 
           <div className="grid gap-4 md:grid-cols-3">

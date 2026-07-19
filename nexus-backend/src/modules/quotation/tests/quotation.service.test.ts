@@ -59,16 +59,17 @@ beforeEach(() => {
   }));
 });
 
-describe('quotationService.create - server-side total calculation', () => {
+describe('quotationService.create - Client-only workflow', () => {
   it('computes subtotal, GST, and grand total from line items rather than trusting client input', async () => {
-    (leadRepository.findById as jest.Mock).mockResolvedValue({ id: 'lead1' });
+    const { clientRepository } = jest.requireMock('../../client/client.repository');
+    (clientRepository.findById as jest.Mock).mockResolvedValue({ id: 'client1', sourceLeadId: 'lead1' });
     (quotationRepository.create as jest.Mock).mockResolvedValue({ id: 'quo1', quotationNumber: 'Q-00001' });
     (quotationVersionRepository.create as jest.Mock).mockResolvedValue({ id: 'ver1', versionNumber: 1 });
-    (quotationRepository.findById as jest.Mock).mockResolvedValue({ id: 'quo1', leadId: 'lead1', lead: {} });
+    (quotationRepository.findById as jest.Mock).mockResolvedValue({ id: 'quo1', clientId: 'client1', client: {} });
 
     await quotationService.create(
       {
-        leadId: 'lead1',
+        clientId: 'client1',
         items: [
           { serviceId: 'svc1', description: 'Interior', quantity: 1, unitPrice: 1000, taxRate: 18 },
           { serviceId: 'svc2', description: 'Electrical', quantity: 1, unitPrice: 500, taxRate: 18 },
@@ -84,22 +85,24 @@ describe('quotationService.create - server-side total calculation', () => {
     expect(createCall.grandTotal).toBe(1770);
   });
 
-  it('advances QUOTE PREPARING services to QUOTE SENT when the first quotation for a Lead is created', async () => {
-    (leadRepository.findById as jest.Mock).mockResolvedValue({ id: 'lead1' });
+  it('advances QUOTE PREPARING services to QUOTE SENT when the first quotation for a Client is created', async () => {
+    const { clientRepository } = jest.requireMock('../../client/client.repository');
+    (clientRepository.findById as jest.Mock).mockResolvedValue({ id: 'client1', sourceLeadId: 'lead1' });
     (quotationRepository.countForLead as jest.Mock).mockResolvedValue(0);
     (quotationRepository.create as jest.Mock).mockResolvedValue({ id: 'quo1', quotationNumber: 'Q-00001' });
     (quotationVersionRepository.create as jest.Mock).mockResolvedValue({ id: 'ver1', versionNumber: 1 });
-    (quotationRepository.findById as jest.Mock).mockResolvedValue({ id: 'quo1', leadId: 'lead1', lead: {} });
+    (quotationRepository.findById as jest.Mock).mockResolvedValue({ id: 'quo1', clientId: 'client1', client: {} });
 
     await quotationService.create(
       {
-        leadId: 'lead1',
+        clientId: 'client1',
         items: [{ serviceId: 'svc1', description: 'Interior', quantity: 1, unitPrice: 1000, taxRate: 18 }],
       },
       'admin1'
     );
 
     // Only services sitting at QUOTE PREPARING move - earlier stages are untouched.
+    // Lead Services continue auto-updating even after conversion via sourceLeadId.
     expect(leadService.applyQuotationWorkflowStatus).toHaveBeenCalledWith(
       'lead1',
       ['svc1'],
@@ -109,30 +112,13 @@ describe('quotationService.create - server-side total calculation', () => {
     );
   });
 
-  it('does not re-trigger QUOTE SENT automation for subsequent quotations of the same Lead', async () => {
-    (leadRepository.findById as jest.Mock).mockResolvedValue({ id: 'lead1' });
+  it('does not re-trigger QUOTE SENT automation for subsequent quotations of the same Client', async () => {
+    const { clientRepository } = jest.requireMock('../../client/client.repository');
+    (clientRepository.findById as jest.Mock).mockResolvedValue({ id: 'client1', sourceLeadId: 'lead1' });
     (quotationRepository.countForLead as jest.Mock).mockResolvedValue(1);
     (quotationRepository.create as jest.Mock).mockResolvedValue({ id: 'quo2', quotationNumber: 'Q-00002' });
     (quotationVersionRepository.create as jest.Mock).mockResolvedValue({ id: 'ver1', versionNumber: 1 });
-    (quotationRepository.findById as jest.Mock).mockResolvedValue({ id: 'quo2', leadId: 'lead1', lead: {} });
-
-    await quotationService.create(
-      {
-        leadId: 'lead1',
-        items: [{ serviceId: 'svc1', description: 'Interior', quantity: 1, unitPrice: 1000, taxRate: 18 }],
-      },
-      'admin1'
-    );
-
-    expect(leadService.applyQuotationWorkflowStatus).not.toHaveBeenCalled();
-  });
-
-  it('does not touch Lead statuses when a quotation is created directly for a Client', async () => {
-    const { clientRepository } = jest.requireMock('../../client/client.repository');
-    (clientRepository.findById as jest.Mock).mockResolvedValue({ id: 'client1', sourceLeadId: 'lead1' });
-    (quotationRepository.create as jest.Mock).mockResolvedValue({ id: 'quo3', quotationNumber: 'Q-00003' });
-    (quotationVersionRepository.create as jest.Mock).mockResolvedValue({ id: 'ver1', versionNumber: 1 });
-    (quotationRepository.findById as jest.Mock).mockResolvedValue({ id: 'quo3', clientId: 'client1', client: {} });
+    (quotationRepository.findById as jest.Mock).mockResolvedValue({ id: 'quo2', clientId: 'client1', client: {} });
 
     await quotationService.create(
       {
@@ -143,6 +129,18 @@ describe('quotationService.create - server-side total calculation', () => {
     );
 
     expect(leadService.applyQuotationWorkflowStatus).not.toHaveBeenCalled();
+  });
+
+  it('rejects quotation creation without a Client ID', async () => {
+    await expect(
+      quotationService.create(
+        {
+          clientId: '', // Invalid
+          items: [{ serviceId: 'svc1', description: 'Interior', quantity: 1, unitPrice: 1000, taxRate: 18 }],
+        } as any,
+        'admin1'
+      )
+    ).rejects.toThrow('Quotations must be created for Clients');
   });
 });
 

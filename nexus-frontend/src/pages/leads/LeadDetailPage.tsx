@@ -43,9 +43,8 @@ export function LeadDetailPage() {
       toast({ title: 'Client account created', description: `${client.contactName} can now log in.`, variant: 'success' });
       convertModal.close();
     } catch (err) {
-      // Eligibility (e.g. "no approved services yet") is enforced entirely
-      // server-side - we surface whatever it says rather than pre-checking
-      // the rule ourselves.
+      // Eligibility (qualified status, required data) is enforced entirely
+      // server-side - we surface whatever validation message it provides.
       toast({
         title: 'Could not convert lead',
         description: err instanceof ApiError ? err.message : 'Something went wrong.',
@@ -105,7 +104,7 @@ export function LeadDetailPage() {
         open={convertModal.isOpen}
         onOpenChange={convertModal.setIsOpen}
         title="Convert this lead to a client?"
-        description="Creates a Client login and emails credentials. This normally happens once a quotation has been approved."
+        description="Creates a Client login and emails credentials. Convert the Lead before creating quotations. Quotations can only be created for Clients."
         confirmLabel="Convert"
         loading={convertMutation.isPending}
         onConfirm={handleConvert}

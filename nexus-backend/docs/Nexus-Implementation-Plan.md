@@ -1,4 +1,4 @@
-# Nexus — Implementation Plan
+++=# Nexus — Implementation Plan
 ## Solo Developer | Node.js/TypeScript/Express/Prisma/PostgreSQL | Cloud VM Deployment
 
 **Based on:** Technical Blueprint & Development Roadmap V1 (15 modules, 8 dependency layers)
