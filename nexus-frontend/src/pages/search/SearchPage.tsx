@@ -150,7 +150,7 @@ export function SearchPage() {
               <ResultRow
                 key={client.id}
                 to={ROUTES.clientDetail(client.id)}
-                primary={client.companyName || client.contactName}
+                primary={`${client.clientNumber} — ${client.companyName || client.contactName}`}
                 secondary={[client.contactName, client.phone, client.email].filter(Boolean).join(' · ')}
               />
             ))}

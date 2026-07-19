@@ -55,14 +55,18 @@ export function AuditLogsPage() {
             <p className="text-sm font-medium capitalize text-ink">
               {info.row.original.entityType.replace(/_/g, ' ').toLowerCase()}
             </p>
-            <p className="font-mono text-xs text-ink-faint">{info.row.original.entityId}</p>
+            <p className="font-mono text-xs text-ink-faint">
+              {info.row.original.entityRef
+                ? `${info.row.original.entityRef.label}${info.row.original.entityRef.name ? ` — ${info.row.original.entityRef.name}` : ''}`
+                : '—'}
+            </p>
           </div>
         ),
       },
       {
-        accessorKey: 'actorUserId',
+        accessorKey: 'actorRef',
         header: 'Actor',
-        cell: (info) => <span className="font-mono text-xs text-ink-muted">{info.getValue() ?? 'system'}</span>,
+        cell: (info) => <span className="text-xs text-ink-muted">{info.getValue() ?? 'System'}</span>,
       },
       {
         accessorKey: 'createdAt',
@@ -89,7 +93,7 @@ export function AuditLogsPage() {
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <SearchInput
-          placeholder="Search action, entity, or ID..."
+          placeholder="Search by action or entity type..."
           value={search}
           onChange={(e) => {
             setSearch(e.target.value);

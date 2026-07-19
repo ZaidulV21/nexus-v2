@@ -47,21 +47,64 @@ export interface Service {
 
 export const LEAD_SERVICE_STATUSES = [
   'NEW',
-  'QUALIFIED',
   'CONTACTED',
-  'SITE VISIT',
+  'SITE VISIT SCHEDULED',
+  'SITE VISIT COMPLETED',
   'QUOTE PREPARING',
   'QUOTE SENT',
   'NEGOTIATION',
   'APPROVED',
   'PROJECT CREATED',
+] as const;
+
+export const PROJECT_SERVICE_STATUSES = [
+  'PROJECT CREATED',
+  'PLANNING',
+  'RESOURCES ASSIGNED',
+  'WORK STARTED',
   'IN PROGRESS',
   'ON HOLD',
+  'QUALITY INSPECTION',
   'COMPLETED',
+  'HANDOVER',
   'CLOSED',
-  'ARCHIVED',
+  'CANCELLED',
 ] as const;
-export type WorkflowStatus = (typeof LEAD_SERVICE_STATUSES)[number];
+export type WorkflowStatus = (typeof LEAD_SERVICE_STATUSES)[number] | (typeof PROJECT_SERVICE_STATUSES)[number];
+
+// The sales pipeline stages an Admin may set by hand on a Lead Service.
+// QUOTE SENT is workflow-driven (set when the first quotation is created /
+// a quotation is sent) and PROJECT CREATED is the system-assigned hand-off -
+// neither is ever offered in a dropdown. Mirrors the backend Status
+// Engine's manual/automatic partition, which remains the enforcing
+// authority.
+export const MANUAL_LEAD_SERVICE_STATUSES = [
+  'NEW',
+  'CONTACTED',
+  'SITE VISIT SCHEDULED',
+  'SITE VISIT COMPLETED',
+  'QUOTE PREPARING',
+  'NEGOTIATION',
+  'APPROVED',
+] as const;
+
+// Statuses controlled exclusively by the backend quotation/project workflow.
+export const AUTOMATIC_LEAD_SERVICE_STATUSES = ['QUOTE SENT', 'PROJECT CREATED'] as const;
+
+// Execution statuses an Admin may select on a Project Service. PROJECT
+// CREATED is the system-assigned start state, never a manual target.
+export const MANUAL_PROJECT_SERVICE_STATUSES = [
+  'PLANNING',
+  'RESOURCES ASSIGNED',
+  'WORK STARTED',
+  'IN PROGRESS',
+  'ON HOLD',
+  'QUALITY INSPECTION',
+  'COMPLETED',
+  'HANDOVER',
+  'CLOSED',
+  'CANCELLED',
+] as const;
 
 export interface LeadService {
   id: string;
@@ -88,6 +131,7 @@ export interface Lead {
 
 export interface Client {
   id: string;
+  clientNumber: string;
   companyName?: string | null;
   contactName: string;
   phone: string;
@@ -179,12 +223,34 @@ export interface QuotationVersion {
 
 export type QuotationStatus = 'DRAFT' | 'SENT' | 'NEGOTIATION' | 'APPROVED' | 'ACCEPTED' | 'REJECTED';
 
+/** Business-facing summary of a related Lead / Client on API payloads. */
+export interface LeadSummary {
+  id: string;
+  leadNumber: string;
+  contactName: string;
+  companyName?: string | null;
+  email?: string | null;
+  phone: string;
+  /** Present when the lead has been converted to a client. */
+  client?: ClientSummary | null;
+}
+
+export interface ClientSummary {
+  id: string;
+  clientNumber: string;
+  contactName: string;
+  companyName?: string | null;
+  email: string;
+  phone: string;
+}
+
 export interface Quotation {
   id: string;
   quotationNumber: string;
-  leadId: string;
-  lead?: Pick<Lead, 'id' | 'leadNumber'> & Partial<Lead>;
+  leadId?: string | null;
+  lead?: LeadSummary;
   clientId?: string | null;
+  client?: ClientSummary | null;
   status: QuotationStatus;
   activeVersionId?: string | null;
   versions: QuotationVersion[];
@@ -268,6 +334,15 @@ export interface Message {
   createdAt: string;
 }
 
+/** Business-facing reference for the entity a Timeline/Audit row points at.
+ *  `label` is the business number (L-00001, Q-00002, ...); `name` is the
+ *  human name where one exists. Populated server-side so the UI never has
+ *  to display raw UUIDs. */
+export interface EntityRef {
+  label: string;
+  name?: string | null;
+}
+
 export interface TimelineEvent {
   id: string;
   entityType: string;
@@ -275,6 +350,10 @@ export interface TimelineEvent {
   eventType: string;
   description: string;
   actorUserId?: string | null;
+  /** Business reference of the entity; null if it no longer resolves. */
+  entityRef?: EntityRef | null;
+  /** Human-readable actor (admin email or client number+name); null = system. */
+  actorRef?: string | null;
   metadata?: Record<string, unknown> | null;
   createdAt: string;
 }
@@ -285,6 +364,8 @@ export interface AuditLogEntry {
   entityId: string;
   action: string;
   actorUserId?: string | null;
+  entityRef?: EntityRef | null;
+  actorRef?: string | null;
   beforeState?: Record<string, unknown> | null;
   afterState?: Record<string, unknown> | null;
   createdAt: string;

@@ -18,12 +18,12 @@ const PAGE_SIZE = 20;
 const FILTER_ALL = 'all';
 
 function getClientName(invoice: Invoice) {
-  if (!invoice.client) return invoice.clientId;
+  if (!invoice.client) return '—';
   return invoice.client.companyName || invoice.client.contactName;
 }
 
 function getProjectNumber(invoice: Invoice) {
-  return invoice.project?.projectNumber ?? invoice.projectId;
+  return invoice.project?.projectNumber ?? '—';
 }
 
 function matchesStatusFilter(invoice: Invoice, filter: string) {

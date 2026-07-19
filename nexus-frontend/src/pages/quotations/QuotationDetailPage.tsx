@@ -40,6 +40,18 @@ export function QuotationDetailPage() {
 
   const activeVersion = quotation.versions.find((version) => version.id === quotation.activeVersionId) ?? quotation.versions[0];
 
+  // Business identifiers only - never render raw UUIDs in the UI. Mirrors
+  // the backend's ownership fallback: direct client link, else the client
+  // the quotation's lead was converted into.
+  const client = quotation.client ?? quotation.lead?.client ?? null;
+  const clientName = client ? client.companyName || client.contactName : null;
+  const leadName = quotation.lead ? quotation.lead.companyName || quotation.lead.contactName : null;
+  const headerParts = [
+    quotation.lead ? `Lead ${quotation.lead.leadNumber}` : null,
+    client ? `Client ${client.clientNumber}` : null,
+    clientName ?? leadName,
+  ].filter(Boolean);
+
   async function handleSend(resend: boolean) {
     try {
       await sendQuotation.mutateAsync(resend);
@@ -57,7 +69,7 @@ export function QuotationDetailPage() {
     <div>
       <PageHeader
         title={quotation.quotationNumber}
-        description={`Lead ${quotation.leadId}${quotation.clientId ? ` · Client ${quotation.clientId}` : ''}`}
+        description={headerParts.join(' · ')}
         actions={
           <div className="flex items-center gap-2">
             <Button variant="secondary" size="sm" onClick={reviseModal.open}>
@@ -98,11 +110,20 @@ export function QuotationDetailPage() {
                 <div className="grid gap-4 md:grid-cols-3">
                   <div className="rounded-lg border border-border bg-canvas p-4">
                     <p className="text-xs uppercase tracking-wide text-ink-faint">Lead</p>
-                    <p className="mt-1 font-medium text-ink">{quotation.leadId}</p>
+                    <p className="mt-1 font-medium text-ink">{quotation.lead?.leadNumber ?? '—'}</p>
+                    {quotation.lead && (
+                      <p className="text-xs text-ink-muted">
+                        {leadName}
+                        {quotation.lead.email ? ` · ${quotation.lead.email}` : ` · ${quotation.lead.phone}`}
+                      </p>
+                    )}
                   </div>
                   <div className="rounded-lg border border-border bg-canvas p-4">
                     <p className="text-xs uppercase tracking-wide text-ink-faint">Client</p>
-                    <p className="mt-1 font-medium text-ink">{quotation.clientId ?? '—'}</p>
+                    <p className="mt-1 font-medium text-ink">{client?.clientNumber ?? '—'}</p>
+                    {client && (
+                      <p className="text-xs text-ink-muted">{clientName} · {client.email}</p>
+                    )}
                   </div>
                   <div className="rounded-lg border border-border bg-canvas p-4">
                     <p className="text-xs uppercase tracking-wide text-ink-faint">Active version</p>

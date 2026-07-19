@@ -1,14 +1,18 @@
 import { useState } from 'react';
 import { Modal, ModalContent, ModalClose } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/Select';
 import { Textarea } from '@/components/ui/Textarea';
 import { FormField } from '@/components/ui/FormField';
 import { useToast } from '@/hooks/useToast';
 import { useUpdateProjectServiceStatus } from '@/queries/useProjects';
 import { ApiError } from '@/lib/api';
-import type { ProjectService } from '@/types';
+import { MANUAL_PROJECT_SERVICE_STATUSES, type ProjectService } from '@/types';
 
+// Only execution statuses are offered - PROJECT CREATED is the
+// system-assigned starting point and is never a manual target. Which
+// transitions are legal stays with the backend Status Engine; its
+// rejection message is surfaced verbatim.
 export function ProjectServiceStatusModal({
   open,
   onOpenChange,
@@ -20,7 +24,10 @@ export function ProjectServiceStatusModal({
   projectId: string;
   projectService: ProjectService;
 }) {
-  const [toStatus, setToStatus] = useState<string>(projectService.status);
+  const isCurrentStatusManual = (MANUAL_PROJECT_SERVICE_STATUSES as readonly string[]).includes(projectService.status);
+  const [toStatus, setToStatus] = useState<string>(
+    isCurrentStatusManual ? projectService.status : MANUAL_PROJECT_SERVICE_STATUSES[0]
+  );
   const [reason, setReason] = useState('');
   const { toast } = useToast();
   const mutation = useUpdateProjectServiceStatus(projectId);
@@ -55,12 +62,18 @@ export function ProjectServiceStatusModal({
       >
         <div className="flex flex-col gap-4">
           <FormField label="New status" htmlFor="project-toStatus">
-            <Input
-              id="project-toStatus"
-              value={toStatus}
-              onChange={(event) => setToStatus(event.target.value)}
-              placeholder="Requested status"
-            />
+            <Select value={toStatus} onValueChange={setToStatus}>
+              <SelectTrigger id="project-toStatus">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {MANUAL_PROJECT_SERVICE_STATUSES.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {s}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </FormField>
 
           <FormField

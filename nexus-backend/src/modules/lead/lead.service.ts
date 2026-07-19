@@ -135,6 +135,21 @@ export const leadService = {
     const leadServiceRecord = await leadServiceRepository.findById(leadServiceId);
     if (!leadServiceRecord) throw new NotFoundError('Lead Service not found');
 
+    // Once the Lead has converted, its services are a read-only sales
+    // record - all further status movement happens on the Project Services
+    // that superseded them.
+    const lead = await leadRepository.findById(leadServiceRecord.leadId);
+    if (lead?.convertedAt) {
+      throw new ValidationError(
+        'This Lead has been converted - its services are read-only. Update the corresponding Project Service instead.'
+      );
+    }
+    if (leadServiceRecord.status === 'PROJECT CREATED') {
+      throw new ValidationError(
+        'This service has moved to project execution - update its Project Service instead.'
+      );
+    }
+
     await statusEngineService.transition({
       entityType: 'LEAD_SERVICE',
       entityId: leadServiceId,
@@ -145,6 +160,54 @@ export const leadService = {
     });
 
     return leadServiceRepository.findById(leadServiceId);
+  },
+
+  // Called by quotation/project workflow events (send, reject, revision
+  // request, accept, project creation) - never by a request handler. Moves
+  // the Lead Services covered by the quotation to the given automatic
+  // status (QUOTE SENT, NEGOTIATION, APPROVED, PROJECT CREATED) through the
+  // Status Engine, so every automatic transition is validated, logged to
+  // the Timeline, and recorded in the transition log exactly like a manual
+  // one.
+  //
+  // Services already at (or past) the target are skipped rather than
+  // erroring: the quotation event must never fail because one Lead Service
+  // is ahead of the pipeline (e.g. a resend when it is already QUOTE SENT).
+  //
+  // options.onlyFromStatus narrows the move to services currently at that
+  // exact stage - used by first-quotation creation, which advances only
+  // QUOTE PREPARING services to QUOTE SENT and leaves earlier stages alone.
+  async applyQuotationWorkflowStatus(
+    leadId: string,
+    serviceIds: string[] | null,
+    toStatus: 'QUOTE SENT' | 'NEGOTIATION' | 'APPROVED' | 'PROJECT CREATED',
+    actorUserId?: string,
+    options?: { onlyFromStatus?: string }
+  ) {
+    const leadServices = await leadServiceRepository.listForLead(leadId);
+    const serviceIdSet = serviceIds ? new Set(serviceIds) : null;
+
+    for (const record of leadServices) {
+      if (serviceIdSet && !serviceIdSet.has(record.serviceId)) continue;
+      if (record.status === toStatus) continue;
+      if (options?.onlyFromStatus && record.status !== options.onlyFromStatus) continue;
+
+      try {
+        await statusEngineService.transition({
+          entityType: 'LEAD_SERVICE',
+          entityId: record.id,
+          fromStatus: record.status,
+          toStatus,
+          actorUserId,
+          isAutomatic: true,
+        });
+      } catch (err) {
+        // A Lead Service that can't legally make this move (e.g. already
+        // PROJECT CREATED when a quotation is re-sent) is left untouched -
+        // the workflow event that triggered us must still succeed.
+        if (!(err instanceof ValidationError)) throw err;
+      }
+    }
   },
 
   async addNote(leadId: string, authorUserId: string, note: string) {

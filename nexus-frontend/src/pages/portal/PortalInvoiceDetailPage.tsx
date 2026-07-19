@@ -39,7 +39,7 @@ function InvoiceSummary({ invoice }: { invoice: Invoice }) {
               label="Project"
               value={
                 <Link to={ROUTES.portal.projectDetail(invoice.projectId)} className="text-accent hover:underline">
-                  {invoice.project?.projectNumber ?? invoice.projectId}
+                  {invoice.project?.projectNumber ?? '—'}
                 </Link>
               }
             />
@@ -188,7 +188,7 @@ export function PortalInvoiceDetailPage() {
     <div>
       <PageHeader
         title={invoice.invoiceNumber}
-        description={`${invoice.label} · ${invoice.project?.projectNumber ?? invoice.projectId}`}
+        description={`${invoice.label} · ${invoice.project?.projectNumber ?? '—'}`}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge status={invoice.displayStatus ?? invoice.status} />

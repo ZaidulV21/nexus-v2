@@ -4,10 +4,15 @@ import { PaginationParams } from '../../core/utils/pagination';
 
 export const clientRepository = {
   create(
-    data: { companyName?: string; contactName: string; phone: string; email: string; passwordHash: string; sourceLeadId: string },
+    data: { clientNumber: string; companyName?: string; contactName: string; phone: string; email: string; passwordHash: string; sourceLeadId: string },
     tx: Prisma.TransactionClient
   ) {
     return tx.client.create({ data });
+  },
+
+  async generateClientNumber(tx: Prisma.TransactionClient): Promise<string> {
+    const count = await tx.client.count();
+    return `C-${String(count + 1).padStart(5, '0')}`;
   },
 
   findBySourceLeadId(leadId: string) {
@@ -30,6 +35,7 @@ export const clientRepository = {
     const where: any = { deletedAt: null };
     if (pagination.search) {
       where.OR = [
+        { clientNumber: { contains: pagination.search, mode: 'insensitive' } },
         { companyName: { contains: pagination.search, mode: 'insensitive' } },
         { contactName: { contains: pagination.search, mode: 'insensitive' } },
         { email: { contains: pagination.search, mode: 'insensitive' } },

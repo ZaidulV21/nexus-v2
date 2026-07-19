@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { auditService } from './audit.service';
+import { enrichWithRefs } from '../entity-ref/entityRef.service';
 import { ok, paginated } from '../../core/utils/response';
 import { parsePagination } from '../../core/utils/pagination';
 
@@ -8,7 +9,7 @@ export const auditController = {
     try {
       const { entityType, entityId } = req.params;
       const logs = await auditService.getAuditFor(entityType.toUpperCase(), entityId);
-      return ok(res, logs);
+      return ok(res, await enrichWithRefs(logs));
     } catch (err) {
       next(err);
     }
@@ -29,7 +30,7 @@ export const auditController = {
         action,
         search: pagination.search,
       });
-      return paginated(res, items, { page: pagination.page, pageSize: pagination.pageSize, total });
+      return paginated(res, await enrichWithRefs(items), { page: pagination.page, pageSize: pagination.pageSize, total });
     } catch (err) {
       next(err);
     }

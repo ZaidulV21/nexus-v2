@@ -7,12 +7,14 @@ import { FormField } from '@/components/ui/FormField';
 import { useToast } from '@/hooks/useToast';
 import { useUpdateLeadServiceStatus } from '@/queries/useLeads';
 import { ApiError } from '@/lib/api';
-import { LEAD_SERVICE_STATUSES, type LeadService as LeadServiceRecord } from '@/types';
+import { MANUAL_LEAD_SERVICE_STATUSES, type LeadService as LeadServiceRecord } from '@/types';
 
-// We deliberately do NOT encode the workflow graph (which transitions are
-// legal) here - that would duplicate the backend's Status Engine. We offer
-// every known status as an option and let the backend accept or reject the
-// transition; its rejection message is surfaced to the user verbatim.
+// Only the manual sales-pipeline stages are offered here. QUOTE SENT,
+// NEGOTIATION, APPROVED, and PROJECT CREATED are set automatically by the
+// backend quotation/project workflow and never appear in this dropdown.
+// We still deliberately do NOT encode which transitions are legal - the
+// backend Status Engine accepts or rejects the move and its message is
+// surfaced verbatim.
 export function ChangeStatusModal({
   open,
   onOpenChange,
@@ -24,7 +26,8 @@ export function ChangeStatusModal({
   leadId: string;
   leadService: LeadServiceRecord;
 }) {
-  const [toStatus, setToStatus] = useState(leadService.status);
+  const isCurrentStatusManual = (MANUAL_LEAD_SERVICE_STATUSES as readonly string[]).includes(leadService.status);
+  const [toStatus, setToStatus] = useState<string>(isCurrentStatusManual ? leadService.status : MANUAL_LEAD_SERVICE_STATUSES[0]);
   const [reason, setReason] = useState('');
   const { toast } = useToast();
   const mutation = useUpdateLeadServiceStatus(leadId);
@@ -57,12 +60,12 @@ export function ChangeStatusModal({
       >
         <div className="flex flex-col gap-4">
           <FormField label="New status" htmlFor="toStatus">
-            <Select value={toStatus} onValueChange={(value) => setToStatus(value as (typeof LEAD_SERVICE_STATUSES)[number])}>
+            <Select value={toStatus} onValueChange={setToStatus}>
               <SelectTrigger id="toStatus">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {LEAD_SERVICE_STATUSES.map((s) => (
+                {MANUAL_LEAD_SERVICE_STATUSES.map((s) => (
                   <SelectItem key={s} value={s}>
                     {s}
                   </SelectItem>

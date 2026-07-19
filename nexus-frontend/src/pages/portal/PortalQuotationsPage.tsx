@@ -42,7 +42,7 @@ export function PortalQuotationsPage() {
         cell: (info) => (
           <div>
             <p className="font-mono text-sm font-medium text-ink">{info.getValue()}</p>
-            <p className="text-xs text-ink-faint">{info.row.original.lead?.leadNumber ?? info.row.original.leadId}</p>
+            <p className="text-xs text-ink-faint">{info.row.original.lead?.leadNumber ?? '—'}</p>
           </div>
         ),
       },

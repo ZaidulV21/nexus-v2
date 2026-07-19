@@ -269,6 +269,7 @@ model LeadActivityNote {
 
 model Client {
   id           String    @id @default(uuid())
+  clientNumber String    @unique
   companyName  String?
   contactName  String
   phone        String
@@ -313,8 +314,11 @@ enum ApprovalMethod {
 model Quotation {
   id               String          @id @default(uuid())
   quotationNumber  String          @unique
-  leadId           String
-  lead             Lead            @relation(fields: [leadId], references: [id])
+  // Exactly one of leadId / clientId is populated at a time: leadId while
+  // the customer is still a Lead, clientId after conversion (quotations are
+  // migrated automatically when the Lead becomes a Client).
+  leadId           String?
+  lead             Lead?           @relation(fields: [leadId], references: [id])
   clientId         String?
   client           Client?         @relation(fields: [clientId], references: [id])
   status           QuotationStatus @default(DRAFT)

@@ -10,7 +10,7 @@ export interface QuotationListParams {
 }
 
 export interface CreateQuotationInput {
-  leadId: string;
+  leadId?: string;
   clientId?: string;
   discount?: number;
   transportation?: number;

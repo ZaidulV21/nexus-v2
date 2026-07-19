@@ -34,7 +34,13 @@ export const searchService = {
       prisma.client.findMany({
         where: {
           deletedAt: null,
-          OR: [{ companyName: insensitive }, { contactName: insensitive }, { email: insensitive }, { phone: insensitive }],
+          OR: [
+            { clientNumber: insensitive },
+            { companyName: insensitive },
+            { contactName: insensitive },
+            { email: insensitive },
+            { phone: insensitive },
+          ],
         },
         take: 20,
       }),

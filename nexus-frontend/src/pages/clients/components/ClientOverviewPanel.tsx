@@ -75,6 +75,10 @@ export function ClientOverviewPanel({ client }: { client: Client }) {
         </CardHeader>
         <CardContent className="space-y-3 text-sm text-ink-muted">
           <div>
+            <p className="text-xs uppercase tracking-wide text-ink-faint">Client number</p>
+            <p className="mt-1 font-mono font-medium text-ink">{client.clientNumber}</p>
+          </div>
+          <div>
             <p className="text-xs uppercase tracking-wide text-ink-faint">Email</p>
             <p className="mt-1 font-medium text-ink">{client.email}</p>
           </div>

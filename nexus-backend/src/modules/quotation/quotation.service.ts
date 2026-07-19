@@ -1,6 +1,8 @@
 import { runInTransaction } from '../../core/utils/transaction';
 import { quotationRepository, quotationVersionRepository, CLIENT_VISIBLE_QUOTATION_STATUSES } from './quotation.repository';
 import { leadRepository } from '../lead/lead.repository';
+import { leadService } from '../lead/lead.service';
+import { clientRepository } from '../client/client.repository';
 import { serviceRepository } from '../catalog/service.repository';
 import { timelineService } from '../timeline/timeline.service';
 import { auditService } from '../audit/audit.service';
@@ -59,10 +61,51 @@ function getActiveVersion(quotation: any) {
   return quotation.versions.find((version: any) => version.id === quotation.activeVersionId) ?? quotation.versions[0];
 }
 
+// The Lead Services a quotation covers = the distinct services on its
+// active version's line items. Used to scope automatic Lead status updates
+// to the services actually being quoted, per PRD 4.4 (independent
+// per-service status).
+function getQuotedServiceIds(quotation: any): string[] {
+  const versions = quotation.versions ?? [];
+  const activeVersion = versions.find((version: any) => version.id === quotation.activeVersionId) ?? versions[0];
+  return [...new Set(((activeVersion?.items ?? []) as any[]).map((item) => item.serviceId).filter(Boolean))] as string[];
+}
+
+// Resolve the source leadId for workflow automation. Quotations start with
+// a leadId; after Lead→Client conversion, leadId becomes null and clientId
+// is populated - the sourceLeadId is fetched via the nested lead relation.
+function resolveSourceLeadId(quotation: any): string {
+  if (quotation.leadId) return quotation.leadId;
+  if (quotation.client?.sourceLeadId) return quotation.client.sourceLeadId;
+  if (quotation.lead?.id) return quotation.lead.id;
+  throw new ValidationError('Quotation has no linked Lead');
+}
+
 export const quotationService = {
   async create(input: CreateQuotationInput, actorUserId: string) {
-    const lead = await leadRepository.findById(input.leadId);
-    if (!lead) throw new NotFoundError('Lead not found');
+    if (!input.leadId && !input.clientId) {
+      throw new ValidationError('Either leadId or clientId is required');
+    }
+    if (input.leadId && input.clientId) {
+      throw new ValidationError('Cannot specify both leadId and clientId');
+    }
+
+    // Verify the owner. A Client-owned quotation remains traceable to its
+    // source Lead through the Client relation when a later workflow event
+    // needs to update the Lead Service statuses.
+    if (input.clientId) {
+      const client = await clientRepository.findById(input.clientId);
+      if (!client) throw new NotFoundError('Client not found');
+      if (!client.sourceLeadId) throw new ValidationError('Client has no source lead');
+    } else {
+      const lead = await leadRepository.findById(input.leadId!);
+      if (!lead) throw new NotFoundError('Lead not found');
+      if (lead.convertedAt) {
+        throw new ValidationError(
+          'This Lead has been converted to a Client - create the quotation against the Client instead'
+        );
+      }
+    }
 
     await assertItemServicesExist(input.items, true);
 
@@ -77,6 +120,9 @@ export const quotationService = {
     );
 
     const result = await runInTransaction(async (tx) => {
+      const isFirstQuotationForLead = input.leadId
+        ? (await quotationRepository.countForLead(input.leadId, tx)) === 0
+        : false;
       const quotationNumber = await quotationRepository.generateQuotationNumber(tx);
       const quotation = await quotationRepository.create(
         { quotationNumber, leadId: input.leadId, clientId: input.clientId },
@@ -101,8 +147,22 @@ export const quotationService = {
       await quotationVersionRepository.createItems(version.id, computedItems, tx);
       await quotationRepository.setActiveVersion(quotation.id, version.id, tx);
 
-      return { quotation, version };
+      return { quotation, version, isFirstQuotationForLead };
     });
+
+    // Lead pipeline automation: creating the FIRST quotation for a Lead
+    // moves its quoted services from QUOTE PREPARING to QUOTE SENT.
+    // Services still earlier in the pipeline are left alone, and subsequent
+    // quotations don't re-trigger the move - re-sends are handled by send().
+    if (input.leadId && result.isFirstQuotationForLead) {
+      await leadService.applyQuotationWorkflowStatus(
+        input.leadId,
+        input.items.map((item) => item.serviceId),
+        'QUOTE SENT',
+        actorUserId,
+        { onlyFromStatus: 'QUOTE PREPARING' }
+      );
+    }
 
     await timelineService.recordEvent({
       entityType: 'QUOTATION',
@@ -229,6 +289,15 @@ export const quotationService = {
       await quotationRepository.updateStatus(quotationId, 'SENT', tx);
     });
 
+    // Lead pipeline automation: sending (or re-sending after a rejection)
+    // moves the quoted Lead Services to QUOTE SENT.
+    await leadService.applyQuotationWorkflowStatus(
+      resolveSourceLeadId(quotation),
+      getQuotedServiceIds(quotation),
+      'QUOTE SENT',
+      actorUserId
+    );
+
     await timelineService.recordEvent({
       entityType: 'QUOTATION',
       entityId: quotationId,
@@ -269,6 +338,15 @@ export const quotationService = {
     await runInTransaction(async (tx) => {
       await quotationRepository.updateStatus(quotationId, 'NEGOTIATION', tx);
     });
+
+    // Lead pipeline automation: a client revision request re-opens
+    // negotiation on the quoted Lead Services.
+    await leadService.applyQuotationWorkflowStatus(
+      resolveSourceLeadId(quotation),
+      getQuotedServiceIds(quotation),
+      'NEGOTIATION',
+      actorUserId
+    );
 
     await timelineService.recordEvent({
       entityType: 'QUOTATION',
@@ -316,12 +394,22 @@ export const quotationService = {
       throw new ValidationError('Only internally approved quotation versions can be accepted');
     }
 
+    // Lead pipeline automation: client acceptance moves the quoted Lead
+    // Services to APPROVED. Project creation below then advances them to
+    // PROJECT CREATED (inside projectService.create).
+    await leadService.applyQuotationWorkflowStatus(
+      resolveSourceLeadId(quotation),
+      getQuotedServiceIds(quotation),
+      'APPROVED',
+      clientId
+    );
+
     // Project creation and the quotation status flip are one atomic unit:
     // the status update runs inside project.create's transaction, so if
     // either write fails, neither is persisted.
     const project = await projectService.create(
       {
-        leadId: quotation.leadId,
+        leadId: resolveSourceLeadId(quotation),
         clientId,
         quotationVersionId: activeVersion.id,
       },
@@ -374,6 +462,15 @@ export const quotationService = {
     }
 
     await quotationRepository.updateStatus(quotationId, 'REJECTED');
+
+    // Lead pipeline automation: a rejection sends the quoted Lead Services
+    // back into NEGOTIATION so the Admin can revise and re-send.
+    await leadService.applyQuotationWorkflowStatus(
+      resolveSourceLeadId(quotation),
+      getQuotedServiceIds(quotation),
+      'NEGOTIATION',
+      clientId
+    );
 
     await timelineService.recordEvent({
       entityType: 'QUOTATION',

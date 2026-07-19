@@ -18,7 +18,11 @@ export const conversationRepository = {
   listAllWithLastMessage() {
     return prisma.conversation.findMany({
       include: {
-        client: true,
+        // Summary only - the full Client record carries passwordHash and
+        // must never leave the API.
+        client: {
+          select: { id: true, clientNumber: true, contactName: true, companyName: true, email: true, phone: true },
+        },
         messages: { orderBy: { createdAt: 'desc' }, take: 1 },
       },
       orderBy: { createdAt: 'desc' },

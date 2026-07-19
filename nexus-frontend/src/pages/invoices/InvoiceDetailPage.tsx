@@ -33,12 +33,12 @@ function Field({ label, value }: { label: string; value: ReactNode }) {
 }
 
 function getClientName(invoice: Invoice) {
-  if (!invoice.client) return invoice.clientId;
+  if (!invoice.client) return '—';
   return invoice.client.companyName || invoice.client.contactName;
 }
 
 function getProjectNumber(invoice: Invoice) {
-  return invoice.project?.projectNumber ?? invoice.projectId;
+  return invoice.project?.projectNumber ?? '—';
 }
 
 function InvoiceOverview({ invoice }: { invoice: Invoice }) {

@@ -13,8 +13,29 @@ export const CLIENT_VISIBLE_QUOTATION_STATUSES: QuotationStatus[] = [
   'REJECTED',
 ];
 
+// Business-facing summaries of the related Lead / Client. Only these fields
+// ever leave the API - never the full records (Client carries passwordHash)
+// and never raw UUIDs as the primary display value.
+const LEAD_SUMMARY_SELECT = {
+  id: true,
+  leadNumber: true,
+  contactName: true,
+  companyName: true,
+  email: true,
+  phone: true,
+} as const;
+
+const CLIENT_SUMMARY_SELECT = {
+  id: true,
+  clientNumber: true,
+  contactName: true,
+  companyName: true,
+  email: true,
+  phone: true,
+} as const;
+
 export const quotationRepository = {
-  create(data: { quotationNumber: string; leadId: string; clientId?: string }, tx: Prisma.TransactionClient) {
+  create(data: { quotationNumber: string; leadId?: string | null; clientId?: string | null }, tx: Prisma.TransactionClient) {
     return tx.quotation.create({ data });
   },
 
@@ -30,12 +51,26 @@ export const quotationRepository = {
     return client.quotation.update({ where: { id }, data: { status } });
   },
 
+  // Lead→Client conversion: migrate all quotations from leadId to clientId.
+  // Runs inside the conversion transaction so the link is never broken.
+  async migrateLeadQuotationsToClient(leadId: string, clientId: string, tx: Prisma.TransactionClient) {
+    return tx.quotation.updateMany({
+      where: { leadId },
+      data: { leadId: null, clientId },
+    });
+  },
+
+  countForLead(leadId: string, tx?: Prisma.TransactionClient) {
+    const client = tx ?? prisma;
+    return client.quotation.count({ where: { leadId } });
+  },
+
   findById(id: string) {
     return prisma.quotation.findFirst({
       where: { id },
       include: {
-        lead: { include: { client: true } },
-        client: true,
+        lead: { select: { ...LEAD_SUMMARY_SELECT, client: { select: CLIENT_SUMMARY_SELECT } } },
+        client: { select: CLIENT_SUMMARY_SELECT },
         versions: { include: { items: true, approvals: true }, orderBy: { versionNumber: 'desc' } },
       },
     });
@@ -52,7 +87,11 @@ export const quotationRepository = {
         skip: pagination.skip,
         take: pagination.take,
         orderBy: { [pagination.sortBy || 'createdAt']: pagination.sortOrder },
-        include: { versions: { where: { isActive: true } } },
+        include: {
+          lead: { select: LEAD_SUMMARY_SELECT },
+          client: { select: CLIENT_SUMMARY_SELECT },
+          versions: { where: { isActive: true } },
+        },
       }),
       prisma.quotation.count({ where }),
     ]);

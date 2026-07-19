@@ -32,7 +32,10 @@ export function EntityAuditLog({ entityType, entityId }: { entityType: string; e
       {data.map((entry) => (
         <li key={entry.id} className="py-3">
           <div className="flex items-center justify-between">
-            <Badge tone="neutral">{entry.action}</Badge>
+            <span className="flex items-center gap-2">
+              <Badge tone="neutral">{entry.action}</Badge>
+              {entry.actorRef && <span className="text-xs text-ink-muted">by {entry.actorRef}</span>}
+            </span>
             <span className="text-xs text-ink-faint">{formatDateTime(entry.createdAt)}</span>
           </div>
           {(entry.beforeState || entry.afterState) && (

@@ -5,16 +5,21 @@ export interface ProjectServiceLike {
   status: string;
 }
 
+// COMPLETED and the post-completion wrap-up stages all count as "done" for
+// aggregation; CANCELLED services are excluded from the running count.
+export const DONE_PROJECT_SERVICE_STATUSES = new Set(['COMPLETED', 'HANDOVER', 'CLOSED']);
+
 export function computeAggregateStatus(projectServices: ProjectServiceLike[]): string {
   if (projectServices.length === 0) return 'NO SERVICES';
 
-  const allCompleted = projectServices.every((ps) => ['COMPLETED', 'CLOSED', 'ARCHIVED'].includes(ps.status));
-  if (allCompleted) return 'Completed';
+  const active = projectServices.filter((ps) => ps.status !== 'CANCELLED');
+  if (active.length === 0) return 'Cancelled';
 
-  const anyOnHold = projectServices.some((ps) => ps.status === 'ON HOLD');
-  const runningCount = projectServices.filter(
-    (ps) => !['COMPLETED', 'CLOSED', 'ARCHIVED'].includes(ps.status)
-  ).length;
+  const allDone = active.every((ps) => DONE_PROJECT_SERVICE_STATUSES.has(ps.status));
+  if (allDone) return 'Completed';
+
+  const anyOnHold = active.some((ps) => ps.status === 'ON HOLD');
+  const runningCount = active.filter((ps) => !DONE_PROJECT_SERVICE_STATUSES.has(ps.status)).length;
 
   if (anyOnHold) return `On Hold (${runningCount} service(s) active)`;
 

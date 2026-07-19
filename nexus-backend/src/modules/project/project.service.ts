@@ -2,17 +2,19 @@ import { runInTransaction } from '../../core/utils/transaction';
 import { Prisma } from '@prisma/client';
 import { projectRepository, projectServiceRepository } from './project.repository';
 import { leadRepository } from '../lead/lead.repository';
+import { clientRepository } from '../client/client.repository';
+import { leadService as leadModuleService } from '../lead/lead.service';
 import { serviceRepository } from '../catalog/service.repository';
 import { quotationVersionRepository } from '../quotation/quotation.repository';
 import { timelineService } from '../timeline/timeline.service';
 import { auditService } from '../audit/audit.service';
 import { notificationsService } from '../notifications/notifications.service';
 import { statusEngineService } from '../status-engine/statusEngine.service';
-import { computeAggregateStatus } from './project.aggregateStatus';
+import { computeAggregateStatus, DONE_PROJECT_SERVICE_STATUSES } from './project.aggregateStatus';
 import { CreateProjectInput, AddServiceToProjectInput, UpdateProjectServiceStatusInput } from './project.types';
 import { ConflictError, NotFoundError, ValidationError } from '../../core/errors/AppError';
 
-const COMPLETED_SERVICE_STATUSES = new Set(['COMPLETED', 'CLOSED', 'ARCHIVED']);
+const COMPLETED_SERVICE_STATUSES = DONE_PROJECT_SERVICE_STATUSES;
 
 function completionPercentage(status: string) {
   return COMPLETED_SERVICE_STATUSES.has(status) ? 100 : 0;
@@ -99,8 +101,16 @@ export const projectService = {
     const lead = await leadRepository.findById(input.leadId);
     if (!lead) throw new NotFoundError('Lead not found');
 
+    const client = await clientRepository.findById(input.clientId);
+    if (!client || client.sourceLeadId !== input.leadId) {
+      throw new ValidationError('Client does not belong to this Lead');
+    }
+
     const quotationVersion = await quotationVersionRepository.findById(input.quotationVersionId);
-    if (!quotationVersion || quotationVersion.quotation.leadId !== input.leadId) {
+    if (
+      !quotationVersion ||
+      (quotationVersion.quotation.leadId !== input.leadId && quotationVersion.quotation.clientId !== input.clientId)
+    ) {
       throw new ValidationError('Quotation version does not belong to this Lead');
     }
     if (!quotationVersion.isActive) {
@@ -108,7 +118,14 @@ export const projectService = {
     }
 
     const quotation = quotationVersion.quotation;
-    if (quotation.status !== 'SENT') {
+    // The public project endpoint must never bypass client acceptance. During
+    // quotationService.accept the quotation is still SENT until its callback
+    // flips it to ACCEPTED inside this same transaction, so that sole
+    // internal path is explicitly identified by the transaction callback.
+    if (quotation.status !== 'ACCEPTED' && !inSameTransaction) {
+      throw new ValidationError('A Project can only be created after the client accepts a sent quotation');
+    }
+    if (quotation.status !== 'SENT' && quotation.status !== 'ACCEPTED') {
       throw new ValidationError('Only sent quotations can be converted into a Project');
     }
 
@@ -148,6 +165,15 @@ export const projectService = {
 
       return { project, projectServices };
     });
+
+    // Lead pipeline automation: once the Project exists, the Lead pipeline
+    // for the converted services is complete - they move to PROJECT CREATED.
+    await leadModuleService.applyQuotationWorkflowStatus(
+      input.leadId,
+      projectServicesFromQuotation.map((serviceRecord) => serviceRecord.serviceId),
+      'PROJECT CREATED',
+      actorUserId
+    );
 
     await timelineService.recordEvent({
       entityType: 'PROJECT',
@@ -230,7 +256,8 @@ export const projectService = {
     if (!project) throw new NotFoundError('Project not found');
 
     const services = project.projectServices;
-    const allCompleted = services.length > 0 && services.every((ps: any) => ps.status === 'COMPLETED');
+    const active = services.filter((ps: any) => ps.status !== 'CANCELLED');
+    const allCompleted = active.length > 0 && active.every((ps: any) => COMPLETED_SERVICE_STATUSES.has(ps.status));
     if (!allCompleted) {
       throw new ValidationError('All Project Services must be COMPLETED before the Project can be marked complete');
     }

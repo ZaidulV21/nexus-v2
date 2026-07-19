@@ -4,7 +4,7 @@ import type { Message } from '@/types';
 export interface ConversationPreview {
   id: string;
   clientId: string;
-  client?: { id: string; contactName: string; companyName?: string | null; email: string };
+  client?: { id: string; clientNumber: string; contactName: string; companyName?: string | null; email: string; phone?: string };
   messages: Message[];
   unreadCount?: number;
   createdAt: string;

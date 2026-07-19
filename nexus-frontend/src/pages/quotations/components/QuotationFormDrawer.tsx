@@ -27,12 +27,18 @@ const itemSchema = z.object({
 });
 
 const createSchema = z.object({
-  leadId: z.string().min(1, 'Select a lead'),
+  leadId: z.string().optional(),
   clientId: z.string().optional(),
   discount: z.string().optional(),
   transportation: z.string().optional(),
   installation: z.string().optional(),
   items: z.array(itemSchema).min(1, 'Add at least one item'),
+}).refine((data) => data.leadId || data.clientId, {
+  message: 'Select either a Lead or a Client',
+  path: ['leadId'],
+}).refine((data) => !(data.leadId && data.clientId), {
+  message: 'Select a Lead or a Client, not both',
+  path: ['clientId'],
 });
 
 const reviseSchema = z.object({
@@ -82,6 +88,7 @@ export function QuotationFormDrawer({
     control,
     handleSubmit,
     reset,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<QuotationFormValues>({
     resolver: zodResolver(schema as z.ZodTypeAny),
@@ -140,7 +147,7 @@ export function QuotationFormDrawer({
     try {
       if (mode === 'create') {
         const payload: CreateQuotationInput = {
-          leadId: values.leadId ?? '',
+          leadId: values.leadId || undefined,
           clientId: values.clientId || undefined,
           discount: Number(values.discount || 0),
           transportation: Number(values.transportation || 0),
@@ -176,7 +183,7 @@ export function QuotationFormDrawer({
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5" noValidate>
           {mode === 'create' && (
             <div className="grid gap-4 md:grid-cols-2">
-              <FormField label="Lead" htmlFor="leadId" required error={errors.leadId?.message}>
+              <FormField label="Lead" htmlFor="leadId" hint="Select a Lead or a Client, not both" error={errors.leadId?.message}>
                 {leadsLoading ? (
                   <Skeleton className="h-9 w-full" />
                 ) : (
@@ -184,14 +191,20 @@ export function QuotationFormDrawer({
                     control={control}
                     name="leadId"
                     render={({ field }) => (
-                      <Select value={field.value} onValueChange={field.onChange}>
+                      <Select
+                        value={field.value}
+                        onValueChange={(value) => {
+                          field.onChange(value);
+                          if (value) setValue('clientId', '');
+                        }}
+                      >
                         <SelectTrigger>
                           <SelectValue placeholder="Select a lead" />
                         </SelectTrigger>
                         <SelectContent>
                           {leads?.items.map((lead) => (
                             <SelectItem key={lead.id} value={lead.id}>
-                              {lead.leadNumber} · {lead.contactName}
+                              {lead.leadNumber} — {lead.contactName}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -201,7 +214,7 @@ export function QuotationFormDrawer({
                 )}
               </FormField>
 
-              <FormField label="Client" htmlFor="clientId" hint="Optional">
+              <FormField label="Client" htmlFor="clientId" hint="For converted leads, pick the Client instead" error={errors.clientId?.message}>
                 {clientsLoading ? (
                   <Skeleton className="h-9 w-full" />
                 ) : (
@@ -209,14 +222,20 @@ export function QuotationFormDrawer({
                     control={control}
                     name="clientId"
                     render={({ field }) => (
-                      <Select value={field.value} onValueChange={field.onChange}>
+                      <Select
+                        value={field.value}
+                        onValueChange={(value) => {
+                          field.onChange(value);
+                          if (value) setValue('leadId', '');
+                        }}
+                      >
                         <SelectTrigger>
-                          <SelectValue placeholder="Link a client" />
+                          <SelectValue placeholder="Select a client" />
                         </SelectTrigger>
                         <SelectContent>
                           {clients?.items.map((client) => (
                             <SelectItem key={client.id} value={client.id}>
-                              {client.contactName}
+                              {client.clientNumber} — {client.contactName}
                             </SelectItem>
                           ))}
                         </SelectContent>

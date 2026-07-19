@@ -30,6 +30,11 @@ export function ClientsPage() {
   const columns = useMemo<ColumnDef<Client, any>[]>(
     () => [
       {
+        accessorKey: 'clientNumber',
+        header: 'Client #',
+        cell: (info) => <span className="font-mono text-sm text-ink">{info.getValue()}</span>,
+      },
+      {
         accessorKey: 'contactName',
         header: 'Contact',
         cell: (info) => (
@@ -68,7 +73,7 @@ export function ClientsPage() {
 
       <div className="mb-4 flex items-center gap-3">
         <SearchInput
-          placeholder="Search by name, company, phone, or email..."
+          placeholder="Search by client number, name, company, phone, or email..."
           value={search}
           onChange={(e) => {
             setSearch(e.target.value);

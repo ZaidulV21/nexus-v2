@@ -10,6 +10,7 @@ jest.mock('../quotation.repository', () => ({
     findById: jest.fn(),
     list: jest.fn(),
     listForClient: jest.fn(),
+    countForLead: jest.fn().mockResolvedValue(0),
     generateQuotationNumber: jest.fn().mockResolvedValue('Q-00001'),
   },
   quotationVersionRepository: {
@@ -24,6 +25,12 @@ jest.mock('../quotation.repository', () => ({
 jest.mock('../../lead/lead.repository', () => ({
   leadRepository: { findById: jest.fn() },
 }));
+jest.mock('../../client/client.repository', () => ({
+  clientRepository: { findById: jest.fn() },
+}));
+jest.mock('../../lead/lead.service', () => ({
+  leadService: { applyQuotationWorkflowStatus: jest.fn() },
+}));
 jest.mock('../../catalog/service.repository', () => ({
   serviceRepository: { findById: jest.fn() },
 }));
@@ -33,12 +40,16 @@ jest.mock('../../notifications/notifications.service', () => ({ notificationsSer
 jest.mock('../../project/project.service', () => ({ projectService: { create: jest.fn() } }));
 
 import { leadRepository } from '../../lead/lead.repository';
+import { leadService } from '../../lead/lead.service';
 import { serviceRepository } from '../../catalog/service.repository';
 import { quotationRepository, quotationVersionRepository } from '../quotation.repository';
 import { projectService } from '../../project/project.service';
 import { quotationService } from '../quotation.service';
 
 beforeEach(() => {
+  jest.clearAllMocks();
+  (quotationRepository.countForLead as jest.Mock).mockResolvedValue(0);
+  (quotationRepository.generateQuotationNumber as jest.Mock).mockResolvedValue('Q-00001');
   // Every quotation line item must reference a live catalog service.
   (serviceRepository.findById as jest.Mock).mockImplementation(async (id: string) => ({
     id,
@@ -53,7 +64,7 @@ describe('quotationService.create - server-side total calculation', () => {
     (leadRepository.findById as jest.Mock).mockResolvedValue({ id: 'lead1' });
     (quotationRepository.create as jest.Mock).mockResolvedValue({ id: 'quo1', quotationNumber: 'Q-00001' });
     (quotationVersionRepository.create as jest.Mock).mockResolvedValue({ id: 'ver1', versionNumber: 1 });
-    (quotationRepository.findById as jest.Mock).mockResolvedValue({ id: 'quo1' });
+    (quotationRepository.findById as jest.Mock).mockResolvedValue({ id: 'quo1', leadId: 'lead1', lead: {} });
 
     await quotationService.create(
       {
@@ -71,6 +82,67 @@ describe('quotationService.create - server-side total calculation', () => {
     expect(createCall.subtotal).toBe(1500);
     expect(createCall.gstAmount).toBe(270);
     expect(createCall.grandTotal).toBe(1770);
+  });
+
+  it('advances QUOTE PREPARING services to QUOTE SENT when the first quotation for a Lead is created', async () => {
+    (leadRepository.findById as jest.Mock).mockResolvedValue({ id: 'lead1' });
+    (quotationRepository.countForLead as jest.Mock).mockResolvedValue(0);
+    (quotationRepository.create as jest.Mock).mockResolvedValue({ id: 'quo1', quotationNumber: 'Q-00001' });
+    (quotationVersionRepository.create as jest.Mock).mockResolvedValue({ id: 'ver1', versionNumber: 1 });
+    (quotationRepository.findById as jest.Mock).mockResolvedValue({ id: 'quo1', leadId: 'lead1', lead: {} });
+
+    await quotationService.create(
+      {
+        leadId: 'lead1',
+        items: [{ serviceId: 'svc1', description: 'Interior', quantity: 1, unitPrice: 1000, taxRate: 18 }],
+      },
+      'admin1'
+    );
+
+    // Only services sitting at QUOTE PREPARING move - earlier stages are untouched.
+    expect(leadService.applyQuotationWorkflowStatus).toHaveBeenCalledWith(
+      'lead1',
+      ['svc1'],
+      'QUOTE SENT',
+      'admin1',
+      { onlyFromStatus: 'QUOTE PREPARING' }
+    );
+  });
+
+  it('does not re-trigger QUOTE SENT automation for subsequent quotations of the same Lead', async () => {
+    (leadRepository.findById as jest.Mock).mockResolvedValue({ id: 'lead1' });
+    (quotationRepository.countForLead as jest.Mock).mockResolvedValue(1);
+    (quotationRepository.create as jest.Mock).mockResolvedValue({ id: 'quo2', quotationNumber: 'Q-00002' });
+    (quotationVersionRepository.create as jest.Mock).mockResolvedValue({ id: 'ver1', versionNumber: 1 });
+    (quotationRepository.findById as jest.Mock).mockResolvedValue({ id: 'quo2', leadId: 'lead1', lead: {} });
+
+    await quotationService.create(
+      {
+        leadId: 'lead1',
+        items: [{ serviceId: 'svc1', description: 'Interior', quantity: 1, unitPrice: 1000, taxRate: 18 }],
+      },
+      'admin1'
+    );
+
+    expect(leadService.applyQuotationWorkflowStatus).not.toHaveBeenCalled();
+  });
+
+  it('does not touch Lead statuses when a quotation is created directly for a Client', async () => {
+    const { clientRepository } = jest.requireMock('../../client/client.repository');
+    (clientRepository.findById as jest.Mock).mockResolvedValue({ id: 'client1', sourceLeadId: 'lead1' });
+    (quotationRepository.create as jest.Mock).mockResolvedValue({ id: 'quo3', quotationNumber: 'Q-00003' });
+    (quotationVersionRepository.create as jest.Mock).mockResolvedValue({ id: 'ver1', versionNumber: 1 });
+    (quotationRepository.findById as jest.Mock).mockResolvedValue({ id: 'quo3', clientId: 'client1', client: {} });
+
+    await quotationService.create(
+      {
+        clientId: 'client1',
+        items: [{ serviceId: 'svc1', description: 'Interior', quantity: 1, unitPrice: 1000, taxRate: 18 }],
+      },
+      'admin1'
+    );
+
+    expect(leadService.applyQuotationWorkflowStatus).not.toHaveBeenCalled();
   });
 });
 
@@ -111,15 +183,20 @@ describe('quotationService.send and accept', () => {
   it('marks an approved quotation as sent before client actions are allowed', async () => {
     (quotationRepository.findById as jest.Mock).mockResolvedValue({
       id: 'quo1',
+      leadId: 'lead1',
       quotationNumber: 'Q-00001',
       status: 'APPROVED',
       lead: { email: 'lead@example.com' },
       client: null,
+      activeVersionId: 'ver1',
+      versions: [{ id: 'ver1', items: [{ serviceId: 'svc1' }] }],
     });
 
     await quotationService.send('quo1', 'admin1');
 
     expect(quotationRepository.updateStatus).toHaveBeenCalledWith('quo1', 'SENT', expect.any(Object));
+    // Lead pipeline automation: quoted services move to QUOTE SENT.
+    expect(leadService.applyQuotationWorkflowStatus).toHaveBeenCalledWith('lead1', ['svc1'], 'QUOTE SENT', 'admin1');
   });
 
   it('creates a project only after the client accepts a sent quotation', async () => {

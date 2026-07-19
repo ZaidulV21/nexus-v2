@@ -18,7 +18,7 @@ const PAGE_SIZE = 20;
 const FILTER_ALL = 'all';
 
 function getClientName(project: Project) {
-  if (!project.client) return project.clientId;
+  if (!project.client) return '—';
   return project.client.companyName || project.client.contactName;
 }
 
@@ -60,7 +60,6 @@ export function ProjectsPage() {
         cell: (info) => (
           <div>
             <p className="font-mono text-sm font-medium text-ink">{info.getValue()}</p>
-            <p className="text-xs text-ink-faint">{info.row.original.id}</p>
           </div>
         ),
       },
@@ -70,7 +69,7 @@ export function ProjectsPage() {
         cell: (info) => (
           <div>
             <p className="font-medium text-ink">{getClientName(info.row.original)}</p>
-            <p className="text-xs text-ink-faint">{info.row.original.client?.email ?? info.row.original.clientId}</p>
+            <p className="text-xs text-ink-faint">{info.row.original.client?.email ?? '—'}</p>
           </div>
         ),
       },
@@ -79,7 +78,7 @@ export function ProjectsPage() {
         header: 'Related Lead',
         cell: (info) => (
           <span className="font-mono text-ink-muted">
-            {info.row.original.lead?.leadNumber ?? info.row.original.leadId}
+            {info.row.original.lead?.leadNumber ?? '—'}
           </span>
         ),
       },

@@ -22,6 +22,12 @@ jest.mock('../project.repository', () => ({
 jest.mock('../../lead/lead.repository', () => ({
   leadRepository: { findById: jest.fn() },
 }));
+jest.mock('../../lead/lead.service', () => ({
+  leadService: { applyQuotationWorkflowStatus: jest.fn() },
+}));
+jest.mock('../../client/client.repository', () => ({
+  clientRepository: { findById: jest.fn() },
+}));
 jest.mock('../../catalog/service.repository', () => ({
   serviceRepository: { findById: jest.fn() },
 }));
@@ -37,12 +43,14 @@ jest.mock('../../status-engine/statusEngine.service', () => ({
 
 import { projectRepository, projectServiceRepository } from '../project.repository';
 import { leadRepository } from '../../lead/lead.repository';
+import { clientRepository } from '../../client/client.repository';
 import { quotationVersionRepository } from '../../quotation/quotation.repository';
 import { projectService } from '../project.service';
 
 describe('projectService.create', () => {
   it('requires an active, sent quotation version before creating a Project', async () => {
     (leadRepository.findById as jest.Mock).mockResolvedValue({ id: 'lead1' });
+    (clientRepository.findById as jest.Mock).mockResolvedValue({ id: 'client1', sourceLeadId: 'lead1' });
     (quotationVersionRepository.findById as jest.Mock).mockResolvedValue(null);
 
     await expect(
@@ -50,12 +58,13 @@ describe('projectService.create', () => {
     ).rejects.toThrow('Quotation version does not belong');
   });
 
-  it('creates project services from the quotation version when valid', async () => {
+  it('creates project services only through the client-acceptance transaction', async () => {
     (leadRepository.findById as jest.Mock).mockResolvedValue({
       id: 'lead1',
       email: 'client@example.com',
       leadServices: [{ id: 'ls1', serviceId: 'svc1' }],
     });
+    (clientRepository.findById as jest.Mock).mockResolvedValue({ id: 'client1', sourceLeadId: 'lead1' });
     (quotationVersionRepository.findById as jest.Mock).mockResolvedValue({
       id: 'ver1',
       isActive: true,
@@ -75,11 +84,27 @@ describe('projectService.create', () => {
 
     const result = await projectService.create(
       { leadId: 'lead1', clientId: 'client1', quotationVersionId: 'ver1' },
-      'admin1'
+      'client1',
+      async () => undefined
     );
 
     expect(projectRepository.create).toHaveBeenCalled();
     expect(result.projectNumber).toBe('P-00001');
+  });
+
+  it('rejects direct project creation from a merely sent quotation', async () => {
+    (leadRepository.findById as jest.Mock).mockResolvedValue({ id: 'lead1' });
+    (clientRepository.findById as jest.Mock).mockResolvedValue({ id: 'client1', sourceLeadId: 'lead1' });
+    (quotationVersionRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'ver1',
+      isActive: true,
+      quotation: { id: 'quo1', leadId: 'lead1', status: 'SENT' },
+      items: [{ serviceId: 'svc1' }],
+    });
+
+    await expect(
+      projectService.create({ leadId: 'lead1', clientId: 'client1', quotationVersionId: 'ver1' }, 'admin1')
+    ).rejects.toThrow('only be created after the client accepts');
   });
 });
 

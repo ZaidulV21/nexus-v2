@@ -19,7 +19,12 @@ import type { ConversationPreview } from '@/services/messageService';
 const THREAD_PAGE_SIZE = 100;
 
 function conversationName(conversation: ConversationPreview) {
-  return conversation.client?.companyName || conversation.client?.contactName || conversation.clientId;
+  return (
+    conversation.client?.companyName ||
+    conversation.client?.contactName ||
+    conversation.client?.clientNumber ||
+    'Client'
+  );
 }
 
 function ConversationListItem({

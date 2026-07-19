@@ -36,7 +36,7 @@ function Field({ label, value }: { label: string; value: ReactNode }) {
 }
 
 function getClientName(project: Project) {
-  if (!project.client) return project.clientId;
+  if (!project.client) return '—';
   return project.client.companyName || project.client.contactName;
 }
 
@@ -52,7 +52,7 @@ function ProjectOverview({ project }: { project: Project }) {
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <Field label="Project number" value={<span className="font-mono">{project.projectNumber}</span>} />
           <Field label="Client" value={getClientName(project)} />
-          <Field label="Related lead" value={project.lead?.leadNumber ?? project.leadId} />
+          <Field label="Related lead" value={project.lead?.leadNumber ?? '—'} />
           <Field label="Linked quotation" value={quotation?.quotationNumber ?? '-'} />
           <Field label="Created" value={formatDateTime(project.createdAt)} />
           <Field label="Aggregate status" value={<StatusBadge status={project.aggregateStatus ?? 'NO SERVICES'} />} />
@@ -72,7 +72,7 @@ function ProjectOverview({ project }: { project: Project }) {
           >
             <span>
               <span className="block font-medium text-ink">{getClientName(project)}</span>
-              <span className="text-xs text-ink-faint">{project.client?.email ?? project.clientId}</span>
+              <span className="text-xs text-ink-faint">{project.client?.email ?? '—'}</span>
             </span>
             <ChevronRight className="h-4 w-4 text-ink-faint" />
           </Link>
@@ -82,7 +82,7 @@ function ProjectOverview({ project }: { project: Project }) {
           >
             <span>
               <span className="block font-medium text-ink">{project.lead?.leadNumber ?? 'Lead'}</span>
-              <span className="text-xs text-ink-faint">{project.lead?.contactName ?? project.leadId}</span>
+              <span className="text-xs text-ink-faint">{project.lead?.contactName ?? '—'}</span>
             </span>
             <ChevronRight className="h-4 w-4 text-ink-faint" />
           </Link>
@@ -107,7 +107,11 @@ function ProjectServices({
 
   return (
     <ul className="divide-y divide-border rounded-lg border border-border">
-      {services.map((service) => (
+      {services.map((service) => {
+        // CLOSED and CANCELLED are terminal - the backend Status Engine has
+        // no legal moves out of them, so no update affordance is shown.
+        const isTerminal = service.status === 'CLOSED' || service.status === 'CANCELLED';
+        return (
         <li key={service.id} className="px-4 py-3">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -128,12 +132,14 @@ function ProjectServices({
                   />
                 </div>
               </div>
-              <button
-                onClick={() => onChangeStatus(service)}
-                className="flex items-center gap-0.5 text-xs font-medium text-accent hover:text-accent-hover"
-              >
-                Update Status <ChevronRight className="h-3 w-3" />
-              </button>
+              {!isTerminal && (
+                <button
+                  onClick={() => onChangeStatus(service)}
+                  className="flex items-center gap-0.5 text-xs font-medium text-accent hover:text-accent-hover"
+                >
+                  Update Status <ChevronRight className="h-3 w-3" />
+                </button>
+              )}
             </div>
           </div>
 
@@ -154,7 +160,8 @@ function ProjectServices({
             </div>
           )}
         </li>
-      ))}
+        );
+      })}
     </ul>
   );
 }
@@ -508,7 +515,7 @@ export function ProjectDetailPage() {
     <div>
       <PageHeader
         title={project.projectNumber}
-        description={`${getClientName(project)} | ${project.lead?.leadNumber ?? project.leadId}`}
+        description={`${getClientName(project)} | ${project.lead?.leadNumber ?? '—'}`}
         actions={
           <span className="hidden items-center gap-2 text-sm text-ink-muted sm:flex">
             <FolderKanban className="h-4 w-4" /> Project

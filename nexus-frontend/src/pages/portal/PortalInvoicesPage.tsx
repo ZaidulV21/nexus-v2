@@ -53,7 +53,7 @@ export function PortalInvoicesPage() {
         header: 'Project',
         cell: (info) => (
           <span className="font-mono text-ink-muted">
-            {info.row.original.project?.projectNumber ?? info.row.original.projectId}
+            {info.row.original.project?.projectNumber ?? '—'}
           </span>
         ),
       },

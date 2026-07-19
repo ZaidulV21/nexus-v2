@@ -30,7 +30,7 @@ export function ClientDetailPage() {
   return (
     <div>
       <PageHeader
-        title={client.contactName}
+        title={`${client.clientNumber} — ${client.contactName}`}
         description={client.companyName ? `${client.companyName} · ${client.email}` : client.email}
         actions={<span className="flex items-center gap-2 text-sm text-ink-muted"><Users className="h-4 w-4" /> Client account</span>}
       />

@@ -17,7 +17,16 @@ export function Timeline({ events }: { events: TimelineEvent[] }) {
           <Circle className="mt-1.5 h-2.5 w-2.5 shrink-0 fill-accent text-accent" />
           <div className="min-w-0 flex-1">
             <p className="text-sm text-ink">{event.description}</p>
-            <p className="mt-0.5 text-xs text-ink-faint">{formatDateTime(event.createdAt)}</p>
+            <p className="mt-0.5 text-xs text-ink-faint">
+              {event.entityRef && (
+                <span className="mr-2 font-mono">
+                  {event.entityRef.label}
+                  {event.entityRef.name ? ` — ${event.entityRef.name}` : ''}
+                </span>
+              )}
+              {formatDateTime(event.createdAt)}
+              {event.actorRef && <span> · by {event.actorRef}</span>}
+            </p>
           </div>
         </li>
       ))}

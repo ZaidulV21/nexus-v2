@@ -44,9 +44,34 @@ export function QuotationsPage() {
         ),
       },
       {
-        accessorKey: 'leadId',
+        id: 'lead',
         header: 'Lead',
-        cell: (info) => <span className="font-mono text-ink-muted">{info.getValue()}</span>,
+        cell: (info) => {
+          const lead = info.row.original.lead;
+          return lead ? (
+            <div>
+              <p className="font-mono text-sm text-ink-muted">{lead.leadNumber}</p>
+              <p className="text-xs text-ink-faint">{lead.companyName || lead.contactName}</p>
+            </div>
+          ) : (
+            <span className="text-ink-faint">—</span>
+          );
+        },
+      },
+      {
+        id: 'client',
+        header: 'Client',
+        cell: (info) => {
+          const client = info.row.original.client;
+          return client ? (
+            <div>
+              <p className="font-mono text-sm text-ink-muted">{client.clientNumber}</p>
+              <p className="text-xs text-ink-faint">{client.companyName || client.contactName}</p>
+            </div>
+          ) : (
+            <span className="text-ink-faint">—</span>
+          );
+        },
       },
       {
         accessorKey: 'createdAt',
