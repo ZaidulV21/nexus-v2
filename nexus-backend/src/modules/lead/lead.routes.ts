@@ -17,4 +17,8 @@ router.patch('/:leadServiceId/status', authenticate, authorize('lead.edit'), lea
 router.post('/:id/notes', authenticate, authorize('lead.edit'), leadController.addNote);
 router.get('/:id/notes', authenticate, authorize('lead.view'), leadController.listNotes);
 
+// Archive / Restore (Admin only)
+router.patch('/:id/archive', authenticate, authorize('lead.edit'), leadController.archive);
+router.patch('/:id/restore', authenticate, authorize('lead.edit'), leadController.restore);
+
 export default router;

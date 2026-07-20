@@ -21,3 +21,7 @@ export interface UpdateLeadServiceStatusInput {
   toStatus: string;
   reason?: string;
 }
+
+export interface ArchiveLeadInput {
+  reason: string;
+}

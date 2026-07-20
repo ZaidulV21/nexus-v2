@@ -5,7 +5,7 @@ import { timelineService } from '../timeline/timeline.service';
 import { auditService } from '../audit/audit.service';
 import { notificationsService } from '../notifications/notifications.service';
 import { statusEngineService } from '../status-engine/statusEngine.service';
-import { CreateLeadInput, AddServiceToLeadInput, UpdateLeadServiceStatusInput } from './lead.types';
+import { CreateLeadInput, AddServiceToLeadInput, UpdateLeadServiceStatusInput, ArchiveLeadInput } from './lead.types';
 import { NotFoundError, ValidationError } from '../../core/errors/AppError';
 
 export const leadService = {
@@ -230,5 +230,69 @@ export const leadService = {
 
   async listNotes(leadId: string) {
     return leadActivityNoteRepository.listForLead(leadId);
+  },
+
+  async archive(id: string, input: ArchiveLeadInput, actorUserId: string) {
+    const lead = await leadRepository.findById(id);
+    if (!lead) throw new NotFoundError('Lead not found');
+    if (lead.archivedAt) {
+      throw new ValidationError('Lead is already archived');
+    }
+    if (lead.convertedAt) {
+      throw new ValidationError('Cannot archive a Lead that has been converted to a Client');
+    }
+
+    const beforeState = { archivedAt: lead.archivedAt, archivedById: lead.archivedById, archiveReason: lead.archiveReason };
+    const updated = await leadRepository.archive(id, actorUserId, input.reason);
+
+    await timelineService.recordEvent({
+      entityType: 'LEAD',
+      entityId: id,
+      eventType: 'LEAD_ARCHIVED',
+      description: `Lead ${lead.leadNumber} archived: ${input.reason}`,
+      actorUserId,
+      metadata: { reason: input.reason },
+    });
+
+    await auditService.recordAudit({
+      entityType: 'LEAD',
+      entityId: id,
+      action: 'ARCHIVE',
+      actorUserId,
+      beforeState,
+      afterState: { archivedAt: updated.archivedAt, archivedById: updated.archivedById, archiveReason: updated.archiveReason },
+    });
+
+    return updated;
+  },
+
+  async restore(id: string, actorUserId: string) {
+    const lead = await leadRepository.findById(id);
+    if (!lead) throw new NotFoundError('Lead not found');
+    if (!lead.archivedAt) {
+      throw new ValidationError('Lead is not archived');
+    }
+
+    const beforeState = { archivedAt: lead.archivedAt, archivedById: lead.archivedById, archiveReason: lead.archiveReason };
+    const updated = await leadRepository.restore(id);
+
+    await timelineService.recordEvent({
+      entityType: 'LEAD',
+      entityId: id,
+      eventType: 'LEAD_RESTORED',
+      description: `Lead ${lead.leadNumber} restored from archive`,
+      actorUserId,
+    });
+
+    await auditService.recordAudit({
+      entityType: 'LEAD',
+      entityId: id,
+      action: 'RESTORE',
+      actorUserId,
+      beforeState,
+      afterState: { archivedAt: null },
+    });
+
+    return updated;
   },
 };

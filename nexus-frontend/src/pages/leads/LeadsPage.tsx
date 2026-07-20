@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { ColumnDef } from '@tanstack/react-table';
-import { Plus } from 'lucide-react';
+import { Plus, Archive } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/Button';
 import { DataTable } from '@/components/ui/DataTable';
@@ -21,6 +21,7 @@ export function LeadsPage() {
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
+  const [showArchived, setShowArchived] = useState(false);
   const debouncedSearch = useDebounce(search, 350);
   const createDrawer = useDisclosure(false);
 
@@ -30,6 +31,7 @@ export function LeadsPage() {
     search: debouncedSearch || undefined,
     sortBy: 'createdAt',
     sortOrder: 'desc',
+    archived: showArchived || undefined,
   });
 
   const columns = useMemo<ColumnDef<Lead, any>[]>(
@@ -87,13 +89,33 @@ export function LeadsPage() {
         title="Leads"
         description="Multi-service enquiries, from first contact through to conversion."
         actions={
-          <Button size="sm" onClick={createDrawer.open}>
-            <Plus className="h-3.5 w-3.5" /> New Lead
-          </Button>
+          !showArchived ? (
+            <Button size="sm" onClick={createDrawer.open}>
+              <Plus className="h-3.5 w-3.5" /> New Lead
+            </Button>
+          ) : undefined
         }
       />
 
       <div className="mb-4 flex items-center gap-3">
+        <div className="flex rounded-lg border border-border bg-surface-subtle p-0.5">
+          <button
+            className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+              !showArchived ? 'bg-surface text-ink shadow-sm' : 'text-ink-muted hover:text-ink'
+            }`}
+            onClick={() => { setShowArchived(false); setPage(1); }}
+          >
+            Active
+          </button>
+          <button
+            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+              showArchived ? 'bg-surface text-ink shadow-sm' : 'text-ink-muted hover:text-ink'
+            }`}
+            onClick={() => { setShowArchived(true); setPage(1); }}
+          >
+            <Archive className="h-3.5 w-3.5" /> Archived
+          </button>
+        </div>
         <SearchInput
           placeholder="Search by name, phone, email, or lead number..."
           value={search}
@@ -113,8 +135,12 @@ export function LeadsPage() {
         isError={isError}
         onRetry={refetch}
         onRowClick={(row) => navigate(ROUTES.leadDetail(row.id))}
-        emptyTitle={search ? 'No leads match your search' : 'No leads yet'}
-        emptyDescription={search ? 'Try a different search term.' : 'Leads created from the public enquiry form, or created here, will appear in this list.'}
+        emptyTitle={search ? 'No leads match your search' : showArchived ? 'No archived leads' : 'No leads yet'}
+        emptyDescription={
+          search ? 'Try a different search term.' :
+          showArchived ? 'Leads that are archived will appear here.' :
+          'Leads created from the public enquiry form, or created here, will appear in this list.'
+        }
         pagination={
           data?.meta
             ? {

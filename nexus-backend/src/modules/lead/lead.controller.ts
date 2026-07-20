@@ -6,6 +6,7 @@ import {
   addServiceToLeadSchema,
   updateLeadServiceStatusSchema,
   addNoteSchema,
+  archiveLeadSchema,
 } from './lead.validation';
 import { ok, created, paginated } from '../../core/utils/response';
 import { parsePagination } from '../../core/utils/pagination';
@@ -91,6 +92,28 @@ export const leadController = {
     try {
       const notes = await leadService.listNotes(req.params.id);
       return ok(res, notes);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async archive(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.user) throw new UnauthorizedError();
+      const parsed = archiveLeadSchema.safeParse(req.body);
+      if (!parsed.success) throw new ValidationError('Invalid payload', parsed.error.flatten());
+      const lead = await leadService.archive(req.params.id, parsed.data, req.user.id);
+      return ok(res, lead);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async restore(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.user) throw new UnauthorizedError();
+      const lead = await leadService.restore(req.params.id, req.user.id);
+      return ok(res, lead);
     } catch (err) {
       next(err);
     }

@@ -31,3 +31,7 @@ export const updateLeadServiceStatusSchema = z.object({
 export const addNoteSchema = z.object({
   note: z.string().min(1),
 });
+
+export const archiveLeadSchema = z.object({
+  reason: z.string().min(1, 'Archive reason is required'),
+});

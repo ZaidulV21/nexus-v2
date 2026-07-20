@@ -8,6 +8,7 @@ export interface PaginationParams {
   search?: string;
   sortBy?: string;
   sortOrder: 'asc' | 'desc';
+  archived?: boolean;
 }
 
 const DEFAULT_PAGE_SIZE = 20;
@@ -20,6 +21,7 @@ export function parsePagination(req: Request): PaginationParams {
   const search = typeof req.query.search === 'string' ? req.query.search : undefined;
   const sortBy = typeof req.query.sortBy === 'string' ? req.query.sortBy : undefined;
   const sortOrder = req.query.sortOrder === 'asc' ? 'asc' : 'desc';
+  const archived = typeof req.query.archived === 'string' ? req.query.archived === 'true' : undefined;
 
   return {
     page,
@@ -29,5 +31,6 @@ export function parsePagination(req: Request): PaginationParams {
     search,
     sortBy,
     sortOrder,
+    archived,
   };
 }

@@ -16,12 +16,27 @@
 - `quotation.service.ts` — `create()` throws `ValidationError` if `clientId` is missing (`quotation.service.ts:92-96`). Also verifies `client.sourceLeadId` exists (`quotation.service.ts:100-103`)
 - `quotation.service.test.ts` — All tests updated and passing
 
-#### 2. Lead Module — Read-Only After Conversion
+#### 2. Lead Module — Read-Only After Conversion + Archive/Restore
 **Files Modified:**
 - `lead.service.ts` — `updateLeadServiceStatus()` checks `lead.convertedAt` and blocks manual updates (`lead.service.ts:142-147`). Also blocks updates to services already at `PROJECT CREATED` (`lead.service.ts:148-152`)
 - `applyQuotationWorkflowStatus()` preserved for automatic post-conversion updates (`lead.service.ts:181-212`). Skips services already at or past target status, swallows illegal-transition errors gracefully
+- **NEW: `archive()`** — Archives an unconverted lead with mandatory reason, records timeline + audit entries (`lead.service.ts:246-271`)
+- **NEW: `restore()`** — Restores an archived lead, records timeline + audit entries (`lead.service.ts:273-295`)
+- `lead.repository.ts` — Added `archive()` and `restore()` methods; `list()` now supports `archived` filter (`lead.repository.ts:36-58`)
+- `lead.types.ts` — Added `ArchiveLeadInput` interface
+- `lead.validation.ts` — Added `archiveLeadSchema` with mandatory reason
+- `lead.controller.ts` — Added `archive` and `restore` endpoints
+- `lead.routes.ts` — Added `PATCH /:id/archive` and `PATCH /:id/restore` routes (Admin only)
+- `lead.service.test.ts` — 7 new tests for archive/restore (16 total lead tests)
 
-#### 3. Client Module — Already Correct (No Changes Needed)
+#### 3. Dashboard & Search — Excludes Archived Leads
+- `dashboard.repository.ts` — `countLeadsBySource()` now filters `archivedAt: null`
+- `search.service.ts` — Search results exclude archived leads by default
+
+#### 4. Pagination — Supports Archived Filter
+- `pagination.ts` — Added `archived?: boolean` to `PaginationParams`, parsed from `?archived=true` query param
+
+#### 5. Client Module — Already Correct (No Changes Needed)
 - Conversion requires at least one service past `NEW`/`CONTACTED` (`client.service.ts:38-45`)
 - `sourceLeadId` set on Client creation (`client.service.ts:72`)
 - All 4 client tests passing
@@ -38,11 +53,24 @@
 #### 2. Lead Detail Page (`LeadDetailPage.tsx`)
 - Conversion dialog title: "Convert this lead to a client?"
 - Description: "Creates a Client login and emails credentials. Convert the Lead before creating quotations. Quotations can only be created for Clients." (`LeadDetailPage.tsx:106-107`)
+- **NEW: Archive button** — Shows confirmation dialog with mandatory reason textarea
+- **NEW: Restore button** — Restores archived lead with confirmation
+- **NEW: Archived badge** — Shows "Archived" label in page header when lead is archived
 
 #### 3. Lead Services Panel (`LeadServicesPanel.tsx`)
 - Shows **"Read-Only (Auto-Sync)"** badge with Lock icon after conversion (`LeadServicesPanel.tsx:50-57`)
 - Tooltip: "This Lead has converted - Lead Services are read-only. Status updates automatically from quotation and project events." (`LeadServicesPanel.tsx:52-53`)
 - Lock state computed from `lead.convertedAt` (`LeadServicesPanel.tsx:37`)
+
+#### 4. Leads List Page (`LeadsPage.tsx`)
+- **NEW: Active/Archived toggle** — Tab-style filter to switch between active and archived leads
+- **NEW: Archived leads view** — Dedicated view with "No archived leads" empty state
+- Search works across both views
+
+#### 5. Frontend Types & Services
+- `types/index.ts` — Added `archivedAt`, `archivedById`, `archiveReason` to `Lead` interface
+- `services/leadService.ts` — Added `archive()`, `restore()` API calls and `archived` filter param
+- `queries/useLeads.ts` — Added `useArchiveLead()` and `useRestoreLead()` mutation hooks
 
 ### ✅ Current Lead → Client → Quotation → Project Workflow
 
@@ -123,7 +151,7 @@ The old error message only exists in `SINGLE-WORKFLOW-COMPLETE.md:279` (historic
 ### Backend
 ```bash
 ✅ npm run build — SUCCESS (0 errors)
-✅ npm test — 120/120 tests passing (18 test suites, ~17s)
+✅ npm test — 136/136 tests passing (18 test suites, ~35s)
 ```
 
 ### Frontend
@@ -146,29 +174,44 @@ There are no unfinished tasks for the core single-workflow implementation. All b
 
 ## Files Modified
 
-### Backend (7 files)
-1. `nexus-backend/src/modules/quotation/quotation.types.ts`
-2. `nexus-backend/src/modules/quotation/quotation.validation.ts`
-3. `nexus-backend/src/modules/quotation/quotation.service.ts`
-4. `nexus-backend/src/modules/quotation/tests/quotation.service.test.ts`
-5. `nexus-backend/src/modules/lead/lead.service.ts`
-6. `nexus-backend/src/modules/client/client.service.ts`
-7. `nexus-backend/src/modules/client/tests/client.service.test.ts`
+### Backend (12 files)
+1. `nexus-backend/prisma/schema.prisma` — Lead model archive fields
+2. `nexus-backend/prisma/migrations/20260720000000_add_lead_archive_fields/migration.sql`
+3. `nexus-backend/src/core/utils/pagination.ts` — Added `archived` filter param
+4. `nexus-backend/src/modules/quotation/quotation.types.ts`
+5. `nexus-backend/src/modules/quotation/quotation.validation.ts`
+6. `nexus-backend/src/modules/quotation/quotation.service.ts`
+7. `nexus-backend/src/modules/quotation/tests/quotation.service.test.ts`
+8. `nexus-backend/src/modules/lead/lead.service.ts` — Archive/restore + conversion guard
+9. `nexus-backend/src/modules/lead/lead.repository.ts` — Archive/restore queries
+10. `nexus-backend/src/modules/lead/lead.types.ts` — ArchiveLeadInput
+11. `nexus-backend/src/modules/lead/lead.validation.ts` — Archive schema
+12. `nexus-backend/src/modules/lead/lead.controller.ts` — Archive/restore endpoints
+13. `nexus-backend/src/modules/lead/lead.routes.ts` — Archive/restore routes
+14. `nexus-backend/src/modules/lead/tests/lead.service.test.ts` — 7 new archive/restore tests
+15. `nexus-backend/src/modules/dashboard/dashboard.repository.ts` — Exclude archived leads
+16. `nexus-backend/src/modules/search/search.service.ts` — Exclude archived leads
+17. `nexus-backend/src/modules/client/client.service.ts`
+18. `nexus-backend/src/modules/client/tests/client.service.test.ts`
 
-### Frontend (3 files)
-8. `nexus-frontend/src/pages/quotations/components/QuotationFormDrawer.tsx`
-9. `nexus-frontend/src/pages/leads/LeadDetailPage.tsx`
-10. `nexus-frontend/src/pages/leads/components/LeadServicesPanel.tsx`
+### Frontend (8 files)
+19. `nexus-frontend/src/types/index.ts` — Lead archive fields
+20. `nexus-frontend/src/services/leadService.ts` — Archive/restore API
+21. `nexus-frontend/src/queries/useLeads.ts` — Archive/restore mutations
+22. `nexus-frontend/src/pages/quotations/components/QuotationFormDrawer.tsx`
+23. `nexus-frontend/src/pages/leads/LeadDetailPage.tsx` — Archive/restore UI
+24. `nexus-frontend/src/pages/leads/LeadsPage.tsx` — Archived filter tab
+25. `nexus-frontend/src/pages/leads/components/LeadServicesPanel.tsx`
 
 ### Documentation (4 files)
-11. `IMPLEMENTATION.md`
-12. `WORKFLOW.md`
-13. `IMPLEMENTATION-PLAN.md`
-14. `IMPLEMENTATION-PROGRESS.md` (this file)
+26. `IMPLEMENTATION.md`
+27. `WORKFLOW.md`
+28. `IMPLEMENTATION-PLAN.md`
+29. `IMPLEMENTATION-PROGRESS.md` (this file)
 
 ---
 
 **STATUS: ✅ IMPLEMENTATION COMPLETE**
-**BACKEND: Build ✓ | 120 Tests ✓**
+**BACKEND: Build ✓ | 136 Tests ✓**
 **FRONTEND: Build ✓**
 **ALL WORKFLOW PATHS VERIFIED**

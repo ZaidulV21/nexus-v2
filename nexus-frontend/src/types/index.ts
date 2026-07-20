@@ -119,6 +119,9 @@ export interface Lead {
   companyName?: string | null;
   source: string;
   convertedAt?: string | null;
+  archivedAt?: string | null;
+  archivedById?: string | null;
+  archiveReason?: string | null;
   createdAt: string;
   leadServices?: LeadService[];
 }

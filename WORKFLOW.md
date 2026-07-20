@@ -77,6 +77,18 @@ Project Module
 - **Automatic updates** continue from quotation/project events
 - **Historical record** preserved for traceability
 
+### Lead Archiving
+- **Only unconverted Leads** can be archived
+- **Mandatory reason** required for audit trail
+- **Archived Leads** are excluded from:
+  - Dashboard counts and statistics
+  - Global search results
+  - Active leads list
+- **Archived Leads** can be viewed via the "Archived" tab on the Leads page
+- **Restore** is available to move a Lead back to active status
+- **Timeline entries** recorded for both archive and restore actions
+- **Audit log** entries created with before/after state snapshots
+
 ---
 
 ## Client Lifecycle
@@ -238,6 +250,8 @@ REJECTED → DRAFT (Admin revises)
 - Lead created
 - Lead status changes
 - Lead converted to Client
+- **Lead archived**
+- **Lead restored**
 - Quotation created
 - Quotation approved
 - Quotation sent
@@ -249,6 +263,7 @@ REJECTED → DRAFT (Admin revises)
 ### Audit Log
 - All CRUD operations
 - Status transitions
+- **Archive/restore actions with before/after state**
 - User actions
 - Timestamps and actor information
 
@@ -298,6 +313,13 @@ REJECTED → DRAFT (Admin revises)
 - Cannot create new quotations
 - Lead Services read-only
 - Automatic updates continue
+
+### Archived Leads
+- Cannot be archived if already converted
+- Cannot be archived if already archived
+- Dashboard excludes archived leads from counts
+- Search excludes archived leads by default
+- Can be restored to active status at any time
 
 ### Multiple Quotations
 - Client can have multiple quotations
@@ -351,6 +373,7 @@ Lead ← Quotation (automatic status sync via sourceLeadId)
 5. **Automatic status updates preserved** - From quotation/project events
 6. **Project execution statuses** - Belong only to Project module
 7. **Timeline, Audit Log, Notifications, Portal** - Remain synchronized
+8. **Lead Archiving** - Soft archive with mandatory reason, excludes from dashboard/search, fully reversible
 
 ---
 

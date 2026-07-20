@@ -21,6 +21,7 @@ export const searchService = {
       prisma.lead.findMany({
         where: {
           deletedAt: null,
+          archivedAt: null,
           OR: [
             { leadNumber: insensitive },
             { contactName: insensitive },

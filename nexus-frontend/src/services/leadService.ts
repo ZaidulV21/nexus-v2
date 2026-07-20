@@ -27,12 +27,17 @@ export interface UpdateLeadServiceStatusInput {
   reason?: string;
 }
 
+export interface ArchiveLeadInput {
+  reason: string;
+}
+
 export interface LeadListParams {
   page?: number;
   pageSize?: number;
   search?: string;
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
+  archived?: boolean;
 }
 
 export interface LeadNote {
@@ -53,6 +58,7 @@ export const leadService = {
       search: params.search,
       sortBy: params.sortBy,
       sortOrder: params.sortOrder,
+      archived: params.archived,
     }),
 
   getById: (id: string) => api.get<Lead>(`/leads/${id}`),
@@ -70,4 +76,9 @@ export const leadService = {
   addNote: (leadId: string, note: string) => api.post<LeadNote>(`/leads/${leadId}/notes`, { note }),
 
   listNotes: (leadId: string) => api.get<LeadNote[]>(`/leads/${leadId}/notes`),
+
+  archive: (leadId: string, input: ArchiveLeadInput) =>
+    api.patch<Lead>(`/leads/${leadId}/archive`, input),
+
+  restore: (leadId: string) => api.patch<Lead>(`/leads/${leadId}/restore`),
 };

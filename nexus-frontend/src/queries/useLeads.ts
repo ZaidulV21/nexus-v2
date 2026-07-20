@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { leadService, type LeadListParams, type CreateLeadInput, type UpdateLeadInput, type UpdateLeadServiceStatusInput } from '@/services/leadService';
+import { leadService, type LeadListParams, type CreateLeadInput, type UpdateLeadInput, type UpdateLeadServiceStatusInput, type ArchiveLeadInput } from '@/services/leadService';
 import { serviceCatalogService } from '@/services/serviceCatalogService';
 import { clientService } from '@/services/clientService';
 import { queryKeys } from './keys';
@@ -105,6 +105,28 @@ export function useConvertLeadToClient(leadId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.leads.detail(leadId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.clients.all });
+    },
+  });
+}
+
+export function useArchiveLead(leadId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: ArchiveLeadInput) => leadService.archive(leadId, input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.leads.detail(leadId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.leads.all });
+    },
+  });
+}
+
+export function useRestoreLead(leadId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => leadService.restore(leadId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.leads.detail(leadId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.leads.all });
     },
   });
 }

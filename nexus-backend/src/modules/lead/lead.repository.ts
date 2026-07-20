@@ -33,8 +33,27 @@ export const leadRepository = {
     return client.lead.update({ where: { id }, data: { convertedAt: new Date() } });
   },
 
-  async list(pagination: PaginationParams) {
+  archive(id: string, archivedById: string, reason: string) {
+    return prisma.lead.update({
+      where: { id },
+      data: { archivedAt: new Date(), archivedById, archiveReason: reason },
+    });
+  },
+
+  restore(id: string) {
+    return prisma.lead.update({
+      where: { id },
+      data: { archivedAt: null, archivedById: null, archiveReason: null },
+    });
+  },
+
+  async list(pagination: PaginationParams & { archived?: boolean }) {
     const where: any = { deletedAt: null };
+    if (pagination.archived !== undefined) {
+      where.archivedAt = pagination.archived ? { not: null } : null;
+    } else {
+      where.archivedAt = null;
+    }
     if (pagination.search) {
       where.OR = [
         { leadNumber: { contains: pagination.search, mode: 'insensitive' } },

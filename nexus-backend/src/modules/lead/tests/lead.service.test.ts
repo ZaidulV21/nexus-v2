@@ -7,6 +7,8 @@ jest.mock('../lead.repository', () => ({
     findById: jest.fn(),
     update: jest.fn(),
     list: jest.fn(),
+    archive: jest.fn(),
+    restore: jest.fn(),
     generateLeadNumber: jest.fn().mockResolvedValue('L-00001'),
   },
   leadServiceRepository: {
@@ -198,5 +200,100 @@ describe('leadService.applyQuotationWorkflowStatus', () => {
     await expect(
       leadService.applyQuotationWorkflowStatus('lead1', ['svc1'], 'QUOTE SENT', 'admin1')
     ).rejects.toThrow('connection lost');
+  });
+});
+
+describe('leadService.archive', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('archives an unconverted lead with a reason', async () => {
+    (leadRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'lead1',
+      leadNumber: 'L-00001',
+      convertedAt: null,
+      archivedAt: null,
+    });
+    (leadRepository.archive as jest.Mock).mockResolvedValue({
+      id: 'lead1',
+      archivedAt: new Date(),
+      archivedById: 'admin1',
+      archiveReason: 'No longer interested',
+    });
+
+    const result = await leadService.archive('lead1', { reason: 'No longer interested' }, 'admin1');
+
+    expect(result.archivedAt).toBeTruthy();
+    expect(result.archiveReason).toBe('No longer interested');
+    expect(leadRepository.archive).toHaveBeenCalledWith('lead1', 'admin1', 'No longer interested');
+  });
+
+  it('rejects archiving an already-archived lead', async () => {
+    (leadRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'lead1',
+      convertedAt: null,
+      archivedAt: new Date(),
+    });
+
+    await expect(
+      leadService.archive('lead1', { reason: 'Test' }, 'admin1')
+    ).rejects.toThrow('already archived');
+  });
+
+  it('rejects archiving a converted lead', async () => {
+    (leadRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'lead1',
+      convertedAt: new Date(),
+      archivedAt: null,
+    });
+
+    await expect(
+      leadService.archive('lead1', { reason: 'Test' }, 'admin1')
+    ).rejects.toThrow('converted to a Client');
+  });
+
+  it('rejects archiving a non-existent lead', async () => {
+    (leadRepository.findById as jest.Mock).mockResolvedValue(null);
+
+    await expect(
+      leadService.archive('lead1', { reason: 'Test' }, 'admin1')
+    ).rejects.toThrow('Lead not found');
+  });
+});
+
+describe('leadService.restore', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('restores an archived lead', async () => {
+    (leadRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'lead1',
+      leadNumber: 'L-00001',
+      archivedAt: new Date(),
+    });
+    (leadRepository.restore as jest.Mock).mockResolvedValue({
+      id: 'lead1',
+      archivedAt: null,
+      archivedById: null,
+      archiveReason: null,
+    });
+
+    const result = await leadService.restore('lead1', 'admin1');
+
+    expect(result.archivedAt).toBeNull();
+    expect(leadRepository.restore).toHaveBeenCalledWith('lead1');
+  });
+
+  it('rejects restoring a non-archived lead', async () => {
+    (leadRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'lead1',
+      archivedAt: null,
+    });
+
+    await expect(leadService.restore('lead1', 'admin1')).rejects.toThrow('not archived');
+  });
+
+  it('rejects restoring a non-existent lead', async () => {
+    (leadRepository.findById as jest.Mock).mockResolvedValue(null);
+
+    await expect(leadService.restore('lead1', 'admin1')).rejects.toThrow('Lead not found');
   });
 });

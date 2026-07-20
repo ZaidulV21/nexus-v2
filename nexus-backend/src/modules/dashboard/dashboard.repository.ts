@@ -2,7 +2,7 @@ import { prisma } from '../../config/database';
 
 export const dashboardRepository = {
   countLeadsBySource() {
-    return prisma.lead.groupBy({ by: ['source'], _count: true, where: { deletedAt: null } });
+    return prisma.lead.groupBy({ by: ['source'], _count: true, where: { deletedAt: null, archivedAt: null } });
   },
 
   countLeadServicesByStatus() {
