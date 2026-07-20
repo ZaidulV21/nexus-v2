@@ -54,6 +54,7 @@ export const queryKeys = {
     thread: (clientId: string) => ['messages', 'thread', clientId] as const,
   },
   dashboard: {
+    adminSummary: ['dashboard', 'admin-summary'] as const,
     clientSummary: ['dashboard', 'client-summary'] as const,
   },
   notifications: {

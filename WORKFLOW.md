@@ -89,6 +89,20 @@ Project Module
 - **Timeline entries** recorded for both archive and restore actions
 - **Audit log** entries created with before/after state snapshots
 
+### Admin Dashboard
+- **Real-time overview** of business performance on the `/` route
+- **10 KPI cards**: Active Projects, Total Leads, Clients, Quotations, Invoices, Revenue Invoiced, Revenue Received, Outstanding, Pending Quotations, Projects In Progress
+- **Month-over-month comparison** on KPI cards (leads, clients, quotations, projects, invoices)
+- **4 Charts**: Lead Services by Status (bar), Leads by Source (donut), Monthly Revenue (grouped bar — invoiced vs received), Projects by Status (donut)
+- **Recent Activity**: Latest 10 timeline events with icons, descriptions, timestamps, and clickable links to related entities
+- **Upcoming Items**: Pending Quotations, Projects On Hold, Overdue Invoices, Invoices Awaiting Payment, Unread Notifications
+- **Quick Actions**: Create/view shortcuts for Leads, Quotations, Invoices, Projects, Clients
+- **Search Shortcut**: Ctrl+K hint to trigger global search
+- **Notifications Summary**: Unread count with "View all" link
+- **Empty states** shown when database has no data
+- **Archived Leads excluded** from all counts and statistics
+- **All queries use aggregates** — no full-table scans, no N+1 queries
+
 ---
 
 ## Client Lifecycle
@@ -317,7 +331,7 @@ REJECTED → DRAFT (Admin revises)
 ### Archived Leads
 - Cannot be archived if already converted
 - Cannot be archived if already archived
-- Dashboard excludes archived leads from counts
+- Dashboard excludes archived leads from counts, charts, and KPI cards
 - Search excludes archived leads by default
 - Can be restored to active status at any time
 

@@ -74,3 +74,30 @@ export function DistributionDonutChart({ data }: { data: { name: string; value: 
     </ResponsiveContainer>
   );
 }
+
+export function GroupedBarChart({
+  data,
+  keys,
+  xKey,
+  colors,
+}: {
+  data: any[];
+  keys: string[];
+  xKey: string;
+  colors?: string[];
+}) {
+  const fills = colors ?? CHART_COLORS;
+  return (
+    <ResponsiveContainer width="100%" height={220}>
+      <BarChart data={data} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} vertical={false} />
+        <XAxis dataKey={xKey} tick={{ fill: tickFill, fontSize: 11 }} axisLine={{ stroke: gridStroke }} tickLine={false} />
+        <YAxis tick={{ fill: tickFill, fontSize: 12 }} axisLine={false} tickLine={false} />
+        <RechartsTooltip content={<ChartTooltip />} cursor={{ fill: 'rgb(var(--color-canvas))' }} />
+        {keys.map((key, i) => (
+          <Bar key={key} dataKey={key} fill={fills[i % fills.length]} radius={[4, 4, 0, 0]} maxBarSize={24} />
+        ))}
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}

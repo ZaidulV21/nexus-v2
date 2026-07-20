@@ -1,15 +1,61 @@
 import { api } from '@/lib/api';
 
+export interface DashboardKpis {
+  totalActiveProjects: number;
+  totalLeads: number;
+  totalClients: number;
+  totalQuotations: number;
+  totalInvoices: number;
+  totalRevenueInvoiced: number;
+  totalRevenueReceived: number;
+  outstandingAmount: number;
+  pendingQuotations: number;
+  projectsInProgress: number;
+}
+
+export interface MonthComparison {
+  thisMonth: number;
+  prevMonth: number;
+}
+
+export interface DashboardComparisons {
+  leads: MonthComparison;
+  clients: MonthComparison;
+  quotations: MonthComparison;
+  projects: MonthComparison;
+  invoices: MonthComparison;
+}
+
+export interface DashboardCharts {
+  leadServicesByStatus: { status: string; count: number }[];
+  leadsBySource: { source: string; count: number }[];
+  monthlyRevenue: { month: string; invoiced: number; received: number }[];
+  projectsByStatus: { status: string; count: number }[];
+}
+
+export interface DashboardActivity {
+  id: string;
+  entityType: string;
+  entityId: string;
+  eventType: string;
+  description: string;
+  createdAt: string;
+}
+
+export interface DashboardUpcoming {
+  pendingQuotations: number;
+  projectsOnHold: number;
+  overdueInvoices: number;
+  invoicesAwaitingPayment: number;
+  unreadNotifications: number;
+}
+
 export interface AdminDashboardSummary {
-  leadsBySource: { source: string; _count: number }[];
-  leadServicesByStatus: { status: string; _count: number }[];
-  activeProjectsCount: number;
-  revenue: {
-    totalInvoiced: number;
-    totalPaid: number;
-    outstanding: number;
-  };
-  invoicesAwaitingFirstPayment: number;
+  kpis: DashboardKpis;
+  comparisons: DashboardComparisons;
+  charts: DashboardCharts;
+  recentActivity: DashboardActivity[];
+  upcoming: DashboardUpcoming;
 }
 
 export interface ClientDashboardProjectSummary {

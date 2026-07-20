@@ -75,6 +75,13 @@ Invoice (projectId) → Project
 - ✅ New event callers: `documents.service.ts` (document.uploaded), `project.service.ts` (project.status_changed), `lead.service.ts` (lead.archived, lead.restored)
 - ✅ `notifications.service.test.ts` — 13 tests (emitEvent + in-app creation + CRUD)
 
+#### Admin Dashboard — Real-Time Business Overview
+- ✅ `dashboard.repository.ts` — Aggregate queries: `countTotalLeads`, `countTotalClients`, `countTotalQuotations`, `countTotalInvoices`, `countProjectsByStatus`, `countPendingQuotations`, `countProjectsOnHold`, `invoicesAwaitingPayment`, `monthlyRevenue`, `previousMonthCounts`, `thisMonthCounts`, `recentTimelineEvents`
+- ✅ `adminDashboard.service.ts` — `getSummary(adminUserId?)` returns KPIs, comparisons (this vs previous month), charts data (lead services by status, leads by source, monthly revenue, projects by status), recent activity (last 10 timeline events), upcoming items (pending quotations, projects on hold, overdue invoices, awaiting payment, unread notifications)
+- ✅ `dashboard.controller.ts` — Passes `req.user.id` to service for unread notification count
+- ✅ `dashboard.repository.ts` — All queries use `archivedAt: null` filter for leads; `status: 'ISSUED'` for invoices; `status: 'CANCELLED'` excluded from revenue
+- ✅ `tests/adminDashboard.service.test.ts` — 6 tests (revenue totals, entity counts, upcoming items, charts, comparisons, recent activity)
+
 #### Company Settings — Centralized Configuration
 - ✅ `company.types.ts` — `UpdateCompanySettingsInput` with all settings fields
 - ✅ `company.validation.ts` — `updateCompanySettingsSchema` with Zod validation (email, URL, length constraints)
@@ -94,6 +101,14 @@ Invoice (projectId) → Project
 
 ### Frontend (100% Complete)
 
+#### Admin Dashboard — Real-Time Business Overview
+- ✅ **REWRITTEN: `pages/dashboard/DashboardPage.tsx`** — Full dashboard with 10 KPI cards, 4 charts, recent activity, upcoming items, quick actions, search shortcut, notifications summary. Responsive grid layout.
+- ✅ **REWRITTEN: `services/dashboardService.ts`** — Typed interfaces for `AdminDashboardSummary` (kpis, comparisons, charts, recentActivity, upcoming). Fetches from `GET /dashboard/admin/summary`.
+- ✅ Updated: `components/ui/StatCard.tsx` — Added `description` prop
+- ✅ Updated: `components/ui/Charts.tsx` — Added `GroupedBarChart` for monthly revenue
+- ✅ Updated: `queries/keys.ts` — Added `dashboard.adminSummary` query key
+
+#### Existing Frontend
 - ✅ `QuotationFormDrawer.tsx` - Client selection only
 - ✅ `LeadDetailPage.tsx` - Updated conversion dialog + Archive/Restore UI
 - ✅ `LeadServicesPanel.tsx` - Read-only badge after conversion
@@ -301,6 +316,7 @@ These statuses are NEVER manually set - backend business logic automatically upd
 - ✅ Search Service: 10/10 passing (type filtering, includes, archived exclusion)
 - ✅ Notification Service: 13/13 passing (emitEvent + in-app creation + CRUD)
 - ✅ Company Service: 5/5 passing (get, get default, update, audit before/after, file upload)
+- ✅ Admin Dashboard Service: 6/6 passing (revenue, entity counts, upcoming, charts, comparisons, activity)
 - ✅ Project Service: Client ownership verified
 
 ### Frontend Tests
@@ -329,7 +345,7 @@ These statuses are NEVER manually set - backend business logic automatically upd
 ### Backend
 ```bash
 ✅ npm run build - SUCCESS (0 errors)
-✅ npm test - 158/158 tests passing (19 test suites, ~11s)
+✅ npm test - 164/164 tests passing (19 test suites, ~11s)
 ```
 
 ### Frontend
@@ -372,7 +388,10 @@ These statuses are NEVER manually set - backend business logic automatically upd
 27. ✅ `nexus-backend/src/modules/lead/lead.controller.ts`
 28. ✅ `nexus-backend/src/modules/lead/lead.routes.ts`
 29. ✅ `nexus-backend/src/modules/lead/tests/lead.service.test.ts`
-30. ✅ `nexus-backend/src/modules/dashboard/dashboard.repository.ts`
+30. ✅ `nexus-backend/src/modules/dashboard/dashboard.repository.ts` — Aggregate queries for KPIs, charts, revenue, activity
+31. ✅ `nexus-backend/src/modules/dashboard/adminDashboard.service.ts` — Full dashboard summary with KPIs, comparisons, charts, activity, upcoming
+32. ✅ `nexus-backend/src/modules/dashboard/dashboard.controller.ts` — Admin + client summary endpoints
+33. ✅ `nexus-backend/src/modules/dashboard/tests/adminDashboard.service.test.ts` — 6 tests
 31. ✅ `nexus-backend/src/modules/client/client.service.ts` — ClientId in payload
 32. ✅ `nexus-backend/src/modules/project/project.service.ts` — ClientId in payload + status_changed notification
 33. ✅ `nexus-backend/src/modules/invoice/invoice.service.ts` — ClientId in payloads
@@ -383,13 +402,14 @@ These statuses are NEVER manually set - backend business logic automatically upd
 38. ✅ `nexus-backend/src/modules/search/tests/search.service.test.ts`
 39. ✅ `nexus-backend/src/app.ts` — Notification + company routes mounted
 
-### Frontend (22 files)
+### Frontend (25 files)
 40. ✅ `nexus-frontend/src/types/index.ts` — Lead archive fields + CompanySetting interface
 41. ✅ `nexus-frontend/src/services/leadService.ts`
 42. ✅ `nexus-frontend/src/services/searchService.ts`
 43. ✅ `nexus-frontend/src/services/notificationService.ts`
 44. ✅ `nexus-frontend/src/services/companyService.ts` — NEW: get, update, uploadFile
-45. ✅ `nexus-frontend/src/queries/useLeads.ts`
+45. ✅ `nexus-frontend/src/services/dashboardService.ts` — REWRITTEN: Full dashboard types + API
+46. ✅ `nexus-frontend/src/queries/useLeads.ts`
 46. ✅ `nexus-frontend/src/queries/useSearch.ts`
 47. ✅ `nexus-frontend/src/queries/useNotifications.ts`
 48. ✅ `nexus-frontend/src/queries/useCompany.ts` — NEW: settings + upload hooks
@@ -399,17 +419,20 @@ These statuses are NEVER manually set - backend business logic automatically upd
 52. ✅ `nexus-frontend/src/pages/leads/LeadsPage.tsx`
 53. ✅ `nexus-frontend/src/pages/leads/components/LeadServicesPanel.tsx`
 54. ✅ `nexus-frontend/src/pages/search/SearchPage.tsx`
-55. ✅ `nexus-frontend/src/pages/notifications/NotificationsPage.tsx`
+55. ✅ `nexus-frontend/src/pages/dashboard/DashboardPage.tsx` — REWRITTEN: 10 KPI cards, 4 charts, activity, upcoming, actions
+56. ✅ `nexus-frontend/src/pages/notifications/NotificationsPage.tsx`
 56. ✅ `nexus-frontend/src/pages/portal/PortalNotificationsPage.tsx`
 57. ✅ `nexus-frontend/src/pages/settings/CompanySettingsPage.tsx` — NEW: Full settings page
 58. ✅ `nexus-frontend/src/pages/settings/SettingsPage.tsx` — Company Settings card
 59. ✅ `nexus-frontend/src/components/ui/CommandPalette.tsx`
-60. ✅ `nexus-frontend/src/components/layout/TopNav.tsx`
-61. ✅ `nexus-frontend/src/components/layout/NotificationPanel.tsx`
-62. ✅ `nexus-frontend/src/components/layout/Sidebar.tsx`
-63. ✅ `nexus-frontend/src/app/PortalLayout.tsx`
-64. ✅ `nexus-frontend/src/routes/routes.ts` — Company settings route
-65. ✅ `nexus-frontend/src/App.tsx` — Company settings route
+60. ✅ `nexus-frontend/src/components/ui/StatCard.tsx` — Added description prop
+61. ✅ `nexus-frontend/src/components/ui/Charts.tsx` — Added GroupedBarChart for monthly revenue
+62. ✅ `nexus-frontend/src/components/layout/TopNav.tsx`
+63. ✅ `nexus-frontend/src/components/layout/NotificationPanel.tsx`
+64. ✅ `nexus-frontend/src/components/layout/Sidebar.tsx`
+65. ✅ `nexus-frontend/src/app/PortalLayout.tsx`
+66. ✅ `nexus-frontend/src/routes/routes.ts` — Company settings route
+67. ✅ `nexus-frontend/src/App.tsx` — Company settings route
 
 ---
 

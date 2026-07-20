@@ -240,6 +240,21 @@ The old error message only exists in `SINGLE-WORKFLOW-COMPLETE.md:279` (historic
 - **Save "Invalid payload"** — `onSubmit` converted `''` → `null`. Backend Zod rejects `null` (accepts `string | undefined` only). Fixed by skipping empty/null/undefined values in payload instead of converting to `null`.
 - **Cloudinary PDF delivery blocked** — Cloudinary Media Library default "Blocked for delivery" caused uploaded PDFs to return HTTP 401 Unauthorized. Fixed by adding `access_control: [{ access: 'public_read' }]` to upload params in `cloudinary.provider.ts`. Images were unaffected. New uploads deliver publicly; existing URLs unchanged.
 
+### ✅ Admin Dashboard — Real-Time Business Overview
+
+**Backend:**
+- `dashboard.repository.ts` — Expanded with 12 aggregate queries: `countTotalLeads`, `countTotalClients`, `countTotalQuotations`, `countTotalInvoices`, `countProjectsByStatus`, `countPendingQuotations`, `countProjectsOnHold`, `invoicesAwaitingPayment`, `monthlyRevenue`, `previousMonthCounts`, `thisMonthCounts`, `recentTimelineEvents`. All queries use `archivedAt: null` for leads and exclude cancelled invoices.
+- `adminDashboard.service.ts` — `getSummary(adminUserId?)` returns structured data: KPIs (10 metrics), comparisons (this vs previous month for 5 entity types), charts (lead services by status, leads by source, monthly revenue, projects by status), recent activity (last 10 timeline events with clickable links), upcoming items (pending quotations, projects on hold, overdue invoices, awaiting payment, unread notifications). `monthlyRevenue()` aggregates last 12 months of invoiced vs received amounts.
+- `dashboard.controller.ts` — Passes `req.user.id` to service for unread notification count
+- `tests/adminDashboard.service.test.ts` — 6 tests (revenue totals, entity counts, upcoming items, charts data, comparisons, recent activity)
+
+**Frontend:**
+- `pages/dashboard/DashboardPage.tsx` — REWRITTEN: Full dashboard with 10 KPI cards (Active Projects, Total Leads, Clients, Quotations, Invoices, Revenue Invoiced, Revenue Received, Outstanding, Pending Quotations, Projects In Progress), 4 charts (Lead Services by Status bar chart, Leads by Source donut, Monthly Revenue grouped bar, Projects by Status donut), Recent Activity (last 10 timeline events with icons, clickable links), Upcoming Items widget (pending quotations, projects on hold, overdue invoices, awaiting payment, unread notifications), Quick Actions (8 buttons for create/view), Search shortcut (Ctrl+K hint), Notifications summary (unread count + view all). All responsive with loading skeletons.
+- `services/dashboardService.ts` — REWRITTEN: Typed interfaces (`AdminDashboardSummary`, `DashboardKpis`, `DashboardComparisons`, `DashboardCharts`, `DashboardActivity`, `DashboardUpcoming`). Fetches from `GET /dashboard/admin/summary`.
+- `components/ui/StatCard.tsx` — Added `description` prop for optional sub-text
+- `components/ui/Charts.tsx` — Added `GroupedBarChart` component for monthly revenue (dual bars: invoiced vs received)
+- `queries/keys.ts` — Added `dashboard.adminSummary` query key
+
 ---
 
 ## Build & Test Status
@@ -247,7 +262,7 @@ The old error message only exists in `SINGLE-WORKFLOW-COMPLETE.md:279` (historic
 ### Backend
 ```bash
 ✅ npm run build — SUCCESS (0 errors)
-✅ npm test — 158/158 tests passing (19 test suites, ~14s)
+✅ npm test — 164/164 tests passing (19 test suites, ~14s)
 ```
 
 ### Frontend
@@ -281,7 +296,7 @@ There are no unfinished tasks for the core single-workflow implementation. All b
 
 ## Files Modified
 
-### Backend (31 files)
+### Backend (34 files)
 1. `nexus-backend/prisma/schema.prisma` — Lead archive fields + InAppNotification model + CompanySetting model
 2. `nexus-backend/prisma/migrations/20260720000000_add_lead_archive_fields/migration.sql`
 3. `nexus-backend/prisma/migrations/20260720010000_add_in_app_notifications/migration.sql`
@@ -311,9 +326,12 @@ There are no unfinished tasks for the core single-workflow implementation. All b
 27. `nexus-backend/src/modules/lead/lead.controller.ts` — Archive/restore endpoints
 28. `nexus-backend/src/modules/lead/lead.routes.ts` — Archive/restore routes
 29. `nexus-backend/src/modules/lead/tests/lead.service.test.ts` — 7 new archive/restore tests
-30. `nexus-backend/src/modules/dashboard/dashboard.repository.ts` — Exclude archived leads
-31. `nexus-backend/src/modules/client/client.service.ts` — Added clientId to payload
-32. `nexus-backend/src/modules/project/project.service.ts` — Added clientId + status_changed notification
+30. `nexus-backend/src/modules/dashboard/dashboard.repository.ts` — REWRITTEN: 12 aggregate queries for KPIs, charts, revenue, activity
+31. `nexus-backend/src/modules/dashboard/adminDashboard.service.ts` — REWRITTEN: Full dashboard summary with KPIs, comparisons, charts, activity, upcoming
+32. `nexus-backend/src/modules/dashboard/dashboard.controller.ts` — Passes admin userId for notifications
+33. `nexus-backend/src/modules/dashboard/tests/adminDashboard.service.test.ts` — 6 new dashboard tests
+34. `nexus-backend/src/modules/client/client.service.ts` — Added clientId to payload
+35. `nexus-backend/src/modules/project/project.service.ts` — Added clientId + status_changed notification
 33. `nexus-backend/src/modules/invoice/invoice.service.ts` — Added clientId to payloads
 34. `nexus-backend/src/modules/documents/documents.service.ts` — Added document.uploaded notification
 35. `nexus-backend/src/modules/search/search.types.ts` — SearchEntityType, SEARCH_ENTITY_TYPES
@@ -322,13 +340,14 @@ There are no unfinished tasks for the core single-workflow implementation. All b
 38. `nexus-backend/src/modules/search/tests/search.service.test.ts` — 10 new search tests
 39. `nexus-backend/src/app.ts` — Notification + company routes mounted
 
-### Frontend (22 files)
+### Frontend (26 files)
 40. `nexus-frontend/src/types/index.ts` — Lead archive fields + CompanySetting interface
 41. `nexus-frontend/src/services/leadService.ts` — Archive/restore API
 42. `nexus-frontend/src/services/searchService.ts` — search(q, type?) API
 43. `nexus-frontend/src/services/notificationService.ts` — NEW: Notification API
 44. `nexus-frontend/src/services/companyService.ts` — NEW: Company settings API
-45. `nexus-frontend/src/queries/useLeads.ts` — Archive/restore mutations
+45. `nexus-frontend/src/services/dashboardService.ts` — REWRITTEN: Full dashboard types + API
+46. `nexus-frontend/src/queries/useLeads.ts` — Archive/restore mutations
 46. `nexus-frontend/src/queries/useSearch.ts` — useGlobalSearch(q, type?)
 47. `nexus-frontend/src/queries/useNotifications.ts` — NEW: Notification hooks
 48. `nexus-frontend/src/queries/useCompany.ts` — NEW: Company settings hooks
@@ -338,27 +357,31 @@ There are no unfinished tasks for the core single-workflow implementation. All b
 52. `nexus-frontend/src/pages/leads/LeadsPage.tsx` — Archived filter tab
 53. `nexus-frontend/src/pages/leads/components/LeadServicesPanel.tsx`
 54. `nexus-frontend/src/pages/search/SearchPage.tsx` — Module filters, highlighting
-55. `nexus-frontend/src/pages/notifications/NotificationsPage.tsx` — NEW: Full page
+55. `nexus-frontend/src/pages/dashboard/DashboardPage.tsx` — REWRITTEN: 10 KPIs, 4 charts, activity, upcoming, actions
+56. `nexus-frontend/src/pages/notifications/NotificationsPage.tsx` — NEW: Full page
 56. `nexus-frontend/src/pages/portal/PortalNotificationsPage.tsx` — NEW: Portal page
 57. `nexus-frontend/src/pages/settings/CompanySettingsPage.tsx` — NEW: Company settings page
 58. `nexus-frontend/src/pages/settings/SettingsPage.tsx` — Added Company Settings card
-59. `nexus-frontend/src/components/ui/CommandPalette.tsx` — Search-integrated Cmd+K
-60. `nexus-frontend/src/components/layout/TopNav.tsx` — Search + bell icon
-61. `nexus-frontend/src/components/layout/NotificationPanel.tsx` — Rewrite with real data
-62. `nexus-frontend/src/components/layout/Sidebar.tsx` — Notifications nav item
+63. `nexus-frontend/src/components/ui/StatCard.tsx` — Added description prop
+64. `nexus-frontend/src/components/ui/Charts.tsx` — Added GroupedBarChart
+65. `nexus-frontend/src/components/ui/CommandPalette.tsx` — Search-integrated Cmd+K
+66. `nexus-frontend/src/components/layout/TopNav.tsx` — Search + bell icon
+67. `nexus-frontend/src/components/layout/NotificationPanel.tsx` — Rewrite with real data
+68. `nexus-frontend/src/components/layout/Sidebar.tsx` — Notifications nav item
 63. `nexus-frontend/src/app/PortalLayout.tsx` — Bell icon + Notifications nav
-64. `nexus-frontend/src/routes/routes.ts` — Notification + company routes
-65. `nexus-frontend/src/App.tsx` — Notification + company routes
+69. `nexus-frontend/src/app/PortalLayout.tsx` — Bell icon + Notifications nav
+70. `nexus-frontend/src/routes/routes.ts` — Notification + company routes
+71. `nexus-frontend/src/App.tsx` — Notification + company routes
 
 ### Documentation (4 files)
-54. `IMPLEMENTATION.md`
-55. `WORKFLOW.md`
-56. `IMPLEMENTATION-PLAN.md`
-57. `IMPLEMENTATION-PROGRESS.md` (this file)
+72. `IMPLEMENTATION.md`
+73. `WORKFLOW.md`
+74. `IMPLEMENTATION-PLAN.md`
+75. `IMPLEMENTATION-PROGRESS.md` (this file)
 
 ---
 
 **STATUS: ✅ IMPLEMENTATION COMPLETE**
-**BACKEND: Build ✓ | 158 Tests ✓**
+**BACKEND: Build ✓ | 164 Tests ✓**
 **FRONTEND: Build ✓ | tsc ✓**
 **ALL WORKFLOW PATHS VERIFIED**

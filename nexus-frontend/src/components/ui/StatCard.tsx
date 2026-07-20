@@ -7,12 +7,14 @@ export function StatCard({
   value,
   icon: Icon,
   trend,
+  description,
   className,
 }: {
   label: string;
   value: string;
   icon?: LucideIcon;
   trend?: { value: string; direction: 'up' | 'down'; positive?: boolean };
+  description?: string;
   className?: string;
 }) {
   return (
@@ -39,6 +41,7 @@ export function StatCard({
           </span>
         )}
       </div>
+      {description && <p className="mt-1 text-xs text-ink-faint">{description}</p>}
     </div>
   );
 }

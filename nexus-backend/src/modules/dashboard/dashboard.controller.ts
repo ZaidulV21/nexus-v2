@@ -6,7 +6,7 @@ import { UnauthorizedError } from '../../core/errors/AppError';
 export const dashboardController = {
   async adminSummary(req: Request, res: Response, next: NextFunction) {
     try {
-      const summary = await adminDashboardService.getSummary();
+      const summary = await adminDashboardService.getSummary(req.user?.id);
       return ok(res, summary);
     } catch (err) {
       next(err);
