@@ -365,6 +365,17 @@ REJECTED → DRAFT (Admin revises)
 - In-app notifications
 - Configurable preferences
 
+### Company Settings Integration
+- Centralized company profile, branding, and business configuration — **single source of truth**
+- Single `CompanySetting` record (singleton pattern)
+- Admin-only edit access; all authenticated users can read
+- Every update creates Timeline and Audit Log entries
+- File uploads via **Cloudinary** (logo, favicon, QR code, signature, stamp) — falls back to local storage when `CLOUDINARY_*` env vars are not set
+- Settings available via `GET /api/company/settings` for all consumers
+- **Branding helper** (`getCompanyBranding()` + `clearBrandingCache()`) for backend consumers (PDF generation, emails, invoices, quotations)
+- **Frontend consumers**: Admin sidebar (logo + name), Login page (logo + name), Client portal header (logo + name), Settings page (company profile summary card), Browser favicon (dynamic from settings.faviconUrl)
+- Frontend: Sectioned card layout at `/settings/company` with unsaved changes protection
+
 ### Portal Integration
 - Real-time data sync
 - Client-specific views

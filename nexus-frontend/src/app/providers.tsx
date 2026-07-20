@@ -5,6 +5,7 @@ import { TooltipProvider } from '@/components/ui/Tooltip';
 import { ToastProvider } from '@/hooks/useToast';
 import { Toaster } from '@/components/ui/Toaster';
 import { CommandPalette } from '@/components/ui/CommandPalette';
+import { DynamicFavicon } from '@/components/layout/DynamicFavicon';
 import { AuthProvider } from './AuthContext';
 
 /** All app-wide context providers, composed once here so main.tsx and
@@ -30,6 +31,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
           <ToastProvider>
             <TooltipProvider delayDuration={200}>
               {children}
+              <DynamicFavicon />
               <Toaster />
               <CommandPalette />
             </TooltipProvider>

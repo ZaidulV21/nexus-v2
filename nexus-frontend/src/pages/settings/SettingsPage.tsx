@@ -1,8 +1,9 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { KeyRound, ShieldCheck, UserCircle2 } from 'lucide-react';
+import { KeyRound, ShieldCheck, UserCircle2, Building2, Pencil } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
@@ -13,6 +14,8 @@ import { Badge } from '@/components/ui/StatusBadge';
 import { useAuth } from '@/app/AuthContext';
 import { useToast } from '@/hooks/useToast';
 import { authService } from '@/services/authService';
+import { useCompanySettings } from '@/queries/useCompany';
+import { ROUTES } from '@/routes/routes';
 import { ApiError } from '@/lib/api';
 
 // Mirrors the backend's changePasswordSchema (auth.validation.ts) for
@@ -54,6 +57,74 @@ function ProfileCard() {
             </div>
           </div>
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function CompanyCard() {
+  const navigate = useNavigate();
+  const { data: settings, isLoading } = useCompanySettings();
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>
+          <span className="inline-flex items-center gap-2">
+            <Building2 className="h-4 w-4 text-ink-faint" /> Company Profile
+          </span>
+        </CardTitle>
+        <CardDescription>Your company branding, contact details, and business configuration.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <p className="text-sm text-ink-muted">Loading...</p>
+        ) : settings ? (
+          <div className="flex items-start gap-4">
+            {settings.logoUrl ? (
+              <img
+                src={settings.logoUrl}
+                alt={settings.companyName || 'Company Logo'}
+                className="h-12 w-12 shrink-0 rounded border border-border object-contain"
+              />
+            ) : (
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded border border-border bg-canvas">
+                <Building2 className="h-5 w-5 text-ink-faint" />
+              </div>
+            )}
+            <div className="min-w-0 flex-1 space-y-1">
+              {settings.companyName && (
+                <p className="truncate text-sm font-medium text-ink">{settings.companyName}</p>
+              )}
+              {settings.email && (
+                <p className="truncate text-xs text-ink-muted">{settings.email}</p>
+              )}
+              {settings.phone && (
+                <p className="truncate text-xs text-ink-muted">{settings.phone}</p>
+              )}
+              {(settings.city || settings.state) && (
+                <p className="truncate text-xs text-ink-muted">
+                  {[settings.city, settings.state].filter(Boolean).join(', ')}
+                </p>
+              )}
+              {!settings.companyName && !settings.email && !settings.phone && (
+                <p className="text-xs text-ink-faint">No company details configured yet.</p>
+              )}
+            </div>
+            <Button variant="secondary" size="sm" onClick={() => navigate(ROUTES.companySettings)}>
+              <Pencil className="h-3.5 w-3.5" />
+              Edit
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <p className="text-sm text-ink-muted">Set up your company profile, branding, and business details.</p>
+            <Button variant="secondary" size="sm" onClick={() => navigate(ROUTES.companySettings)}>
+              <Building2 className="h-3.5 w-3.5" />
+              Set up Company Settings
+            </Button>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -140,6 +211,7 @@ function ChangePasswordCard() {
 }
 
 export function SettingsPage() {
+  const navigate = useNavigate();
   return (
     <div>
       <PageHeader
@@ -154,12 +226,18 @@ export function SettingsPage() {
 
       <div className="grid gap-4 lg:grid-cols-2">
         <ProfileCard />
+        <CompanyCard />
         <ChangePasswordCard />
       </div>
 
       <p className="mt-4 text-xs text-ink-faint">
-        Company profile, branding, email, and invoice configuration are provisioned at deployment in V1 and will become
-        editable here when the backend exposes configuration APIs.
+        Company profile, branding, email, and invoice configuration are managed in{' '}
+        <button
+          onClick={() => navigate(ROUTES.companySettings)}
+          className="text-accent hover:underline"
+        >
+          Company Settings
+        </button>.
       </p>
     </div>
   );

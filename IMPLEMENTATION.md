@@ -75,6 +75,19 @@ Invoice (projectId) → Project
 - ✅ New event callers: `documents.service.ts` (document.uploaded), `project.service.ts` (project.status_changed), `lead.service.ts` (lead.archived, lead.restored)
 - ✅ `notifications.service.test.ts` — 13 tests (emitEvent + in-app creation + CRUD)
 
+#### Company Settings — Centralized Configuration
+- ✅ `company.types.ts` — `UpdateCompanySettingsInput` with all settings fields
+- ✅ `company.validation.ts` — `updateCompanySettingsSchema` with Zod validation (email, URL, length constraints)
+- ✅ `company.repository.ts` — Singleton pattern: `find()`, `create()`, `update()` (upsert)
+- ✅ `company.service.ts` — `get()`, `update()` (with timeline + audit), `updateField()` (for file uploads)
+- ✅ `company.controller.ts` — `get`, `update` (Admin-only), `upload` (Cloudinary with local fallback)
+- ✅ `company.routes.ts` — `GET /settings`, `PATCH /settings`, `POST /settings/upload` (authenticated)
+- ✅ **NEW: `company.branding.ts`** — `getCompanyBranding()` + `clearBrandingCache()` for downstream consumers (PDFs, emails)
+- ✅ **NEW: `cloudinary.provider.ts`** — Cloudinary `StorageProvider` implementation with stream upload
+- ✅ `prisma/schema.prisma` — `CompanySetting` singleton model with 47 fields across 5 sections
+- ✅ `prisma/migrations/20260720020000_add_company_settings/`
+- ✅ `company.service.test.ts` — 5 tests (get, get with default, update with timeline/audit, audit before/after, file upload)
+
 #### Client Module - Already Correct
 - ✅ `client.service.ts` - Conversion logic correct
 - ✅ `client.service.test.ts` - All 4 tests passing
@@ -103,6 +116,20 @@ Invoice (projectId) → Project
 - ✅ Updated: `queries/keys.ts` — Notification query keys
 - ✅ Updated: `routes/routes.ts` — Admin and portal notification routes
 - ✅ Updated: `App.tsx` — Admin and portal notification routes
+- ✅ **NEW: `services/companyService.ts`** — `get()`, `update()`, `uploadFile()` with typed inputs
+- ✅ **NEW: `queries/useCompany.ts`** — `useCompanySettings`, `useUpdateCompanySettings`, `useUploadCompanyFile`
+- ✅ **NEW: `pages/settings/CompanySettingsPage.tsx`** — Full settings page with 5 sections, file uploads, unsaved changes warning
+- ✅ **NEW: `components/layout/CompanyLogo.tsx`** — Shared `CompanyLogo` + `CompanyName` components reading from settings
+- ✅ **NEW: `components/layout/DynamicFavicon.tsx`** — Dynamically updates browser favicon from Company Settings
+- ✅ Updated: `types/index.ts` — `CompanySetting` interface with all 47 fields
+- ✅ Updated: `queries/keys.ts` — Company query keys
+- ✅ Updated: `routes/routes.ts` — `companySettings: '/settings/company'`
+- ✅ Updated: `App.tsx` — Company settings route
+- ✅ Updated: `components/layout/Sidebar.tsx` — Company Logo + Company Name from settings (replaces hardcoded "Nexus")
+- ✅ Updated: `pages/auth/LoginPage.tsx` — Company Logo + Company Name on login screen
+- ✅ Updated: `app/PortalLayout.tsx` — Company Logo + Company Name in portal header
+- ✅ Updated: `pages/settings/SettingsPage.tsx` — Company Profile summary card with logo, name, contact, Edit button
+- ✅ Updated: `app/providers.tsx` — `DynamicFavicon` wired globally
 
 ---
 
@@ -162,6 +189,24 @@ Invoice (projectId) → Project
 - ✅ Admin endpoints: `GET /api/notifications` (paginated), `GET /api/notifications/unread-count`, `PATCH /api/notifications/read-all`, `PATCH /api/notifications/:id/read`
 - ✅ Portal notifications page with mark-as-read and navigation to related entities
 - ✅ Real-time unread badge in header with 30s polling interval
+
+### Company Settings
+- ✅ Singleton pattern — single `CompanySetting` row with fixed ID
+- ✅ 5 sections: Company Info, Business Settings, Bank Details, Email Settings, Social Links
+- ✅ File uploads for: Logo, Favicon, QR Code, Signature, Stamp (reuses existing storage infrastructure)
+- ✅ Admin-only edit access enforced in controller
+- ✅ Timeline entries recorded for every settings update and file upload
+- ✅ Audit logs record before/after state for every update
+- ✅ Frontend: Sectioned card layout with react-hook-form + zod validation
+- ✅ Frontend: Unsaved changes warning (beforeunload + inline banner)
+- ✅ Frontend: File upload preview with replace capability
+- ✅ Frontend: Reset button to discard unsaved changes
+- ✅ Frontend: Settings page links to Company Settings
+- ✅ API: `GET /api/company/settings`, `PATCH /api/company/settings`, `POST /api/company/settings/upload?field=...`
+
+#### Bug Fixes
+- ✅ **Logo upload preview** — `localStorageProvider.save()` returned a bare filename (e.g. `uuid-name.png`). `<img src>` couldn't resolve it. Fixed by: (1) adding `express.static` middleware serving `./uploads` at `/uploads` in `app.ts`, (2) company controller now returns `/uploads/${filename}` as `fileUrl` so it's a serveable path stored in DB and displayed by `<img>`.
+- ✅ **Save "Invalid payload"** — `onSubmit` converted empty strings `''` to `null` before sending. Backend Zod schema uses `z.string().optional()` which accepts `string | undefined` only — `null` fails validation. Fixed by skipping empty/null/undefined values in the payload instead of converting to `null`.
 
 ---
 
@@ -254,6 +299,7 @@ These statuses are NEVER manually set - backend business logic automatically upd
 - ✅ Lead Service: 16/16 passing (manual update blocking + archive/restore)
 - ✅ Search Service: 10/10 passing (type filtering, includes, archived exclusion)
 - ✅ Notification Service: 13/13 passing (emitEvent + in-app creation + CRUD)
+- ✅ Company Service: 5/5 passing (get, get default, update, audit before/after, file upload)
 - ✅ Project Service: Client ownership verified
 
 ### Frontend Tests
@@ -282,7 +328,7 @@ These statuses are NEVER manually set - backend business logic automatically upd
 ### Backend
 ```bash
 ✅ npm run build - SUCCESS (0 errors)
-✅ npm test - 153/153 tests passing (18 test suites, ~13s)
+✅ npm test - 158/158 tests passing (19 test suites, ~11s)
 ```
 
 ### Frontend
@@ -295,62 +341,74 @@ These statuses are NEVER manually set - backend business logic automatically upd
 
 ## Files Modified
 
-### Backend (24 files)
-1. ✅ `nexus-backend/prisma/schema.prisma` - Lead archive fields + `InAppNotification` model
+### Backend (31 files)
+1. ✅ `nexus-backend/prisma/schema.prisma` - Lead archive fields + `InAppNotification` model + `CompanySetting` model
 2. ✅ `nexus-backend/prisma/migrations/20260720000000_add_lead_archive_fields/migration.sql`
 3. ✅ `nexus-backend/prisma/migrations/20260720010000_add_in_app_notifications/migration.sql`
-4. ✅ `nexus-backend/src/core/utils/pagination.ts` - Archived filter param
-5. ✅ `nexus-backend/src/modules/notifications/notifications.types.ts` — Notification types
-6. ✅ `nexus-backend/src/modules/notifications/notifications.repository.ts` — In-app CRUD
-7. ✅ `nexus-backend/src/modules/notifications/notifications.service.ts` — Event mapping + emitEvent + CRUD
-8. ✅ `nexus-backend/src/modules/notifications/notifications.controller.ts` — REST endpoints
-9. ✅ `nexus-backend/src/modules/notifications/notifications.routes.ts` — Authenticated routes
-10. ✅ `nexus-backend/src/modules/notifications/tests/notifications.service.test.ts` — 13 tests
-11. ✅ `nexus-backend/src/modules/quotation/quotation.types.ts`
-12. ✅ `nexus-backend/src/modules/quotation/quotation.validation.ts`
-13. ✅ `nexus-backend/src/modules/quotation/quotation.service.ts` — ClientId in payloads
-14. ✅ `nexus-backend/src/modules/quotation/tests/quotation.service.test.ts`
-15. ✅ `nexus-backend/src/modules/lead/lead.service.ts` — Archive/restore + notifications
-16. ✅ `nexus-backend/src/modules/lead/lead.repository.ts`
-17. ✅ `nexus-backend/src/modules/lead/lead.types.ts`
-18. ✅ `nexus-backend/src/modules/lead/lead.validation.ts`
-19. ✅ `nexus-backend/src/modules/lead/lead.controller.ts`
-20. ✅ `nexus-backend/src/modules/lead/lead.routes.ts`
-21. ✅ `nexus-backend/src/modules/lead/tests/lead.service.test.ts`
-22. ✅ `nexus-backend/src/modules/dashboard/dashboard.repository.ts`
-23. ✅ `nexus-backend/src/modules/client/client.service.ts` — ClientId in payload
-24. ✅ `nexus-backend/src/modules/project/project.service.ts` — ClientId in payload + status_changed notification
-25. ✅ `nexus-backend/src/modules/invoice/invoice.service.ts` — ClientId in payloads
-26. ✅ `nexus-backend/src/modules/documents/documents.service.ts` — document.uploaded notification
-27. ✅ `nexus-backend/src/modules/search/search.types.ts`
-28. ✅ `nexus-backend/src/modules/search/search.service.ts`
-29. ✅ `nexus-backend/src/modules/search/search.controller.ts`
-30. ✅ `nexus-backend/src/modules/search/tests/search.service.test.ts`
-31. ✅ `nexus-backend/src/app.ts` — Notification routes mounted
+4. ✅ `nexus-backend/prisma/migrations/20260720020000_add_company_settings/migration.sql`
+5. ✅ `nexus-backend/src/core/utils/pagination.ts` - Archived filter param
+6. ✅ `nexus-backend/src/modules/notifications/notifications.types.ts` — Notification types
+7. ✅ `nexus-backend/src/modules/notifications/notifications.repository.ts` — In-app CRUD
+8. ✅ `nexus-backend/src/modules/notifications/notifications.service.ts` — Event mapping + emitEvent + CRUD
+9. ✅ `nexus-backend/src/modules/notifications/notifications.controller.ts` — REST endpoints
+10. ✅ `nexus-backend/src/modules/notifications/notifications.routes.ts` — Authenticated routes
+11. ✅ `nexus-backend/src/modules/notifications/tests/notifications.service.test.ts` — 13 tests
+12. ✅ `nexus-backend/src/modules/company/company.types.ts` — Company settings input types
+13. ✅ `nexus-backend/src/modules/company/company.validation.ts` — Zod validation schema
+14. ✅ `nexus-backend/src/modules/company/company.repository.ts` — Singleton CRUD
+15. ✅ `nexus-backend/src/modules/company/company.service.ts` — Settings with timeline + audit
+16. ✅ `nexus-backend/src/modules/company/company.controller.ts` — REST + file upload
+17. ✅ `nexus-backend/src/modules/company/company.routes.ts` — Authenticated routes
+18. ✅ `nexus-backend/src/modules/company/tests/company.service.test.ts` — 5 tests
+19. ✅ `nexus-backend/src/modules/quotation/quotation.types.ts`
+20. ✅ `nexus-backend/src/modules/quotation/quotation.validation.ts`
+21. ✅ `nexus-backend/src/modules/quotation/quotation.service.ts` — ClientId in payloads
+22. ✅ `nexus-backend/src/modules/quotation/tests/quotation.service.test.ts`
+23. ✅ `nexus-backend/src/modules/lead/lead.service.ts` — Archive/restore + notifications
+24. ✅ `nexus-backend/src/modules/lead/lead.repository.ts`
+25. ✅ `nexus-backend/src/modules/lead/lead.types.ts`
+26. ✅ `nexus-backend/src/modules/lead/lead.validation.ts`
+27. ✅ `nexus-backend/src/modules/lead/lead.controller.ts`
+28. ✅ `nexus-backend/src/modules/lead/lead.routes.ts`
+29. ✅ `nexus-backend/src/modules/lead/tests/lead.service.test.ts`
+30. ✅ `nexus-backend/src/modules/dashboard/dashboard.repository.ts`
+31. ✅ `nexus-backend/src/modules/client/client.service.ts` — ClientId in payload
+32. ✅ `nexus-backend/src/modules/project/project.service.ts` — ClientId in payload + status_changed notification
+33. ✅ `nexus-backend/src/modules/invoice/invoice.service.ts` — ClientId in payloads
+34. ✅ `nexus-backend/src/modules/documents/documents.service.ts` — document.uploaded notification
+35. ✅ `nexus-backend/src/modules/search/search.types.ts`
+36. ✅ `nexus-backend/src/modules/search/search.service.ts`
+37. ✅ `nexus-backend/src/modules/search/search.controller.ts`
+38. ✅ `nexus-backend/src/modules/search/tests/search.service.test.ts`
+39. ✅ `nexus-backend/src/app.ts` — Notification + company routes mounted
 
-### Frontend (17 files)
-32. ✅ `nexus-frontend/src/types/index.ts`
-33. ✅ `nexus-frontend/src/services/leadService.ts`
-34. ✅ `nexus-frontend/src/services/searchService.ts`
-35. ✅ `nexus-frontend/src/services/notificationService.ts` — NEW: list, unreadCount, markAsRead, markAllAsRead
-36. ✅ `nexus-frontend/src/queries/useLeads.ts`
-37. ✅ `nexus-frontend/src/queries/useSearch.ts`
-38. ✅ `nexus-frontend/src/queries/useNotifications.ts` — NEW: React Query hooks with polling
-39. ✅ `nexus-frontend/src/queries/keys.ts` — Notification query keys
-40. ✅ `nexus-frontend/src/pages/quotations/components/QuotationFormDrawer.tsx`
-41. ✅ `nexus-frontend/src/pages/leads/LeadDetailPage.tsx`
-42. ✅ `nexus-frontend/src/pages/leads/LeadsPage.tsx`
-43. ✅ `nexus-frontend/src/pages/leads/components/LeadServicesPanel.tsx`
-44. ✅ `nexus-frontend/src/pages/search/SearchPage.tsx`
-45. ✅ `nexus-frontend/src/pages/notifications/NotificationsPage.tsx` — NEW: Full page with filters
-46. ✅ `nexus-frontend/src/pages/portal/PortalNotificationsPage.tsx` — NEW: Client portal page
-47. ✅ `nexus-frontend/src/components/ui/CommandPalette.tsx`
-48. ✅ `nexus-frontend/src/components/layout/TopNav.tsx` — Bell icon with unread badge
-49. ✅ `nexus-frontend/src/components/layout/NotificationPanel.tsx` — Rewrite with real data
-50. ✅ `nexus-frontend/src/components/layout/Sidebar.tsx` — Notifications nav item
-51. ✅ `nexus-frontend/src/app/PortalLayout.tsx` — Bell icon + Notifications nav item
-52. ✅ `nexus-frontend/src/routes/routes.ts` — Admin and portal notification routes
-53. ✅ `nexus-frontend/src/App.tsx` — Admin and portal notification routes
+### Frontend (22 files)
+40. ✅ `nexus-frontend/src/types/index.ts` — Lead archive fields + CompanySetting interface
+41. ✅ `nexus-frontend/src/services/leadService.ts`
+42. ✅ `nexus-frontend/src/services/searchService.ts`
+43. ✅ `nexus-frontend/src/services/notificationService.ts`
+44. ✅ `nexus-frontend/src/services/companyService.ts` — NEW: get, update, uploadFile
+45. ✅ `nexus-frontend/src/queries/useLeads.ts`
+46. ✅ `nexus-frontend/src/queries/useSearch.ts`
+47. ✅ `nexus-frontend/src/queries/useNotifications.ts`
+48. ✅ `nexus-frontend/src/queries/useCompany.ts` — NEW: settings + upload hooks
+49. ✅ `nexus-frontend/src/queries/keys.ts` — Notification + company query keys
+50. ✅ `nexus-frontend/src/pages/quotations/components/QuotationFormDrawer.tsx`
+51. ✅ `nexus-frontend/src/pages/leads/LeadDetailPage.tsx`
+52. ✅ `nexus-frontend/src/pages/leads/LeadsPage.tsx`
+53. ✅ `nexus-frontend/src/pages/leads/components/LeadServicesPanel.tsx`
+54. ✅ `nexus-frontend/src/pages/search/SearchPage.tsx`
+55. ✅ `nexus-frontend/src/pages/notifications/NotificationsPage.tsx`
+56. ✅ `nexus-frontend/src/pages/portal/PortalNotificationsPage.tsx`
+57. ✅ `nexus-frontend/src/pages/settings/CompanySettingsPage.tsx` — NEW: Full settings page
+58. ✅ `nexus-frontend/src/pages/settings/SettingsPage.tsx` — Company Settings card
+59. ✅ `nexus-frontend/src/components/ui/CommandPalette.tsx`
+60. ✅ `nexus-frontend/src/components/layout/TopNav.tsx`
+61. ✅ `nexus-frontend/src/components/layout/NotificationPanel.tsx`
+62. ✅ `nexus-frontend/src/components/layout/Sidebar.tsx`
+63. ✅ `nexus-frontend/src/app/PortalLayout.tsx`
+64. ✅ `nexus-frontend/src/routes/routes.ts` — Company settings route
+65. ✅ `nexus-frontend/src/App.tsx` — Company settings route
 
 ---
 

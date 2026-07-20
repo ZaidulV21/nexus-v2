@@ -569,3 +569,71 @@ model Message {
 
   @@map("messages")
 }
+
+// ==========================================================================
+// M13 - COMPANY SETTINGS (Singleton)
+// ==========================================================================
+
+model CompanySetting {
+  id String @id @default("singleton")
+
+  // Company Info
+  companyName       String?
+  legalBusinessName String?
+  logoUrl           String?
+  faviconUrl        String?
+  gstNumber         String?
+  panNumber         String?
+  cin               String?
+  email             String?
+  phone             String?
+  whatsappNumber    String?
+  website           String?
+  addressLine1      String?
+  addressLine2      String?
+  city              String?
+  state             String?
+  country           String?
+  pincode           String?
+
+  // Business Settings
+  currency              String?   @default("INR")
+  currencySymbol        String?   @default("₹")
+  timezone              String?   @default("Asia/Kolkata")
+  dateFormat            String?   @default("dd/MM/yyyy")
+  invoicePrefix         String?   @default("INV")
+  quotationPrefix       String?   @default("QUO")
+  projectPrefix         String?   @default("PRJ")
+  clientPrefix          String?   @default("CLI")
+  leadPrefix            String?   @default("LD")
+  defaultGstPercent     Decimal?  @default(18) @db.Decimal(5, 2)
+  defaultPaymentTerms   String?
+  companySignatureUrl   String?
+  companyStampUrl       String?
+
+  // Bank Details
+  bankName      String?
+  accountHolder String?
+  accountNumber String?
+  ifsc          String?
+  branch        String?
+  upiId         String?
+  qrCodeUrl     String?
+
+  // Email Settings
+  senderName   String?
+  replyToEmail String?
+  supportEmail String?
+
+  // Social Links
+  facebook  String?
+  instagram String?
+  linkedin  String?
+  twitter   String?
+  youtube   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("company_settings")
+}

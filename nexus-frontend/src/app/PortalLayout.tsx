@@ -2,7 +2,7 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, FolderKanban, Receipt, MessageSquare, FolderOpen, FileText, Bell, LogOut } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ROUTES } from '@/routes/routes';
-import { NexusLogo } from '@/components/layout/NexusLogo';
+import { CompanyLogo, CompanyName } from '@/components/layout/CompanyLogo';
 import { NotificationPanel } from '@/components/layout/NotificationPanel';
 import { useDisclosure } from '@/hooks/useDisclosure';
 import { useUnreadCount } from '@/queries/useNotifications';
@@ -41,8 +41,8 @@ export function PortalLayout() {
     <div className="flex min-h-screen flex-col bg-canvas">
       <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-border bg-surface/80 px-4 backdrop-blur-md lg:px-6">
         <div className="flex items-center gap-2">
-          <NexusLogo className="h-5 w-5" />
-          <span className="text-sm font-semibold text-ink">Nexus</span>
+          <CompanyLogo className="h-5 w-5" />
+          <CompanyName className="text-sm font-semibold text-ink" />
           <span className="ml-1 rounded-sm bg-canvas px-1.5 py-0.5 text-xs text-ink-faint ring-1 ring-border">
             Client Portal
           </span>

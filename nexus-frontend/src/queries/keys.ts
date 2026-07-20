@@ -62,6 +62,10 @@ export const queryKeys = {
       isRead !== undefined ? ['notifications', 'list', page, pageSize, isRead] as const : ['notifications', 'list', page, pageSize] as const,
     unreadCount: ['notifications', 'unread-count'] as const,
   },
+  company: {
+    all: ['company'] as const,
+    detail: ['company', 'detail'] as const,
+  },
   globalTimeline: (params: unknown) => ['timeline', 'global', params] as const,
   globalAuditLogs: (params: unknown) => ['audit-logs', 'global', params] as const,
   search: (q: string, type?: string) => type ? ['search', q, type] as const : ['search', q] as const,

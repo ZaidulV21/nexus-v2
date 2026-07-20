@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ROUTES } from '@/routes/routes';
-import { NexusLogo } from './NexusLogo';
+import { CompanyLogo, CompanyName } from './CompanyLogo';
 
 const NAV_SECTIONS = [
   {
@@ -53,8 +53,8 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-14 items-center gap-2 px-4">
-        <NexusLogo className="h-6 w-6" />
-        <span className="text-sm font-semibold text-ink">Nexus</span>
+        <CompanyLogo className="h-6 w-6" />
+        <CompanyName className="text-sm font-semibold text-ink" />
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 py-2 scrollbar-thin">

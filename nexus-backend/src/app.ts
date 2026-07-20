@@ -18,6 +18,7 @@ import dashboardRoutes from './modules/dashboard/dashboard.routes';
 import timelineRoutes from './modules/timeline/timeline.routes';
 import auditRoutes from './modules/audit/audit.routes';
 import notificationRoutes from './modules/notifications/notifications.routes';
+import companyRoutes from './modules/company/company.routes';
 
 export function createApp(): Express {
   const app = express();
@@ -45,6 +46,7 @@ export function createApp(): Express {
   app.use('/api/timeline', timelineRoutes);
   app.use('/api/audit-logs', auditRoutes);
   app.use('/api/notifications', notificationRoutes);
+  app.use('/api/company', companyRoutes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

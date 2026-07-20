@@ -22,6 +22,7 @@ export const ROUTES = {
   auditLogs: '/audit-logs',
   search: '/search',
   settings: '/settings',
+  companySettings: '/settings/company',
   designSystem: '/design-system',
 
   // Client portal (separate shell/auth context from the Admin app)

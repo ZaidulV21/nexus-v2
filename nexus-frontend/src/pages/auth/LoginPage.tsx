@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { FormField } from '@/components/ui/FormField';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
-import { NexusLogo } from '@/components/layout/NexusLogo';
+import { CompanyLogo, CompanyName } from '@/components/layout/CompanyLogo';
 import { useAuth } from '@/app/AuthContext';
 import { useToast } from '@/hooks/useToast';
 import { ApiError } from '@/lib/api';
@@ -81,8 +81,8 @@ export function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-canvas px-4">
       <div className="w-full max-w-sm">
         <div className="mb-6 flex flex-col items-center gap-2">
-          <NexusLogo className="h-7 w-7" />
-          <h1 className="text-lg font-semibold text-ink">Sign in to Nexus</h1>
+          <CompanyLogo className="h-7 w-7" />
+          <h1 className="text-lg font-semibold text-ink">Sign in to <CompanyName fallback="Nexus" /></h1>
           <p className="text-sm text-ink-muted">Business Service Management Platform</p>
         </div>
 

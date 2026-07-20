@@ -199,6 +199,46 @@ The old error message `"Quotation has no linked Lead"` has been **removed from a
 
 The old error message only exists in `SINGLE-WORKFLOW-COMPLETE.md:279` (historical documentation).
 
+### ✅ Company Settings — Centralized Configuration & Integration
+
+**Backend:**
+- `company.types.ts` — `UpdateCompanySettingsInput` with 45 optional fields across 5 sections
+- `company.validation.ts` — `updateCompanySettingsSchema` with Zod validation (email, URL, length constraints)
+- `company.repository.ts` — Singleton pattern: `find()`, `create()`, `update()` (upsert on fixed ID)
+- `company.service.ts` — `get()` (creates defaults if none exist), `update()` (with timeline + audit + branding cache clear), `updateField()` (for file uploads with per-field audit)
+- `company.controller.ts` — `get` (any auth user), `update` (Admin-only), `upload` (Cloudinary with local fallback, file type/size validation, field whitelist)
+- `company.branding.ts` — `getCompanyBranding()` + `clearBrandingCache()` for downstream consumers (PDFs, emails, invoices)
+- `company.routes.ts` — `GET /api/company/settings`, `PATCH /api/company/settings`, `POST /api/company/settings/upload?field=...`
+- `cloudinary.provider.ts` — Cloudinary `StorageProvider` (stream upload, returns secure URL)
+- `env.ts` — Added `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `CLOUDINARY_FOLDER`
+- `app.ts` — Removed `/uploads` static middleware (no longer needed with Cloudinary)
+- `notifications/channels/email.channel.ts` — Reads company branding (name, logo, sender, address) and includes in email payload
+- `company.service.test.ts` — 5 tests (get existing, get with default creation, update with timeline+audit, audit before/after state, file upload)
+- `prisma/schema.prisma` — `CompanySetting` model: 47 fields across Company Info, Business Settings, Bank Details, Email Settings, Social Links
+- `prisma/migrations/20260720020000_add_company_settings/migration.sql`
+
+**Frontend — Settings CRUD:**
+- `services/companyService.ts` — `get()`, `update()`, `uploadFile(field, file)` with typed inputs
+- `queries/useCompany.ts` — `useCompanySettings`, `useUpdateCompanySettings`, `useUploadCompanyFile` (React Query hooks with cache invalidation)
+- `pages/settings/CompanySettingsPage.tsx` — Full settings page with 5 sectioned cards, file upload previews, unsaved changes warning, reset, save
+- `types/index.ts` — `CompanySetting` interface with all 47 fields
+- `queries/keys.ts` — `company: { all, detail }` query keys
+- `routes/routes.ts` — `companySettings: '/settings/company'`
+- `App.tsx` — `/settings/company` route
+
+**Frontend — Integration (Company Settings as single source of truth):**
+- `components/layout/CompanyLogo.tsx` — Shared `CompanyLogo` (renders `<img>` from settings.logoUrl) + `CompanyName` (reads settings.companyName)
+- `components/layout/DynamicFavicon.tsx` — Dynamically updates `<link rel="icon">` from settings.faviconUrl
+- `components/layout/Sidebar.tsx` — Company Logo + Company Name replace hardcoded "Nexus" branding
+- `pages/auth/LoginPage.tsx` — Company Logo + Company Name on login screen
+- `app/PortalLayout.tsx` — Company Logo + Company Name in client portal header
+- `pages/settings/SettingsPage.tsx` — Company Profile summary card (logo, name, email, phone, city/state, Edit button) replaces bare "Open Company Settings" button
+- `app/providers.tsx` — `DynamicFavicon` wired globally for all routes
+
+#### Previous Bug Fixes
+- **Logo upload preview** — `localStorageProvider.save()` returned a bare filename. Fixed by: (1) adding `express.static` for `/uploads` in `app.ts`, (2) company controller now returns `/uploads/${filename}` as serveable URL path. (Now replaced by Cloudinary — no longer needed.)
+- **Save "Invalid payload"** — `onSubmit` converted `''` → `null`. Backend Zod rejects `null` (accepts `string | undefined` only). Fixed by skipping empty/null/undefined values in payload instead of converting to `null`.
+
 ---
 
 ## Build & Test Status
@@ -206,12 +246,13 @@ The old error message only exists in `SINGLE-WORKFLOW-COMPLETE.md:279` (historic
 ### Backend
 ```bash
 ✅ npm run build — SUCCESS (0 errors)
-✅ npm test — 153/153 tests passing (18 test suites, ~13s)
+✅ npm test — 158/158 tests passing (19 test suites, ~14s)
 ```
 
 ### Frontend
 ```bash
 ✅ npx tsc --noEmit — SUCCESS (0 errors)
+✅ npx vite build — SUCCESS
 ```
 
 ---
@@ -219,6 +260,16 @@ The old error message only exists in `SINGLE-WORKFLOW-COMPLETE.md:279` (historic
 ## Remaining Work
 
 There are no unfinished tasks for the core single-workflow implementation. All backend, frontend, tests, and builds are complete and passing.
+
+### What Company Settings Now Provides
+- **Upload storage**: Cloudinary (logo, favicon, signature, stamp, QR code) — no local `/uploads` dependency
+- **Admin sidebar**: Displays company logo + company name from settings
+- **Login page**: Displays company logo + company name
+- **Client portal**: Displays company logo + company name in header
+- **Settings page**: Company Profile summary card (logo, name, contact info, Edit button)
+- **Browser favicon**: Dynamically updated from `settings.faviconUrl`
+- **Email channel**: Reads company branding (name, logo, sender, address) for future template use
+- **Downstream consumers**: `getCompanyBranding()` + `clearBrandingCache()` available for PDF generation, invoice branding, quotation headers, etc.
 
 ### Optional Future Enhancements (Not Part of Current Scope)
 - Update PRD Section 10 to clarify single workflow
@@ -229,62 +280,74 @@ There are no unfinished tasks for the core single-workflow implementation. All b
 
 ## Files Modified
 
-### Backend (24 files)
-1. `nexus-backend/prisma/schema.prisma` — Lead model archive fields + InAppNotification model
+### Backend (31 files)
+1. `nexus-backend/prisma/schema.prisma` — Lead archive fields + InAppNotification model + CompanySetting model
 2. `nexus-backend/prisma/migrations/20260720000000_add_lead_archive_fields/migration.sql`
 3. `nexus-backend/prisma/migrations/20260720010000_add_in_app_notifications/migration.sql`
-4. `nexus-backend/src/core/utils/pagination.ts` — Added `archived` filter param
-5. `nexus-backend/src/modules/notifications/notifications.types.ts` — NEW: Notification types
-6. `nexus-backend/src/modules/notifications/notifications.repository.ts` — NEW: In-app CRUD
-7. `nexus-backend/src/modules/notifications/notifications.service.ts` — NEW: Event mapping + CRUD
-8. `nexus-backend/src/modules/notifications/notifications.controller.ts` — NEW: REST endpoints
-9. `nexus-backend/src/modules/notifications/notifications.routes.ts` — NEW: Authenticated routes
-10. `nexus-backend/src/modules/notifications/tests/notifications.service.test.ts` — NEW: 13 tests
-11. `nexus-backend/src/modules/quotation/quotation.types.ts`
-12. `nexus-backend/src/modules/quotation/quotation.validation.ts`
-13. `nexus-backend/src/modules/quotation/quotation.service.ts` — Added clientId to payloads
-14. `nexus-backend/src/modules/quotation/tests/quotation.service.test.ts`
-15. `nexus-backend/src/modules/lead/lead.service.ts` — Archive/restore + notifications
-16. `nexus-backend/src/modules/lead/lead.repository.ts` — Archive/restore queries
-17. `nexus-backend/src/modules/lead/lead.types.ts` — ArchiveLeadInput
-18. `nexus-backend/src/modules/lead/lead.validation.ts` — Archive schema
-19. `nexus-backend/src/modules/lead/lead.controller.ts` — Archive/restore endpoints
-20. `nexus-backend/src/modules/lead/lead.routes.ts` — Archive/restore routes
-21. `nexus-backend/src/modules/lead/tests/lead.service.test.ts` — 7 new archive/restore tests
-22. `nexus-backend/src/modules/dashboard/dashboard.repository.ts` — Exclude archived leads
-23. `nexus-backend/src/modules/client/client.service.ts` — Added clientId to payload
-24. `nexus-backend/src/modules/project/project.service.ts` — Added clientId + status_changed notification
-25. `nexus-backend/src/modules/invoice/invoice.service.ts` — Added clientId to payloads
-26. `nexus-backend/src/modules/documents/documents.service.ts` — Added document.uploaded notification
-27. `nexus-backend/src/modules/search/search.types.ts` — SearchEntityType, SEARCH_ENTITY_TYPES
-28. `nexus-backend/src/modules/search/search.service.ts` — Full rewrite with type filter, includes
-29. `nexus-backend/src/modules/search/search.controller.ts` — type query parameter
-30. `nexus-backend/src/modules/search/tests/search.service.test.ts` — 10 new search tests
-31. `nexus-backend/src/app.ts` — Notification routes mounted
+4. `nexus-backend/prisma/migrations/20260720020000_add_company_settings/migration.sql`
+5. `nexus-backend/src/core/utils/pagination.ts` — Added `archived` filter param
+6. `nexus-backend/src/modules/notifications/notifications.types.ts` — NEW: Notification types
+7. `nexus-backend/src/modules/notifications/notifications.repository.ts` — NEW: In-app CRUD
+8. `nexus-backend/src/modules/notifications/notifications.service.ts` — NEW: Event mapping + CRUD
+9. `nexus-backend/src/modules/notifications/notifications.controller.ts` — NEW: REST endpoints
+10. `nexus-backend/src/modules/notifications/notifications.routes.ts` — NEW: Authenticated routes
+11. `nexus-backend/src/modules/notifications/tests/notifications.service.test.ts` — NEW: 13 tests
+12. `nexus-backend/src/modules/company/company.types.ts` — NEW: Company settings types
+13. `nexus-backend/src/modules/company/company.validation.ts` — NEW: Zod validation
+14. `nexus-backend/src/modules/company/company.repository.ts` — NEW: Singleton CRUD
+15. `nexus-backend/src/modules/company/company.service.ts` — NEW: Settings with timeline + audit
+16. `nexus-backend/src/modules/company/company.controller.ts` — NEW: REST + file upload
+17. `nexus-backend/src/modules/company/company.routes.ts` — NEW: Authenticated routes
+18. `nexus-backend/src/modules/company/tests/company.service.test.ts` — NEW: 5 tests
+19. `nexus-backend/src/modules/quotation/quotation.types.ts`
+20. `nexus-backend/src/modules/quotation/quotation.validation.ts`
+21. `nexus-backend/src/modules/quotation/quotation.service.ts` — Added clientId to payloads
+22. `nexus-backend/src/modules/quotation/tests/quotation.service.test.ts`
+23. `nexus-backend/src/modules/lead/lead.service.ts` — Archive/restore + notifications
+24. `nexus-backend/src/modules/lead/lead.repository.ts` — Archive/restore queries
+25. `nexus-backend/src/modules/lead/lead.types.ts` — ArchiveLeadInput
+26. `nexus-backend/src/modules/lead/lead.validation.ts` — Archive schema
+27. `nexus-backend/src/modules/lead/lead.controller.ts` — Archive/restore endpoints
+28. `nexus-backend/src/modules/lead/lead.routes.ts` — Archive/restore routes
+29. `nexus-backend/src/modules/lead/tests/lead.service.test.ts` — 7 new archive/restore tests
+30. `nexus-backend/src/modules/dashboard/dashboard.repository.ts` — Exclude archived leads
+31. `nexus-backend/src/modules/client/client.service.ts` — Added clientId to payload
+32. `nexus-backend/src/modules/project/project.service.ts` — Added clientId + status_changed notification
+33. `nexus-backend/src/modules/invoice/invoice.service.ts` — Added clientId to payloads
+34. `nexus-backend/src/modules/documents/documents.service.ts` — Added document.uploaded notification
+35. `nexus-backend/src/modules/search/search.types.ts` — SearchEntityType, SEARCH_ENTITY_TYPES
+36. `nexus-backend/src/modules/search/search.service.ts` — Full rewrite with type filter, includes
+37. `nexus-backend/src/modules/search/search.controller.ts` — type query parameter
+38. `nexus-backend/src/modules/search/tests/search.service.test.ts` — 10 new search tests
+39. `nexus-backend/src/app.ts` — Notification + company routes mounted
 
-### Frontend (17 files)
-32. `nexus-frontend/src/types/index.ts` — Lead archive fields
-33. `nexus-frontend/src/services/leadService.ts` — Archive/restore API
-34. `nexus-frontend/src/services/searchService.ts` — search(q, type?) API
-35. `nexus-frontend/src/services/notificationService.ts` — NEW: Notification API
-36. `nexus-frontend/src/queries/useLeads.ts` — Archive/restore mutations
-37. `nexus-frontend/src/queries/useSearch.ts` — useGlobalSearch(q, type?)
-38. `nexus-frontend/src/queries/useNotifications.ts` — NEW: Notification hooks
-39. `nexus-frontend/src/queries/keys.ts` — Search + notification key factories
-40. `nexus-frontend/src/pages/quotations/components/QuotationFormDrawer.tsx`
-41. `nexus-frontend/src/pages/leads/LeadDetailPage.tsx` — Archive/restore UI
-42. `nexus-frontend/src/pages/leads/LeadsPage.tsx` — Archived filter tab
-43. `nexus-frontend/src/pages/leads/components/LeadServicesPanel.tsx`
-44. `nexus-frontend/src/pages/search/SearchPage.tsx` — Module filters, highlighting
-45. `nexus-frontend/src/pages/notifications/NotificationsPage.tsx` — NEW: Full page
-46. `nexus-frontend/src/pages/portal/PortalNotificationsPage.tsx` — NEW: Portal page
-47. `nexus-frontend/src/components/ui/CommandPalette.tsx` — Search-integrated Cmd+K
-48. `nexus-frontend/src/components/layout/TopNav.tsx` — Search + bell icon
-49. `nexus-frontend/src/components/layout/NotificationPanel.tsx` — Rewrite with real data
-50. `nexus-frontend/src/components/layout/Sidebar.tsx` — Notifications nav item
-51. `nexus-frontend/src/app/PortalLayout.tsx` — Bell icon + Notifications nav
-52. `nexus-frontend/src/routes/routes.ts` — Notification routes
-53. `nexus-frontend/src/App.tsx` — Notification routes
+### Frontend (22 files)
+40. `nexus-frontend/src/types/index.ts` — Lead archive fields + CompanySetting interface
+41. `nexus-frontend/src/services/leadService.ts` — Archive/restore API
+42. `nexus-frontend/src/services/searchService.ts` — search(q, type?) API
+43. `nexus-frontend/src/services/notificationService.ts` — NEW: Notification API
+44. `nexus-frontend/src/services/companyService.ts` — NEW: Company settings API
+45. `nexus-frontend/src/queries/useLeads.ts` — Archive/restore mutations
+46. `nexus-frontend/src/queries/useSearch.ts` — useGlobalSearch(q, type?)
+47. `nexus-frontend/src/queries/useNotifications.ts` — NEW: Notification hooks
+48. `nexus-frontend/src/queries/useCompany.ts` — NEW: Company settings hooks
+49. `nexus-frontend/src/queries/keys.ts` — Search + notification + company key factories
+50. `nexus-frontend/src/pages/quotations/components/QuotationFormDrawer.tsx`
+51. `nexus-frontend/src/pages/leads/LeadDetailPage.tsx` — Archive/restore UI
+52. `nexus-frontend/src/pages/leads/LeadsPage.tsx` — Archived filter tab
+53. `nexus-frontend/src/pages/leads/components/LeadServicesPanel.tsx`
+54. `nexus-frontend/src/pages/search/SearchPage.tsx` — Module filters, highlighting
+55. `nexus-frontend/src/pages/notifications/NotificationsPage.tsx` — NEW: Full page
+56. `nexus-frontend/src/pages/portal/PortalNotificationsPage.tsx` — NEW: Portal page
+57. `nexus-frontend/src/pages/settings/CompanySettingsPage.tsx` — NEW: Company settings page
+58. `nexus-frontend/src/pages/settings/SettingsPage.tsx` — Added Company Settings card
+59. `nexus-frontend/src/components/ui/CommandPalette.tsx` — Search-integrated Cmd+K
+60. `nexus-frontend/src/components/layout/TopNav.tsx` — Search + bell icon
+61. `nexus-frontend/src/components/layout/NotificationPanel.tsx` — Rewrite with real data
+62. `nexus-frontend/src/components/layout/Sidebar.tsx` — Notifications nav item
+63. `nexus-frontend/src/app/PortalLayout.tsx` — Bell icon + Notifications nav
+64. `nexus-frontend/src/routes/routes.ts` — Notification + company routes
+65. `nexus-frontend/src/App.tsx` — Notification + company routes
 
 ### Documentation (4 files)
 54. `IMPLEMENTATION.md`
@@ -295,6 +358,6 @@ There are no unfinished tasks for the core single-workflow implementation. All b
 ---
 
 **STATUS: ✅ IMPLEMENTATION COMPLETE**
-**BACKEND: Build ✓ | 153 Tests ✓**
+**BACKEND: Build ✓ | 158 Tests ✓**
 **FRONTEND: Build ✓ | tsc ✓**
 **ALL WORKFLOW PATHS VERIFIED**

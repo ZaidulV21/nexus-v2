@@ -377,3 +377,54 @@ export interface ApiResponse<T> {
   success: boolean;
   data: T;
 }
+
+export interface CompanySetting {
+  id: string;
+  companyName: string | null;
+  legalBusinessName: string | null;
+  logoUrl: string | null;
+  faviconUrl: string | null;
+  gstNumber: string | null;
+  panNumber: string | null;
+  cin: string | null;
+  email: string | null;
+  phone: string | null;
+  whatsappNumber: string | null;
+  website: string | null;
+  addressLine1: string | null;
+  addressLine2: string | null;
+  city: string | null;
+  state: string | null;
+  country: string | null;
+  pincode: string | null;
+  currency: string | null;
+  currencySymbol: string | null;
+  timezone: string | null;
+  dateFormat: string | null;
+  invoicePrefix: string | null;
+  quotationPrefix: string | null;
+  projectPrefix: string | null;
+  clientPrefix: string | null;
+  leadPrefix: string | null;
+  defaultGstPercent: number | null;
+  defaultPaymentTerms: string | null;
+  companySignatureUrl: string | null;
+  companyStampUrl: string | null;
+  bankName: string | null;
+  accountHolder: string | null;
+  accountNumber: string | null;
+  ifsc: string | null;
+  branch: string | null;
+  upiId: string | null;
+  qrCodeUrl: string | null;
+  senderName: string | null;
+  replyToEmail: string | null;
+  supportEmail: string | null;
+  facebook: string | null;
+  instagram: string | null;
+  linkedin: string | null;
+  twitter: string | null;
+  youtube: string | null;
+  createdAt: string;
+  updatedAt: string;
+}

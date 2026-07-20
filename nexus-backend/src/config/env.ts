@@ -18,4 +18,8 @@ export const env = {
   bcryptSaltRounds: parseInt(process.env.BCRYPT_SALT_ROUNDS || '10', 10),
   storageDriver: process.env.STORAGE_DRIVER || 'local',
   localStoragePath: process.env.LOCAL_STORAGE_PATH || './uploads',
+  cloudinaryCloudName: process.env.CLOUDINARY_CLOUD_NAME || '',
+  cloudinaryApiKey: process.env.CLOUDINARY_API_KEY || '',
+  cloudinaryApiSecret: process.env.CLOUDINARY_API_SECRET || '',
+  cloudinaryFolder: process.env.CLOUDINARY_FOLDER || 'nexus',
 };

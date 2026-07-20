@@ -23,6 +23,7 @@ import { NotificationsPage } from '@/pages/notifications/NotificationsPage';
 import { AuditLogsPage } from '@/pages/audit-logs/AuditLogsPage';
 import { SearchPage } from '@/pages/search/SearchPage';
 import { SettingsPage } from '@/pages/settings/SettingsPage';
+import { CompanySettingsPage } from '@/pages/settings/CompanySettingsPage';
 import { DesignSystemPage } from '@/pages/design-system/DesignSystemPage';
 
 import { PortalDashboardPage } from '@/pages/portal/PortalDashboardPage';
@@ -74,6 +75,7 @@ export default function App() {
           <Route path="/audit-logs" element={<AuditLogsPage />} />
           <Route path="/search" element={<SearchPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/settings/company" element={<CompanySettingsPage />} />
           <Route path="/design-system" element={<DesignSystemPage />} />
         </Route>
 
