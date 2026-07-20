@@ -263,6 +263,14 @@ export const leadService = {
       afterState: { archivedAt: updated.archivedAt, archivedById: updated.archivedById, archiveReason: updated.archiveReason },
     });
 
+    await notificationsService.emitEvent({
+      eventType: 'lead.archived',
+      entityType: 'LEAD',
+      entityId: id,
+      recipient: 'admin-inbox',
+      payload: { leadNumber: lead.leadNumber, reason: input.reason },
+    });
+
     return updated;
   },
 
@@ -291,6 +299,14 @@ export const leadService = {
       actorUserId,
       beforeState,
       afterState: { archivedAt: null },
+    });
+
+    await notificationsService.emitEvent({
+      eventType: 'lead.restored',
+      entityType: 'LEAD',
+      entityId: id,
+      recipient: 'admin-inbox',
+      payload: { leadNumber: lead.leadNumber },
     });
 
     return updated;

@@ -1,8 +1,11 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, FolderKanban, Receipt, MessageSquare, FolderOpen, FileText, LogOut } from 'lucide-react';
+import { LayoutDashboard, FolderKanban, Receipt, MessageSquare, FolderOpen, FileText, Bell, LogOut } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ROUTES } from '@/routes/routes';
 import { NexusLogo } from '@/components/layout/NexusLogo';
+import { NotificationPanel } from '@/components/layout/NotificationPanel';
+import { useDisclosure } from '@/hooks/useDisclosure';
+import { useUnreadCount } from '@/queries/useNotifications';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/app/AuthContext';
@@ -14,6 +17,7 @@ const PORTAL_NAV = [
   { label: 'Invoices', icon: Receipt, to: ROUTES.portal.invoices },
   { label: 'Messages', icon: MessageSquare, to: ROUTES.portal.messages },
   { label: 'Documents', icon: FolderOpen, to: ROUTES.portal.documents },
+  { label: 'Notifications', icon: Bell, to: ROUTES.portal.notifications },
 ];
 
 /** Client Portal is intentionally a separate, lighter shell from the Admin
@@ -22,6 +26,9 @@ const PORTAL_NAV = [
 export function PortalLayout() {
   const { actor, logout } = useAuth();
   const navigate = useNavigate();
+  const notifications = useDisclosure(false);
+  const { data: unreadData } = useUnreadCount();
+  const unreadCount = unreadData?.count ?? 0;
 
   function handleLogout() {
     logout();
@@ -41,6 +48,20 @@ export function PortalLayout() {
           </span>
         </div>
         <div className="flex items-center gap-2">
+          <div className="relative">
+            <button
+              onClick={notifications.toggle}
+              className="relative rounded-md p-2 text-ink-muted transition-colors hover:bg-canvas hover:text-ink"
+            >
+              <Bell className="h-4 w-4" />
+              {unreadCount > 0 && (
+                <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold text-white">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )}
+            </button>
+            <NotificationPanel open={notifications.isOpen} onClose={notifications.close} />
+          </div>
           <div className="hidden text-right sm:block">
             <p className="text-sm font-medium text-ink">{userName}</p>
             <p className="text-xs text-ink-faint">Signed in</p>

@@ -330,6 +330,17 @@ REJECTED → DRAFT (Admin revises)
 - Cmd+K opens CommandPalette for instant search
 - Search page provides module filter tabs with text highlighting
 
+### Notification Center
+- Notifications are generated automatically by business events — NOT duplicating Timeline or Audit Log
+- Timeline = history of an entity; Audit Log = system changes; Notifications = items requiring user attention
+- Admin notifications (17 event types) sent to ALL active admin users
+- Client notifications (9 event types) sent to specific client via `clientId` in payload
+- 4 notification types: INFO, SUCCESS, WARNING, ERROR
+- 4 priority levels: LOW, NORMAL, HIGH, URGENT
+- `emitEvent()` creates in-app notifications (fire-and-forget, never blocks business transaction)
+- API: `GET /api/notifications` (paginated), `GET /api/notifications/unread-count`, `PATCH /api/notifications/read-all`, `PATCH /api/notifications/:id/read`
+- Frontend: Bell icon with unread badge (30s polling), dropdown preview, full page with All/Unread/Read filters
+
 ### Multiple Quotations
 - Client can have multiple quotations
 - Each quotation can create separate project

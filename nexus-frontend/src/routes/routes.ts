@@ -17,6 +17,7 @@ export const ROUTES = {
   invoiceDetail: (id: string) => `/invoices/${id}`,
   messages: '/messages',
   documents: '/documents',
+  notifications: '/notifications',
   timeline: '/timeline',
   auditLogs: '/audit-logs',
   search: '/search',
@@ -34,6 +35,7 @@ export const ROUTES = {
     invoiceDetail: (id: string) => `/portal/invoices/${id}`,
     messages: '/portal/messages',
     documents: '/portal/documents',
+    notifications: '/portal/notifications',
   },
 
   login: '/login',

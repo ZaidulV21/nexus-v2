@@ -319,7 +319,7 @@ export const quotationService = {
       entityType: 'QUOTATION',
       entityId: quotationId,
       recipient,
-      payload: { quotationId, quotationNumber: quotation.quotationNumber, resend },
+      payload: { quotationId, quotationNumber: quotation.quotationNumber, resend, clientId: quotation.clientId },
     });
 
     return quotationRepository.findById(quotationId);
@@ -444,7 +444,7 @@ export const quotationService = {
       entityType: 'QUOTATION',
       entityId: quotationId,
       recipient: 'admin-on-file',
-      payload: { quotationId, projectId: project.id },
+      payload: { quotationId, projectId: project.id, clientId: quotationClientId },
     });
 
     return { quotation: await quotationRepository.findById(quotationId), project };

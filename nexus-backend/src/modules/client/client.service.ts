@@ -129,7 +129,7 @@ export const clientService = {
       entityType: 'CLIENT',
       entityId: client.id,
       recipient: client.email,
-      payload: { tempPassword, loginEmail: client.email },
+      payload: { tempPassword, loginEmail: client.email, clientId: client.id },
     });
 
     return client;

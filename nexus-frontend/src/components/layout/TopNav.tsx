@@ -14,6 +14,7 @@ import { useDisclosure } from '@/hooks/useDisclosure';
 import { useAuth } from '@/app/AuthContext';
 import { ROUTES } from '@/routes/routes';
 import { NotificationPanel } from './NotificationPanel';
+import { useUnreadCount } from '@/queries/useNotifications';
 
 export function TopNav({
   breadcrumbs,
@@ -25,6 +26,9 @@ export function TopNav({
   const notifications = useDisclosure(false);
   const { actor, logout } = useAuth();
   const navigate = useNavigate();
+  const { data: unreadData } = useUnreadCount();
+
+  const unreadCount = unreadData?.count ?? 0;
 
   const userName = actor?.email.split('@')[0] ?? 'Admin';
   const userEmail = actor?.email ?? '';
@@ -64,7 +68,11 @@ export function TopNav({
             className="relative rounded-md p-2 text-ink-muted transition-colors hover:bg-canvas hover:text-ink"
           >
             <Bell className="h-4 w-4" />
-            <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-accent" />
+            {unreadCount > 0 && (
+              <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold text-white">
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            )}
           </button>
           <NotificationPanel open={notifications.isOpen} onClose={notifications.close} />
         </div>

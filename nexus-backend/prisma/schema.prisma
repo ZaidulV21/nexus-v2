@@ -127,6 +127,30 @@ model NotificationLog {
 }
 
 // ==========================================================================
+// M3B - IN-APP NOTIFICATION CENTER
+// ==========================================================================
+
+model InAppNotification {
+  id              String   @id @default(uuid())
+  recipientId     String
+  recipientType   String   // ADMIN | CLIENT
+  title           String
+  description     String
+  type            String   @default("INFO")   // INFO | SUCCESS | WARNING | ERROR
+  priority        String   @default("NORMAL") // LOW | NORMAL | HIGH | URGENT
+  relatedEntity   String?  // LEAD | CLIENT | QUOTATION | PROJECT | INVOICE | CONVERSATION | DOCUMENT
+  relatedEntityId String?
+  actionUrl       String?
+  isRead          Boolean  @default(false)
+  readAt          DateTime?
+  createdAt       DateTime @default(now())
+
+  @@index([recipientId, recipientType])
+  @@index([recipientId, recipientType, isRead])
+  @@map("in_app_notifications")
+}
+
+// ==========================================================================
 // M4 - STATUS ENGINE
 // ==========================================================================
 

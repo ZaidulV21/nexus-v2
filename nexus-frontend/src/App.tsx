@@ -19,6 +19,7 @@ import { InvoiceDetailPage } from '@/pages/invoices/InvoiceDetailPage';
 import { MessagesPage } from '@/pages/messages/MessagesPage';
 import { DocumentsPage } from '@/pages/documents/DocumentsPage';
 import { TimelinePage } from '@/pages/timeline/TimelinePage';
+import { NotificationsPage } from '@/pages/notifications/NotificationsPage';
 import { AuditLogsPage } from '@/pages/audit-logs/AuditLogsPage';
 import { SearchPage } from '@/pages/search/SearchPage';
 import { SettingsPage } from '@/pages/settings/SettingsPage';
@@ -33,6 +34,7 @@ import { PortalInvoicesPage } from '@/pages/portal/PortalInvoicesPage';
 import { PortalInvoiceDetailPage } from '@/pages/portal/PortalInvoiceDetailPage';
 import { PortalMessagesPage } from '@/pages/portal/PortalMessagesPage';
 import { PortalDocumentsPage } from '@/pages/portal/PortalDocumentsPage';
+import { PortalNotificationsPage } from '@/pages/portal/PortalNotificationsPage';
 
 import { LoginPage } from '@/pages/auth/LoginPage';
 import { NotFoundPage } from '@/pages/errors/NotFoundPage';
@@ -67,6 +69,7 @@ export default function App() {
           <Route path="/invoices/:id" element={<InvoiceDetailPage />} />
           <Route path="/messages" element={<MessagesPage />} />
           <Route path="/documents" element={<DocumentsPage />} />
+          <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/timeline" element={<TimelinePage />} />
           <Route path="/audit-logs" element={<AuditLogsPage />} />
           <Route path="/search" element={<SearchPage />} />
@@ -91,6 +94,7 @@ export default function App() {
           <Route path="invoices/:id" element={<PortalInvoiceDetailPage />} />
           <Route path="messages" element={<PortalMessagesPage />} />
           <Route path="documents" element={<PortalDocumentsPage />} />
+          <Route path="notifications" element={<PortalNotificationsPage />} />
         </Route>
 
         <Route path="*" element={<NotFoundPage />} />

@@ -9,6 +9,7 @@ import {
   Layers,
   MessageSquare,
   FolderOpen,
+  Bell,
   History,
   ShieldCheck,
   Search,
@@ -40,6 +41,7 @@ const NAV_SECTIONS = [
     items: [
       { label: 'Messages', icon: MessageSquare, to: ROUTES.messages },
       { label: 'Documents', icon: FolderOpen, to: ROUTES.documents },
+      { label: 'Notifications', icon: Bell, to: ROUTES.notifications },
       { label: 'Timeline', icon: History, to: ROUTES.timeline },
       { label: 'Audit Logs', icon: ShieldCheck, to: ROUTES.auditLogs },
       { label: 'Search', icon: Search, to: ROUTES.search },

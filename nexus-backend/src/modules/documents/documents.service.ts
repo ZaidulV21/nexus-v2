@@ -6,6 +6,7 @@ import { UploadDocumentInput, DocumentEntityType } from './documents.types';
 import { ALLOWED_MIME_TYPES, MAX_FILE_SIZE_BYTES } from './documents.validation';
 import { NotFoundError, ValidationError } from '../../core/errors/AppError';
 import { timelineService } from '../timeline/timeline.service';
+import { notificationsService } from '../notifications/notifications.service';
 import { leadRepository } from '../lead/lead.repository';
 import { projectRepository } from '../project/project.repository';
 
@@ -54,6 +55,14 @@ export const documentsService = {
       eventType: 'DOCUMENT_UPLOADED',
       description: `Document "${input.fileName}" (${input.documentType}) uploaded`,
       actorUserId: uploadedByUserId,
+    });
+
+    await notificationsService.emitEvent({
+      eventType: 'document.uploaded',
+      entityType: 'DOCUMENT',
+      entityId: document.id,
+      recipient: 'admin-inbox',
+      payload: { fileName: input.fileName, documentType: input.documentType, entityType: input.entityType, entityId: input.entityId, clientId },
     });
 
     return document;

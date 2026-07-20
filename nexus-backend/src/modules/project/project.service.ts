@@ -201,6 +201,7 @@ export const projectService = {
         projectNumber: result.project.projectNumber,
         quotationId: quotation.id,
         quotationVersionId: input.quotationVersionId,
+        clientId: input.clientId,
       },
     });
 
@@ -254,6 +255,14 @@ export const projectService = {
       description: `${serviceName}: ${record.status} → ${input.toStatus}`,
       actorUserId,
       metadata: { fromStatus: record.status, toStatus: input.toStatus, projectServiceId },
+    });
+
+    await notificationsService.emitEvent({
+      eventType: 'project.status_changed',
+      entityType: 'PROJECT',
+      entityId: record.project.id,
+      recipient: 'admin-inbox',
+      payload: { projectNumber: record.project.projectNumber, fromStatus: record.status, toStatus: input.toStatus, clientId: record.project.clientId },
     });
 
     return projectServiceRepository.findById(projectServiceId);

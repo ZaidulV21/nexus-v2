@@ -51,6 +51,26 @@
 - `search.controller.ts` — Added `type` query parameter validation
 - `search.service.test.ts` — 10 tests (type filtering, includes, archived exclusion, whitespace trim)
 
+#### 8. Notification Center — In-App Notifications
+**Files Created:**
+- `notifications.types.ts` — `CreateInAppNotificationInput`, `ListNotificationsParams`, `EventNotificationMapping`, `NotificationType`, `NotificationPriority`, `NotificationRecipientType`
+- `notifications.repository.ts` — CRUD: `createInAppNotification`, `createManyInAppNotifications`, `listByRecipient`, `countByRecipient`, `countUnread`, `markAsRead`, `markAllAsRead`, `findAllAdminUserIds`
+- `notifications.service.ts` — `EVENT_NOTIFICATION_MAP` (17 admin + 9 client event mappings); `emitEvent()` creates in-app notifications (fire-and-forget); `listByRecipient`, `getUnreadCount`, `markAsRead`, `markAllAsRead`
+- `notifications.controller.ts` — `list` (paginated), `unreadCount`, `markAsRead`, `markAllAsRead`
+- `notifications.routes.ts` — `GET /`, `GET /unread-count`, `PATCH /read-all`, `PATCH /:id/read` (all authenticated)
+- `notifications.service.test.ts` — 13 tests
+
+**Files Modified:**
+- `prisma/schema.prisma` — `InAppNotification` model with indexes on `[recipientId, recipientType]` and `[recipientId, recipientType, isRead]`
+- `prisma/migrations/20260720010000_add_in_app_notifications/migration.sql`
+- `app.ts` — Notification routes mounted at `/api/notifications`
+- `client.service.ts` — Added `clientId` to `client.account.created` payload
+- `quotation.service.ts` — Added `clientId` to `quotation.sent`/`quotation.accepted` payloads
+- `project.service.ts` — Added `clientId` to `project.created` payload; added `project.status_changed` notification
+- `invoice.service.ts` — Added `clientId` to `invoice.issued`/`payment.recorded` payloads
+- `documents.service.ts` — Added `document.uploaded` notification
+- `lead.service.ts` — Added `lead.archived`/`lead.restored` notifications
+
 ### ✅ Frontend Implementation (100%)
 
 #### 1. Quotation Form (`QuotationFormDrawer.tsx`)
@@ -78,8 +98,21 @@
 - `queries/useSearch.ts` — `useGlobalSearch(q, type?)` hook with debounced requests
 - `queries/keys.ts` — `search(q, type?)` query key factory
 - `components/ui/CommandPalette.tsx` — Full rewrite: Cmd+K palette with integrated search API, grouped results by module, icons and metadata, click-to-navigate
-- `components/layout/TopNav.tsx` — Search button dispatches Cmd+K event to open CommandPalette
+- `components/layout/TopNav.tsx` — Search button dispatches Cmd+K event + bell icon with unread badge
 - `pages/search/SearchPage.tsx` — Full rewrite: module filter tabs (All/Leads/Clients/Projects/Quotations/Invoices/Services/Documents), `<Highlight>` text matching, fixed navigation for Services/Documents, related entity display
+
+#### 7. Notification Center — Frontend
+- `services/notificationService.ts` — NEW: `list` (uses `api.getPaginated`), `getUnreadCount`, `markAsRead`, `markAllAsRead`
+- `queries/useNotifications.ts` — NEW: `useNotifications`, `useUnreadCount`, `useMarkNotificationAsRead`, `useMarkAllNotificationsAsRead` (with 30s polling)
+- `queries/keys.ts` — Added notification query keys
+- `components/layout/NotificationPanel.tsx` — Rewrite: real API data, unread badge, mark-as-read, relative timestamps, view-all navigation
+- `components/layout/TopNav.tsx` — Bell icon with real unread count badge from API
+- `components/layout/Sidebar.tsx` — Added Notifications nav item
+- `pages/notifications/NotificationsPage.tsx` — NEW: Full page with All/Unread/Read filters, pagination
+- `pages/portal/PortalNotificationsPage.tsx` — NEW: Client portal notifications page with mark-as-read
+- `app/PortalLayout.tsx` — Added bell icon with unread count + Notifications nav item
+- `routes/routes.ts` — Added `notifications` and `portal.notifications` routes
+- `App.tsx` — Added admin and portal notification routes
 
 ### ✅ Current Lead → Client → Quotation → Project Workflow
 
@@ -142,6 +175,19 @@ The function resolves the Lead via `resolveSourceLeadId()` (`quotation.service.t
 - Notifications sent on key events (quotation sent, credentials emailed)
 - All remain functional through the single workflow
 
+### ✅ Bug Fix: Notification Badge/List Inconsistency
+
+**Root cause:** `notificationService.list()` used `api.get()` which calls `apiRequest()`, returning `json.data` — a raw array from the backend's `paginated()` response. But `NotificationPanel.tsx` and `NotificationsPage.tsx` read `data?.items`, which is `undefined` on an array, so the list always rendered empty while the badge (which uses `api.get('/notifications/unread-count')` returning `{ count }` via `ok()`) worked correctly.
+
+**Fix:** Changed `notificationService.list()` to use `api.getPaginated<InAppNotification>()` which correctly wraps the response as `{ items: T[], meta: PaginationMeta }`. Removed the unused `NotificationListResponse` interface.
+
+**Files changed:** `nexus-frontend/src/services/notificationService.ts`
+
+**Verification:**
+- Badge count equals the number of unread notifications displayed
+- Mark as Read updates both list and badge immediately via query invalidation
+- Mark All Read clears both list and badge correctly
+
 ### ✅ "Quotation has no linked Lead" Bug — Fixed
 
 The old error message `"Quotation has no linked Lead"` has been **removed from all source code**. The `resolveSourceLeadId()` function (`quotation.service.ts:76-86`) now has a robust fallback chain:
@@ -160,7 +206,7 @@ The old error message only exists in `SINGLE-WORKFLOW-COMPLETE.md:279` (historic
 ### Backend
 ```bash
 ✅ npm run build — SUCCESS (0 errors)
-✅ npm test — 143/143 tests passing (18 test suites, ~23s)
+✅ npm test — 153/153 tests passing (18 test suites, ~13s)
 ```
 
 ### Frontend
@@ -183,51 +229,72 @@ There are no unfinished tasks for the core single-workflow implementation. All b
 
 ## Files Modified
 
-### Backend (19 files)
-1. `nexus-backend/prisma/schema.prisma` — Lead model archive fields
+### Backend (24 files)
+1. `nexus-backend/prisma/schema.prisma` — Lead model archive fields + InAppNotification model
 2. `nexus-backend/prisma/migrations/20260720000000_add_lead_archive_fields/migration.sql`
-3. `nexus-backend/src/core/utils/pagination.ts` — Added `archived` filter param
-4. `nexus-backend/src/modules/quotation/quotation.types.ts`
-5. `nexus-backend/src/modules/quotation/quotation.validation.ts`
-6. `nexus-backend/src/modules/quotation/quotation.service.ts`
-7. `nexus-backend/src/modules/quotation/tests/quotation.service.test.ts`
-8. `nexus-backend/src/modules/lead/lead.service.ts` — Archive/restore + conversion guard
-9. `nexus-backend/src/modules/lead/lead.repository.ts` — Archive/restore queries
-10. `nexus-backend/src/modules/lead/lead.types.ts` — ArchiveLeadInput
-11. `nexus-backend/src/modules/lead/lead.validation.ts` — Archive schema
-12. `nexus-backend/src/modules/lead/lead.controller.ts` — Archive/restore endpoints
-13. `nexus-backend/src/modules/lead/lead.routes.ts` — Archive/restore routes
-14. `nexus-backend/src/modules/lead/tests/lead.service.test.ts` — 7 new archive/restore tests
-15. `nexus-backend/src/modules/dashboard/dashboard.repository.ts` — Exclude archived leads
-16. `nexus-backend/src/modules/search/search.types.ts` — SearchEntityType, SEARCH_ENTITY_TYPES
-17. `nexus-backend/src/modules/search/search.service.ts` — Full rewrite with type filter, includes
-18. `nexus-backend/src/modules/search/search.controller.ts` — type query parameter
-19. `nexus-backend/src/modules/search/tests/search.service.test.ts` — 10 new search tests
+3. `nexus-backend/prisma/migrations/20260720010000_add_in_app_notifications/migration.sql`
+4. `nexus-backend/src/core/utils/pagination.ts` — Added `archived` filter param
+5. `nexus-backend/src/modules/notifications/notifications.types.ts` — NEW: Notification types
+6. `nexus-backend/src/modules/notifications/notifications.repository.ts` — NEW: In-app CRUD
+7. `nexus-backend/src/modules/notifications/notifications.service.ts` — NEW: Event mapping + CRUD
+8. `nexus-backend/src/modules/notifications/notifications.controller.ts` — NEW: REST endpoints
+9. `nexus-backend/src/modules/notifications/notifications.routes.ts` — NEW: Authenticated routes
+10. `nexus-backend/src/modules/notifications/tests/notifications.service.test.ts` — NEW: 13 tests
+11. `nexus-backend/src/modules/quotation/quotation.types.ts`
+12. `nexus-backend/src/modules/quotation/quotation.validation.ts`
+13. `nexus-backend/src/modules/quotation/quotation.service.ts` — Added clientId to payloads
+14. `nexus-backend/src/modules/quotation/tests/quotation.service.test.ts`
+15. `nexus-backend/src/modules/lead/lead.service.ts` — Archive/restore + notifications
+16. `nexus-backend/src/modules/lead/lead.repository.ts` — Archive/restore queries
+17. `nexus-backend/src/modules/lead/lead.types.ts` — ArchiveLeadInput
+18. `nexus-backend/src/modules/lead/lead.validation.ts` — Archive schema
+19. `nexus-backend/src/modules/lead/lead.controller.ts` — Archive/restore endpoints
+20. `nexus-backend/src/modules/lead/lead.routes.ts` — Archive/restore routes
+21. `nexus-backend/src/modules/lead/tests/lead.service.test.ts` — 7 new archive/restore tests
+22. `nexus-backend/src/modules/dashboard/dashboard.repository.ts` — Exclude archived leads
+23. `nexus-backend/src/modules/client/client.service.ts` — Added clientId to payload
+24. `nexus-backend/src/modules/project/project.service.ts` — Added clientId + status_changed notification
+25. `nexus-backend/src/modules/invoice/invoice.service.ts` — Added clientId to payloads
+26. `nexus-backend/src/modules/documents/documents.service.ts` — Added document.uploaded notification
+27. `nexus-backend/src/modules/search/search.types.ts` — SearchEntityType, SEARCH_ENTITY_TYPES
+28. `nexus-backend/src/modules/search/search.service.ts` — Full rewrite with type filter, includes
+29. `nexus-backend/src/modules/search/search.controller.ts` — type query parameter
+30. `nexus-backend/src/modules/search/tests/search.service.test.ts` — 10 new search tests
+31. `nexus-backend/src/app.ts` — Notification routes mounted
 
-### Frontend (12 files)
-20. `nexus-frontend/src/types/index.ts` — Lead archive fields
-21. `nexus-frontend/src/services/leadService.ts` — Archive/restore API
-22. `nexus-frontend/src/services/searchService.ts` — search(q, type?) API
-23. `nexus-frontend/src/queries/useLeads.ts` — Archive/restore mutations
-24. `nexus-frontend/src/queries/useSearch.ts` — useGlobalSearch(q, type?)
-25. `nexus-frontend/src/queries/keys.ts` — Search key factory
-26. `nexus-frontend/src/pages/quotations/components/QuotationFormDrawer.tsx`
-27. `nexus-frontend/src/pages/leads/LeadDetailPage.tsx` — Archive/restore UI
-28. `nexus-frontend/src/pages/leads/LeadsPage.tsx` — Archived filter tab
-29. `nexus-frontend/src/pages/leads/components/LeadServicesPanel.tsx`
-30. `nexus-frontend/src/components/ui/CommandPalette.tsx` — Search-integrated Cmd+K
-31. `nexus-frontend/src/components/layout/TopNav.tsx` — Search button wiring
-32. `nexus-frontend/src/pages/search/SearchPage.tsx` — Module filters, highlighting
+### Frontend (17 files)
+32. `nexus-frontend/src/types/index.ts` — Lead archive fields
+33. `nexus-frontend/src/services/leadService.ts` — Archive/restore API
+34. `nexus-frontend/src/services/searchService.ts` — search(q, type?) API
+35. `nexus-frontend/src/services/notificationService.ts` — NEW: Notification API
+36. `nexus-frontend/src/queries/useLeads.ts` — Archive/restore mutations
+37. `nexus-frontend/src/queries/useSearch.ts` — useGlobalSearch(q, type?)
+38. `nexus-frontend/src/queries/useNotifications.ts` — NEW: Notification hooks
+39. `nexus-frontend/src/queries/keys.ts` — Search + notification key factories
+40. `nexus-frontend/src/pages/quotations/components/QuotationFormDrawer.tsx`
+41. `nexus-frontend/src/pages/leads/LeadDetailPage.tsx` — Archive/restore UI
+42. `nexus-frontend/src/pages/leads/LeadsPage.tsx` — Archived filter tab
+43. `nexus-frontend/src/pages/leads/components/LeadServicesPanel.tsx`
+44. `nexus-frontend/src/pages/search/SearchPage.tsx` — Module filters, highlighting
+45. `nexus-frontend/src/pages/notifications/NotificationsPage.tsx` — NEW: Full page
+46. `nexus-frontend/src/pages/portal/PortalNotificationsPage.tsx` — NEW: Portal page
+47. `nexus-frontend/src/components/ui/CommandPalette.tsx` — Search-integrated Cmd+K
+48. `nexus-frontend/src/components/layout/TopNav.tsx` — Search + bell icon
+49. `nexus-frontend/src/components/layout/NotificationPanel.tsx` — Rewrite with real data
+50. `nexus-frontend/src/components/layout/Sidebar.tsx` — Notifications nav item
+51. `nexus-frontend/src/app/PortalLayout.tsx` — Bell icon + Notifications nav
+52. `nexus-frontend/src/routes/routes.ts` — Notification routes
+53. `nexus-frontend/src/App.tsx` — Notification routes
 
 ### Documentation (4 files)
-26. `IMPLEMENTATION.md`
-27. `WORKFLOW.md`
-28. `IMPLEMENTATION-PLAN.md`
-29. `IMPLEMENTATION-PROGRESS.md` (this file)
+54. `IMPLEMENTATION.md`
+55. `WORKFLOW.md`
+56. `IMPLEMENTATION-PLAN.md`
+57. `IMPLEMENTATION-PROGRESS.md` (this file)
 
 ---
 
 **STATUS: ✅ IMPLEMENTATION COMPLETE**
-**BACKEND: Build ✓ | 143 Tests ✓**
-**FRONTEND: Build ✓**
+**BACKEND: Build ✓ | 153 Tests ✓**
+**FRONTEND: Build ✓ | tsc ✓**
 **ALL WORKFLOW PATHS VERIFIED**

@@ -125,7 +125,7 @@ export const invoiceService = {
       entityType: 'INVOICE',
       entityId: invoice.id,
       recipient: 'client-on-file',
-      payload: { invoiceNumber: invoice.invoiceNumber, grandTotal },
+      payload: { invoiceNumber: invoice.invoiceNumber, grandTotal, clientId: input.clientId },
     });
 
     return this.getById(invoice.id);
@@ -165,6 +165,7 @@ export const invoiceService = {
         invoiceNumber: invoice.invoiceNumber,
         grandTotal: invoice.grandTotal,
         resend,
+        clientId: invoice.clientId,
       },
     });
 
@@ -251,7 +252,7 @@ export const invoiceService = {
       entityType: 'INVOICE',
       entityId: invoiceId,
       recipient: 'client-on-file',
-      payload: { amount: input.amount, invoiceNumber: invoice.invoiceNumber },
+      payload: { amount: input.amount, invoiceNumber: invoice.invoiceNumber, clientId: invoice.clientId },
     });
 
     return payment;
