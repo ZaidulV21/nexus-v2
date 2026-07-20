@@ -246,6 +246,16 @@ export const projectService = {
       reason: input.reason,
     });
 
+    const serviceName = record.service?.name ?? 'Service';
+    await timelineService.recordEvent({
+      entityType: 'PROJECT',
+      entityId: record.project.id,
+      eventType: 'STATUS_CHANGED',
+      description: `${serviceName}: ${record.status} → ${input.toStatus}`,
+      actorUserId,
+      metadata: { fromStatus: record.status, toStatus: input.toStatus, projectServiceId },
+    });
+
     return projectServiceRepository.findById(projectServiceId);
   },
 
