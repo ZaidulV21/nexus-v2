@@ -197,6 +197,27 @@ describe('quotationService.send and accept', () => {
     expect(leadService.applyQuotationWorkflowStatus).toHaveBeenCalledWith('lead1', ['svc1'], 'QUOTE SENT', 'admin1');
   });
 
+  it('sends a Client-owned quotation by resolving the historical Lead from Client.sourceLeadId', async () => {
+    const { clientRepository } = jest.requireMock('../../client/client.repository');
+    (clientRepository.findById as jest.Mock).mockResolvedValue({ id: 'client1', sourceLeadId: 'lead1' });
+    (quotationRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'quo1',
+      leadId: null,
+      clientId: 'client1',
+      quotationNumber: 'Q-00001',
+      status: 'APPROVED',
+      lead: null,
+      client: { id: 'client1', email: 'client@example.com' },
+      activeVersionId: 'ver1',
+      versions: [{ id: 'ver1', items: [{ serviceId: 'svc1' }] }],
+    });
+
+    await quotationService.send('quo1', 'admin1');
+
+    expect(quotationRepository.updateStatus).toHaveBeenCalledWith('quo1', 'SENT', expect.any(Object));
+    expect(leadService.applyQuotationWorkflowStatus).toHaveBeenCalledWith('lead1', ['svc1'], 'QUOTE SENT', 'admin1');
+  });
+
   it('creates a project only after the client accepts a sent quotation', async () => {
     (quotationRepository.findById as jest.Mock).mockResolvedValue({
       id: 'quo1',
@@ -237,6 +258,79 @@ describe('quotationService.send and accept', () => {
       expect.any(Function)
     );
     expect(quotationRepository.updateStatus).toHaveBeenCalledWith('quo1', 'ACCEPTED', expect.anything());
+  });
+
+  it('accepts a Client-owned quotation with no direct leadId', async () => {
+    const { clientRepository } = jest.requireMock('../../client/client.repository');
+    (clientRepository.findById as jest.Mock).mockResolvedValue({ id: 'client1', sourceLeadId: 'lead1' });
+    (quotationRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'quo1',
+      leadId: null,
+      clientId: 'client1',
+      quotationNumber: 'Q-00001',
+      status: 'SENT',
+      lead: null,
+      client: { id: 'client1', email: 'client@example.com' },
+      activeVersionId: 'ver1',
+      versions: [{ id: 'ver1', approvals: [{ id: 'ap1' }], items: [{ serviceId: 'svc1' }] }],
+    });
+    (projectService.create as jest.Mock).mockImplementation(
+      async (_input: unknown, _actor: string, inSameTransaction?: (tx: object) => Promise<void>) => {
+        if (inSameTransaction) await inSameTransaction({});
+        return { id: 'proj1' };
+      }
+    );
+
+    await quotationService.accept('quo1', 'client1');
+
+    expect(leadService.applyQuotationWorkflowStatus).toHaveBeenCalledWith('lead1', ['svc1'], 'APPROVED', 'client1');
+    expect(projectService.create).toHaveBeenCalledWith(
+      { leadId: 'lead1', clientId: 'client1', quotationVersionId: 'ver1' },
+      'client1',
+      expect.any(Function)
+    );
+  });
+
+  it('rejects a Client-owned quotation with no direct leadId', async () => {
+    const { clientRepository } = jest.requireMock('../../client/client.repository');
+    (clientRepository.findById as jest.Mock).mockResolvedValue({ id: 'client1', sourceLeadId: 'lead1' });
+    (quotationRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'quo1',
+      leadId: null,
+      clientId: 'client1',
+      quotationNumber: 'Q-00001',
+      status: 'SENT',
+      lead: null,
+      client: { id: 'client1', email: 'client@example.com' },
+      activeVersionId: 'ver1',
+      versions: [{ id: 'ver1', items: [{ serviceId: 'svc1' }] }],
+    });
+
+    await quotationService.reject('quo1', 'client1', 'Too expensive');
+
+    expect(quotationRepository.updateStatus).toHaveBeenCalledWith('quo1', 'REJECTED');
+    expect(leadService.applyQuotationWorkflowStatus).toHaveBeenCalledWith('lead1', ['svc1'], 'NEGOTIATION', 'client1');
+  });
+
+  it('requests revision for a Client-owned quotation with no direct leadId', async () => {
+    const { clientRepository } = jest.requireMock('../../client/client.repository');
+    (clientRepository.findById as jest.Mock).mockResolvedValue({ id: 'client1', sourceLeadId: 'lead1' });
+    (quotationRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'quo1',
+      leadId: null,
+      clientId: 'client1',
+      quotationNumber: 'Q-00001',
+      status: 'SENT',
+      lead: null,
+      client: { id: 'client1', email: 'client@example.com' },
+      activeVersionId: 'ver1',
+      versions: [{ id: 'ver1', items: [{ serviceId: 'svc1' }] }],
+    });
+
+    await quotationService.requestRevision('quo1', 'client1', 'Please revise scope');
+
+    expect(quotationRepository.updateStatus).toHaveBeenCalledWith('quo1', 'NEGOTIATION', expect.any(Object));
+    expect(leadService.applyQuotationWorkflowStatus).toHaveBeenCalledWith('lead1', ['svc1'], 'NEGOTIATION', 'client1');
   });
 
   it('rolls the whole acceptance back if the status update fails inside the transaction', async () => {

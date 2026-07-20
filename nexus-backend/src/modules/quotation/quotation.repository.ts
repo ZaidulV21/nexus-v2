@@ -62,7 +62,14 @@ export const quotationRepository = {
 
   countForLead(leadId: string, tx?: Prisma.TransactionClient) {
     const client = tx ?? prisma;
-    return client.quotation.count({ where: { leadId } });
+    return client.quotation.count({
+      where: {
+        OR: [
+          { leadId },
+          { client: { sourceLeadId: leadId } },
+        ],
+      },
+    });
   },
 
   findById(id: string) {

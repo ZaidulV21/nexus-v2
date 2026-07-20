@@ -71,14 +71,18 @@ function getQuotedServiceIds(quotation: any): string[] {
   return [...new Set(((activeVersion?.items ?? []) as any[]).map((item) => item.serviceId).filter(Boolean))] as string[];
 }
 
-// Resolve the source leadId for workflow automation. Quotations start with
-// a leadId; after Lead→Client conversion, leadId becomes null and clientId
-// is populated - the sourceLeadId is fetched via the nested lead relation.
-function resolveSourceLeadId(quotation: any): string {
+// Resolve the historical source Lead for workflow automation. Client-owned
+// quotations are valid with leadId = null, so fall back to Client.sourceLeadId.
+async function resolveSourceLeadId(quotation: any): Promise<string> {
   if (quotation.leadId) return quotation.leadId;
   if (quotation.client?.sourceLeadId) return quotation.client.sourceLeadId;
   if (quotation.lead?.id) return quotation.lead.id;
-  throw new ValidationError('Quotation has no linked Lead');
+  if (quotation.clientId) {
+    const client = await clientRepository.findById(quotation.clientId);
+    if (client?.sourceLeadId) return client.sourceLeadId;
+    throw new ValidationError('Client has no source Lead - cannot synchronize quotation workflow');
+  }
+  throw new ValidationError('Quotation has no Lead or Client owner');
 }
 
 export const quotationService = {
@@ -278,6 +282,7 @@ export const quotationService = {
     const recipient = getQuotationRecipient(quotation);
     if (!recipient) throw new ValidationError('Quotation has no client email recipient');
 
+    const sourceLeadId = await resolveSourceLeadId(quotation);
     const statusBefore = quotation.status;
     await runInTransaction(async (tx) => {
       await quotationRepository.updateStatus(quotationId, 'SENT', tx);
@@ -286,7 +291,7 @@ export const quotationService = {
     // Lead pipeline automation: sending (or re-sending after a rejection)
     // moves the quoted Lead Services to QUOTE SENT.
     await leadService.applyQuotationWorkflowStatus(
-      resolveSourceLeadId(quotation),
+      sourceLeadId,
       getQuotedServiceIds(quotation),
       'QUOTE SENT',
       actorUserId
@@ -328,6 +333,7 @@ export const quotationService = {
     }
 
     const recipient = 'admin-on-file';
+    const sourceLeadId = await resolveSourceLeadId(quotation);
 
     await runInTransaction(async (tx) => {
       await quotationRepository.updateStatus(quotationId, 'NEGOTIATION', tx);
@@ -336,7 +342,7 @@ export const quotationService = {
     // Lead pipeline automation: a client revision request re-opens
     // negotiation on the quoted Lead Services.
     await leadService.applyQuotationWorkflowStatus(
-      resolveSourceLeadId(quotation),
+      sourceLeadId,
       getQuotedServiceIds(quotation),
       'NEGOTIATION',
       actorUserId
@@ -388,11 +394,13 @@ export const quotationService = {
       throw new ValidationError('Only internally approved quotation versions can be accepted');
     }
 
+    const sourceLeadId = await resolveSourceLeadId(quotation);
+
     // Lead pipeline automation: client acceptance moves the quoted Lead
     // Services to APPROVED. Project creation below then advances them to
     // PROJECT CREATED (inside projectService.create).
     await leadService.applyQuotationWorkflowStatus(
-      resolveSourceLeadId(quotation),
+      sourceLeadId,
       getQuotedServiceIds(quotation),
       'APPROVED',
       clientId
@@ -403,7 +411,7 @@ export const quotationService = {
     // either write fails, neither is persisted.
     const project = await projectService.create(
       {
-        leadId: resolveSourceLeadId(quotation),
+        leadId: sourceLeadId,
         clientId,
         quotationVersionId: activeVersion.id,
       },
@@ -455,12 +463,14 @@ export const quotationService = {
       throw new ValidationError('Only sent quotations can be rejected');
     }
 
+    const sourceLeadId = await resolveSourceLeadId(quotation);
+
     await quotationRepository.updateStatus(quotationId, 'REJECTED');
 
     // Lead pipeline automation: a rejection sends the quoted Lead Services
     // back into NEGOTIATION so the Admin can revise and re-send.
     await leadService.applyQuotationWorkflowStatus(
-      resolveSourceLeadId(quotation),
+      sourceLeadId,
       getQuotedServiceIds(quotation),
       'NEGOTIATION',
       clientId
