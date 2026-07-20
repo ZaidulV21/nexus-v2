@@ -52,30 +52,18 @@ export const AUTOMATIC_LEAD_STATUSES = [
 // --------------------------------------------------------------------------
 export const PROJECT_WORKFLOW_ORDER = [
   'PROJECT CREATED',
-  'PLANNING',
-  'RESOURCES ASSIGNED',
-  'WORK STARTED',
   'IN PROGRESS',
   'ON HOLD',
-  'QUALITY INSPECTION',
   'COMPLETED',
-  'HANDOVER',
-  'CLOSED',
+  'CANCELLED',
 ] as const;
 
 // Statuses an Admin may manually move a Project Service to. PROJECT CREATED
-// is the system-assigned starting point, never a manual target. CANCELLED
-// is a terminal exit reachable from any pre-completion execution status.
+// is the system-assigned starting point, never a manual target.
 export const MANUAL_PROJECT_STATUSES = [
-  'PLANNING',
-  'RESOURCES ASSIGNED',
-  'WORK STARTED',
   'IN PROGRESS',
   'ON HOLD',
-  'QUALITY INSPECTION',
   'COMPLETED',
-  'HANDOVER',
-  'CLOSED',
   'CANCELLED',
 ] as const;
 
@@ -94,26 +82,16 @@ const SKIPPABLE_LEAD_STATUSES = new Set<string>([
 // Skipping these specific stages requires a recorded reason.
 const SITE_VISIT_STAGES = new Set<string>(['SITE VISIT SCHEDULED', 'SITE VISIT COMPLETED']);
 
-// Execution stages are checkpoints, not a forced march - any forward move
-// is legal (services may not need every checkpoint), but never backward.
-// ON HOLD is situational: it can be entered from any active stage and
-// exited back to where work resumes.
-const PROJECT_ACTIVE_STATUSES = [
-  'PROJECT CREATED',
-  'PLANNING',
-  'RESOURCES ASSIGNED',
-  'WORK STARTED',
-  'IN PROGRESS',
-  'QUALITY INSPECTION',
-] as const;
-
-const PROJECT_EXTRA_EDGES: Record<string, string[]> = {
-  // Exiting a hold resumes wherever the work actually is.
-  'ON HOLD': ['PLANNING', 'RESOURCES ASSIGNED', 'WORK STARTED', 'IN PROGRESS', 'QUALITY INSPECTION', 'CANCELLED'],
+// Allowed transitions for Project Services. Each status maps to the
+// statuses it may transition to. COMPLETED and CANCELLED are terminal
+// with no outgoing edges.
+const PROJECT_ALLOWED_TRANSITIONS: Record<string, readonly string[]> = {
+  'PROJECT CREATED': ['IN PROGRESS', 'CANCELLED'],
+  'IN PROGRESS': ['ON HOLD', 'COMPLETED', 'CANCELLED'],
+  'ON HOLD': ['IN PROGRESS', 'COMPLETED', 'CANCELLED'],
+  'COMPLETED': [],
+  'CANCELLED': [],
 };
-for (const status of PROJECT_ACTIVE_STATUSES) {
-  PROJECT_EXTRA_EDGES[status] = [...(PROJECT_EXTRA_EDGES[status] ?? []), 'ON HOLD', 'CANCELLED'];
-}
 
 function isForwardMove(order: readonly string[], skippable: Set<string>, from: string, to: string): boolean {
   const fromIndex = order.indexOf(from);
@@ -133,15 +111,10 @@ export function isValidTransition(entityType: WorkflowEntityType, from: string |
     return isForwardMove(LEAD_WORKFLOW_ORDER, SKIPPABLE_LEAD_STATUSES, from, to);
   }
 
-  // PROJECT_SERVICE
+  // PROJECT_SERVICE — strict whitelist, no forward-skip logic.
   if (from === null) return to === 'PROJECT CREATED';
-  if ((PROJECT_EXTRA_EDGES[from] || []).includes(to)) return true;
-  const fromIndex = PROJECT_WORKFLOW_ORDER.indexOf(from as any);
-  const toIndex = PROJECT_WORKFLOW_ORDER.indexOf(to as any);
-  if (fromIndex === -1 || toIndex === -1) return false;
-  // Any forward execution move is legal; ON HOLD is only entered via the
-  // explicit edges above, never as a "forward stage".
-  return toIndex > fromIndex && to !== 'ON HOLD';
+  const allowed = PROJECT_ALLOWED_TRANSITIONS[from] || [];
+  return allowed.includes(to);
 }
 
 // Transitions performed by backend workflow events (quotation created/sent,

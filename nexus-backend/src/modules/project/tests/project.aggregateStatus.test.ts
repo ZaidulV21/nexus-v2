@@ -4,15 +4,14 @@ describe('computeAggregateStatus', () => {
   it('reproduces the PRD 4.4 example: mixed execution statuses -> Active N Running', () => {
     const result = computeAggregateStatus([
       { status: 'IN PROGRESS' },       // Interior
-      { status: 'PLANNING' },          // Solar
+      { status: 'PROJECT CREATED' },   // Solar
       { status: 'PROJECT CREATED' },   // CCTV
     ]);
     expect(result).toBe('Active (3 Services Running)');
   });
 
-  it('returns Completed only when every active service is done (COMPLETED/HANDOVER/CLOSED)', () => {
+  it('returns Completed only when every active service is done (COMPLETED)', () => {
     expect(computeAggregateStatus([{ status: 'COMPLETED' }, { status: 'COMPLETED' }])).toBe('Completed');
-    expect(computeAggregateStatus([{ status: 'HANDOVER' }, { status: 'CLOSED' }])).toBe('Completed');
   });
 
   it('does not report Completed if even one service is still active', () => {

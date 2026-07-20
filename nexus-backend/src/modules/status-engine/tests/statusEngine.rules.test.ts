@@ -59,55 +59,78 @@ describe('statusEngine.rules - Lead workflow', () => {
 describe('statusEngine.rules - Project workflow', () => {
   it('allows PROJECT CREATED as the only valid starting status for Project Services', () => {
     expect(isValidTransition('PROJECT_SERVICE', null, 'PROJECT CREATED')).toBe(true);
-    expect(isValidTransition('PROJECT_SERVICE', null, 'PLANNING')).toBe(false);
+    expect(isValidTransition('PROJECT_SERVICE', null, 'IN PROGRESS')).toBe(false);
   });
 
-  it('allows sequential forward transitions through the full execution pipeline', () => {
-    expect(isValidTransition('PROJECT_SERVICE', 'PROJECT CREATED', 'PLANNING')).toBe(true);
-    expect(isValidTransition('PROJECT_SERVICE', 'PLANNING', 'RESOURCES ASSIGNED')).toBe(true);
-    expect(isValidTransition('PROJECT_SERVICE', 'RESOURCES ASSIGNED', 'WORK STARTED')).toBe(true);
-    expect(isValidTransition('PROJECT_SERVICE', 'WORK STARTED', 'IN PROGRESS')).toBe(true);
-    expect(isValidTransition('PROJECT_SERVICE', 'IN PROGRESS', 'QUALITY INSPECTION')).toBe(true);
-    expect(isValidTransition('PROJECT_SERVICE', 'QUALITY INSPECTION', 'COMPLETED')).toBe(true);
-    expect(isValidTransition('PROJECT_SERVICE', 'COMPLETED', 'HANDOVER')).toBe(true);
-    expect(isValidTransition('PROJECT_SERVICE', 'HANDOVER', 'CLOSED')).toBe(true);
+  it('allows PROJECT CREATED → IN PROGRESS', () => {
+    expect(isValidTransition('PROJECT_SERVICE', 'PROJECT CREATED', 'IN PROGRESS')).toBe(true);
   });
 
-  it('allows forward checkpoint skips (not every service needs every stage)', () => {
-    expect(isValidTransition('PROJECT_SERVICE', 'PROJECT CREATED', 'WORK STARTED')).toBe(true);
-    expect(isValidTransition('PROJECT_SERVICE', 'IN PROGRESS', 'COMPLETED')).toBe(true);
-    expect(isValidTransition('PROJECT_SERVICE', 'COMPLETED', 'CLOSED')).toBe(true);
-  });
-
-  it('rejects backward execution moves', () => {
-    expect(isValidTransition('PROJECT_SERVICE', 'IN PROGRESS', 'PLANNING')).toBe(false);
-    expect(isValidTransition('PROJECT_SERVICE', 'COMPLETED', 'IN PROGRESS')).toBe(false);
-    expect(isValidTransition('PROJECT_SERVICE', 'CLOSED', 'HANDOVER')).toBe(false);
-  });
-
-  it('allows ON HOLD from any active stage and resume to any active stage', () => {
-    expect(isValidTransition('PROJECT_SERVICE', 'PLANNING', 'ON HOLD')).toBe(true);
-    expect(isValidTransition('PROJECT_SERVICE', 'IN PROGRESS', 'ON HOLD')).toBe(true);
-    expect(isValidTransition('PROJECT_SERVICE', 'ON HOLD', 'IN PROGRESS')).toBe(true);
-    expect(isValidTransition('PROJECT_SERVICE', 'ON HOLD', 'PLANNING')).toBe(true);
-    // But not from a done state.
-    expect(isValidTransition('PROJECT_SERVICE', 'COMPLETED', 'ON HOLD')).toBe(false);
-    expect(isValidTransition('PROJECT_SERVICE', 'CLOSED', 'ON HOLD')).toBe(false);
-  });
-
-  it('allows CANCELLED from any pre-completion execution status, never after', () => {
+  it('allows PROJECT CREATED → CANCELLED', () => {
     expect(isValidTransition('PROJECT_SERVICE', 'PROJECT CREATED', 'CANCELLED')).toBe(true);
-    expect(isValidTransition('PROJECT_SERVICE', 'PLANNING', 'CANCELLED')).toBe(true);
+  });
+
+  it('allows IN PROGRESS → ON HOLD', () => {
+    expect(isValidTransition('PROJECT_SERVICE', 'IN PROGRESS', 'ON HOLD')).toBe(true);
+  });
+
+  it('allows IN PROGRESS → COMPLETED', () => {
+    expect(isValidTransition('PROJECT_SERVICE', 'IN PROGRESS', 'COMPLETED')).toBe(true);
+  });
+
+  it('allows IN PROGRESS → CANCELLED', () => {
     expect(isValidTransition('PROJECT_SERVICE', 'IN PROGRESS', 'CANCELLED')).toBe(true);
+  });
+
+  it('allows ON HOLD → IN PROGRESS', () => {
+    expect(isValidTransition('PROJECT_SERVICE', 'ON HOLD', 'IN PROGRESS')).toBe(true);
+  });
+
+  it('allows ON HOLD → CANCELLED', () => {
     expect(isValidTransition('PROJECT_SERVICE', 'ON HOLD', 'CANCELLED')).toBe(true);
+  });
+
+  it('rejects PROJECT CREATED → COMPLETED (must go through IN PROGRESS)', () => {
+    expect(isValidTransition('PROJECT_SERVICE', 'PROJECT CREATED', 'COMPLETED')).toBe(false);
+  });
+
+  it('rejects PROJECT CREATED → ON HOLD (must go through IN PROGRESS)', () => {
+    expect(isValidTransition('PROJECT_SERVICE', 'PROJECT CREATED', 'ON HOLD')).toBe(false);
+  });
+
+  it('rejects COMPLETED → any status (terminal)', () => {
+    expect(isValidTransition('PROJECT_SERVICE', 'COMPLETED', 'IN PROGRESS')).toBe(false);
+    expect(isValidTransition('PROJECT_SERVICE', 'COMPLETED', 'ON HOLD')).toBe(false);
     expect(isValidTransition('PROJECT_SERVICE', 'COMPLETED', 'CANCELLED')).toBe(false);
-    expect(isValidTransition('PROJECT_SERVICE', 'CLOSED', 'CANCELLED')).toBe(false);
+  });
+
+  it('rejects CANCELLED → any status (terminal)', () => {
+    expect(isValidTransition('PROJECT_SERVICE', 'CANCELLED', 'IN PROGRESS')).toBe(false);
+    expect(isValidTransition('PROJECT_SERVICE', 'CANCELLED', 'ON HOLD')).toBe(false);
+    expect(isValidTransition('PROJECT_SERVICE', 'CANCELLED', 'COMPLETED')).toBe(false);
+  });
+
+  it('allows ON HOLD → COMPLETED', () => {
+    expect(isValidTransition('PROJECT_SERVICE', 'ON HOLD', 'COMPLETED')).toBe(true);
+  });
+
+  it('rejects all other invalid transitions', () => {
+    expect(isValidTransition('PROJECT_SERVICE', 'IN PROGRESS', 'PROJECT CREATED')).toBe(false);
+    expect(isValidTransition('PROJECT_SERVICE', 'COMPLETED', 'PROJECT CREATED')).toBe(false);
+    expect(isValidTransition('PROJECT_SERVICE', 'CANCELLED', 'PROJECT CREATED')).toBe(false);
   });
 
   it('rejects Project Services from entering Lead sales statuses', () => {
     expect(isValidTransition('PROJECT_SERVICE', 'PROJECT CREATED', 'QUOTE PREPARING')).toBe(false);
     expect(isValidTransition('PROJECT_SERVICE', 'IN PROGRESS', 'CONTACTED')).toBe(false);
-    expect(isValidTransition('PROJECT_SERVICE', 'PLANNING', 'NEGOTIATION')).toBe(false);
+  });
+
+  it('rejects old statuses that are no longer part of the project workflow', () => {
+    expect(isValidTransition('PROJECT_SERVICE', 'PROJECT CREATED', 'PLANNING')).toBe(false);
+    expect(isValidTransition('PROJECT_SERVICE', 'PROJECT CREATED', 'WORK STARTED')).toBe(false);
+    expect(isValidTransition('PROJECT_SERVICE', 'IN PROGRESS', 'QUALITY INSPECTION')).toBe(false);
+    expect(isValidTransition('PROJECT_SERVICE', 'COMPLETED', 'HANDOVER')).toBe(false);
+    expect(isValidTransition('PROJECT_SERVICE', 'HANDOVER', 'CLOSED')).toBe(false);
   });
 });
 
@@ -129,15 +152,9 @@ describe('statusEngine.rules - manual vs automatic partition', () => {
 
   it('exposes the PRD Project execution stages, PROJECT CREATED excluded (system-assigned)', () => {
     expect(MANUAL_PROJECT_STATUSES).toEqual([
-      'PLANNING',
-      'RESOURCES ASSIGNED',
-      'WORK STARTED',
       'IN PROGRESS',
       'ON HOLD',
-      'QUALITY INSPECTION',
       'COMPLETED',
-      'HANDOVER',
-      'CLOSED',
       'CANCELLED',
     ]);
     expect(MANUAL_PROJECT_STATUSES).not.toContain('PROJECT CREATED');

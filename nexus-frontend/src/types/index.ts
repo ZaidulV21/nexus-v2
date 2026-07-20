@@ -94,15 +94,9 @@ export const AUTOMATIC_LEAD_SERVICE_STATUSES = ['QUOTE SENT', 'PROJECT CREATED']
 // Execution statuses an Admin may select on a Project Service. PROJECT
 // CREATED is the system-assigned start state, never a manual target.
 export const MANUAL_PROJECT_SERVICE_STATUSES = [
-  'PLANNING',
-  'RESOURCES ASSIGNED',
-  'WORK STARTED',
   'IN PROGRESS',
   'ON HOLD',
-  'QUALITY INSPECTION',
   'COMPLETED',
-  'HANDOVER',
-  'CLOSED',
   'CANCELLED',
 ] as const;
 

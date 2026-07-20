@@ -108,9 +108,9 @@ function ProjectServices({
   return (
     <ul className="divide-y divide-border rounded-lg border border-border">
       {services.map((service) => {
-        // CLOSED and CANCELLED are terminal - the backend Status Engine has
+        // COMPLETED and CANCELLED are terminal - the backend Status Engine has
         // no legal moves out of them, so no update affordance is shown.
-        const isTerminal = service.status === 'CLOSED' || service.status === 'CANCELLED';
+        const isTerminal = service.status === 'COMPLETED' || service.status === 'CANCELLED';
         return (
         <li key={service.id} className="px-4 py-3">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

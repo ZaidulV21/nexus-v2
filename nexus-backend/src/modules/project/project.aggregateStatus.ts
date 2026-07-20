@@ -5,9 +5,9 @@ export interface ProjectServiceLike {
   status: string;
 }
 
-// COMPLETED and the post-completion wrap-up stages all count as "done" for
-// aggregation; CANCELLED services are excluded from the running count.
-export const DONE_PROJECT_SERVICE_STATUSES = new Set(['COMPLETED', 'HANDOVER', 'CLOSED']);
+// COMPLETED is the only terminal "done" status for aggregation; CANCELLED
+// services are excluded from the running count.
+export const DONE_PROJECT_SERVICE_STATUSES = new Set(['COMPLETED']);
 
 export function computeAggregateStatus(projectServices: ProjectServiceLike[]): string {
   if (projectServices.length === 0) return 'NO SERVICES';
