@@ -207,6 +207,7 @@ Invoice (projectId) → Project
 #### Bug Fixes
 - ✅ **Logo upload preview** — `localStorageProvider.save()` returned a bare filename (e.g. `uuid-name.png`). `<img src>` couldn't resolve it. Fixed by: (1) adding `express.static` middleware serving `./uploads` at `/uploads` in `app.ts`, (2) company controller now returns `/uploads/${filename}` as `fileUrl` so it's a serveable path stored in DB and displayed by `<img>`.
 - ✅ **Save "Invalid payload"** — `onSubmit` converted empty strings `''` to `null` before sending. Backend Zod schema uses `z.string().optional()` which accepts `string | undefined` only — `null` fails validation. Fixed by skipping empty/null/undefined values in the payload instead of converting to `null`.
+- ✅ **Cloudinary PDF delivery blocked** — Cloudinary Media Library default "Blocked for delivery" caused uploaded PDFs to return HTTP 401 Unauthorized. Fixed by adding `access_control: [{ access: 'public_read' }]` to the upload parameters in `cloudinary.provider.ts`. Images were unaffected (different default behavior). New uploads deliver publicly; existing URLs unchanged.
 
 ---
 

@@ -1,6 +1,6 @@
 import { documentsRepository } from './documents.repository';
 import { localStorageProvider } from '../../core/storage/localStorage.provider';
-import { s3StorageProvider } from '../../core/storage/s3Storage.provider';
+import { cloudinaryProvider } from '../../core/storage/cloudinary.provider';
 import { env } from '../../config/env';
 import { UploadDocumentInput, DocumentEntityType } from './documents.types';
 import { ALLOWED_MIME_TYPES, MAX_FILE_SIZE_BYTES } from './documents.validation';
@@ -10,7 +10,7 @@ import { notificationsService } from '../notifications/notifications.service';
 import { leadRepository } from '../lead/lead.repository';
 import { projectRepository } from '../project/project.repository';
 
-const storageProvider = env.storageDriver === 's3' ? s3StorageProvider : localStorageProvider;
+const storageProvider = env.cloudinaryCloudName ? cloudinaryProvider : localStorageProvider;
 
 export const documentsService = {
   async upload(input: UploadDocumentInput, uploadedByUserId: string) {
@@ -100,7 +100,13 @@ export const documentsService = {
       // Clients may only download documents attached to their own records.
       throw new NotFoundError('Document not found');
     }
-    return { document: doc, url: storageProvider.getUrl(doc.fileUrl) };
+    // Cloudinary URLs are already fully qualified HTTPS URLs and can be opened
+    // directly. Local-storage fileUrls are bare filenames that need the
+    // /uploads prefix to be served by express.static.
+    const url = env.cloudinaryCloudName
+      ? doc.fileUrl
+      : `/uploads/${doc.fileUrl}`;
+    return { document: doc, url };
   },
 
   async softDelete(id: string, actorUserId?: string) {

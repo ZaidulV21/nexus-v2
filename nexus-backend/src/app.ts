@@ -1,7 +1,9 @@
 import express, { Express, Request, Response } from 'express';
+import path from 'path';
 import { applySecurityMiddleware } from './core/middleware/security';
 import { requestLogger } from './core/middleware/requestLogger';
 import { errorHandler, notFoundHandler } from './core/middleware/errorHandler';
+import { env } from './config/env';
 
 import authRoutes from './modules/auth/auth.routes';
 import categoryRoutes from './modules/catalog/category.routes';
@@ -47,6 +49,8 @@ export function createApp(): Express {
   app.use('/api/audit-logs', auditRoutes);
   app.use('/api/notifications', notificationRoutes);
   app.use('/api/company', companyRoutes);
+
+  app.use('/uploads', express.static(path.resolve(env.localStoragePath)));
 
   app.use(notFoundHandler);
   app.use(errorHandler);

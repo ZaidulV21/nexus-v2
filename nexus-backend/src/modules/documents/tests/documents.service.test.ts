@@ -1,3 +1,12 @@
+jest.mock('../../../config/env', () => ({
+  env: {
+    nodeEnv: 'test',
+    cloudinaryCloudName: '',
+    cloudinaryApiKey: '',
+    cloudinaryApiSecret: '',
+    cloudinaryFolder: 'nexus',
+  },
+}));
 jest.mock('../documents.repository', () => ({
   documentsRepository: {
     create: jest.fn(),

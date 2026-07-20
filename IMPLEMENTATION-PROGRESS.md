@@ -238,6 +238,7 @@ The old error message only exists in `SINGLE-WORKFLOW-COMPLETE.md:279` (historic
 #### Previous Bug Fixes
 - **Logo upload preview** — `localStorageProvider.save()` returned a bare filename. Fixed by: (1) adding `express.static` for `/uploads` in `app.ts`, (2) company controller now returns `/uploads/${filename}` as serveable URL path. (Now replaced by Cloudinary — no longer needed.)
 - **Save "Invalid payload"** — `onSubmit` converted `''` → `null`. Backend Zod rejects `null` (accepts `string | undefined` only). Fixed by skipping empty/null/undefined values in payload instead of converting to `null`.
+- **Cloudinary PDF delivery blocked** — Cloudinary Media Library default "Blocked for delivery" caused uploaded PDFs to return HTTP 401 Unauthorized. Fixed by adding `access_control: [{ access: 'public_read' }]` to upload params in `cloudinary.provider.ts`. Images were unaffected. New uploads deliver publicly; existing URLs unchanged.
 
 ---
 

@@ -21,6 +21,7 @@ export const cloudinaryProvider: StorageProvider = {
             public_id: publicId,
             resource_type: 'auto',
             format: mimeType.split('/')[1] || undefined,
+            access_control: { access_type: 'anonymous' },
           },
           (error, result) => {
             if (error || !result) return reject(error || new Error('Cloudinary upload failed'));
