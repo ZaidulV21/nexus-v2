@@ -321,6 +321,15 @@ REJECTED → DRAFT (Admin revises)
 - Search excludes archived leads by default
 - Can be restored to active status at any time
 
+### Global Search
+- Backend performs all filtering — no client-side fetch-and-filter
+- Searches across 7 modules: Leads, Clients, Projects, Quotations, Invoices, Services, Documents
+- `GET /api/search?q=...&type=...` — optional module filter
+- Related entity data included (client name, project number, category)
+- 3-character minimum query length
+- Cmd+K opens CommandPalette for instant search
+- Search page provides module filter tabs with text highlighting
+
 ### Multiple Quotations
 - Client can have multiple quotations
 - Each quotation can create separate project
@@ -374,6 +383,7 @@ Lead ← Quotation (automatic status sync via sourceLeadId)
 6. **Project execution statuses** - Belong only to Project module
 7. **Timeline, Audit Log, Notifications, Portal** - Remain synchronized
 8. **Lead Archiving** - Soft archive with mandatory reason, excludes from dashboard/search, fully reversible
+9. **Global Search** - Backend-first architecture, type filtering, related entity includes, Cmd+K integration
 
 ---
 

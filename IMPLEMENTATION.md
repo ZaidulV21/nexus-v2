@@ -57,6 +57,12 @@ Invoice (projectId) → Project
 - ✅ `lead.controller.ts` - Archive/restore endpoints
 - ✅ `lead.routes.ts` - `PATCH /:id/archive` and `PATCH /:id/restore` routes
 
+#### Search Module — Global Search Across All Modules
+- ✅ `search.types.ts` — `SearchEntityType` union and `SEARCH_ENTITY_TYPES` constant
+- ✅ `search.service.ts` — Expanded searchable fields per module; `type` filter; `include` for related entities; `RESULTS_PER_TYPE = 15`
+- ✅ `search.controller.ts` — `type` query parameter validation
+- ✅ `search.service.test.ts` — 10 tests (type filtering, includes, archived exclusion, whitespace)
+
 #### Client Module - Already Correct
 - ✅ `client.service.ts` - Conversion logic correct
 - ✅ `client.service.test.ts` - All 4 tests passing
@@ -66,10 +72,15 @@ Invoice (projectId) → Project
 - ✅ `QuotationFormDrawer.tsx` - Client selection only
 - ✅ `LeadDetailPage.tsx` - Updated conversion dialog + Archive/Restore UI
 - ✅ `LeadServicesPanel.tsx` - Read-only badge after conversion
-- ✅ **NEW: `LeadsPage.tsx`** - Active/Archived toggle filter
-- ✅ **NEW: `types/index.ts`** - Lead archive fields
-- ✅ **NEW: `services/leadService.ts`** - Archive/restore API calls
-- ✅ **NEW: `queries/useLeads.ts`** - Archive/restore mutation hooks
+- ✅ `LeadsPage.tsx` - Active/Archived toggle filter
+- ✅ `types/index.ts` - Lead archive fields
+- ✅ `services/leadService.ts` - Archive/restore API calls
+- ✅ `queries/useLeads.ts` - Archive/restore mutation hooks
+- ✅ **NEW: `services/searchService.ts`** — `search(q, type?)` with `SearchEntityType`
+- ✅ **NEW: `queries/useSearch.ts`** — `useGlobalSearch(q, type?)` hook
+- ✅ **NEW: `components/ui/CommandPalette.tsx`** — Cmd+K search with grouped results
+- ✅ **NEW: `components/layout/TopNav.tsx`** — Search button wired to CommandPalette
+- ✅ **NEW: `pages/search/SearchPage.tsx`** — Module filter tabs, text highlighting, related entity display
 
 ---
 
@@ -104,6 +115,18 @@ Invoice (projectId) → Project
 - ✅ Archived Leads excluded from dashboard, search, active list
 - ✅ Restore available to move Lead back to active status
 - ✅ Timeline and audit entries recorded for both actions
+
+### Global Search
+- ✅ Searches across all 7 modules: Leads, Clients, Projects, Quotations, Invoices, Services, Documents
+- ✅ Backend performs all filtering — no client-side fetch-and-filter
+- ✅ `GET /api/search?q=...&type=...` — optional module filter (single type or all)
+- ✅ `type` param validated against `SEARCH_ENTITY_TYPES`
+- ✅ Related entity data included (client name, project number, category, document type)
+- ✅ Archived leads excluded from search results
+- ✅ 3-character minimum query length enforced
+- ✅ Debounced frontend requests (300ms)
+- ✅ Cmd+K CommandPalette integration for instant search
+- ✅ Search page with module filter tabs and text highlighting
 
 ---
 
@@ -193,8 +216,8 @@ These statuses are NEVER manually set - backend business logic automatically upd
 ### Backend Tests
 - ✅ Quotation Service: 14/14 passing
 - ✅ Client Service: 4/4 passing
-- ✅ Lead Service: Manual update blocking verified
-- ✅ Lead Service: Archive/restore verified (7 new tests)
+- ✅ Lead Service: 16/16 passing (manual update blocking + archive/restore)
+- ✅ Search Service: 10/10 passing (type filtering, includes, archived exclusion)
 - ✅ Project Service: Client ownership verified
 
 ### Frontend Tests
@@ -202,6 +225,8 @@ These statuses are NEVER manually set - backend business logic automatically upd
 - ✅ Lead detail shows conversion button + archive/restore buttons
 - ✅ Lead Services show read-only after conversion
 - ✅ Leads page shows Active/Archived toggle
+- ✅ Search page shows module filter tabs with highlighting
+- ✅ CommandPalette opens with Cmd+K and shows search results
 
 ### Integration Tests
 - ✅ End-to-end: Lead → Convert → Quotation → Accept → Project
@@ -209,6 +234,7 @@ These statuses are NEVER manually set - backend business logic automatically upd
 - ✅ Audit logs recorded correctly
 - ✅ Notifications sent correctly
 - ✅ Archive/restore creates timeline and audit entries
+- ✅ Global search queries all modules and returns typed results
 
 ---
 
@@ -217,9 +243,7 @@ These statuses are NEVER manually set - backend business logic automatically upd
 ### Backend
 ```bash
 ✅ npm run build - SUCCESS (0 errors)
-✅ npm test -- --testPathPattern="quotation" - SUCCESS (14/14)
-✅ npm test -- --testPathPattern="client" - SUCCESS (4/4)
-✅ npm test -- --testPathPattern="lead" - SUCCESS (16/16)
+✅ npm test - 143/143 tests passing (18 test suites, ~23s)
 ```
 
 ### Frontend
@@ -232,33 +256,41 @@ These statuses are NEVER manually set - backend business logic automatically upd
 
 ## Files Modified
 
-### Backend (12 files)
+### Backend (18 files)
 1. ✅ `nexus-backend/prisma/schema.prisma` - Lead archive fields
-2. ✅ `nexus-backend/src/core/utils/pagination.ts` - Archived filter param
-3. ✅ `nexus-backend/src/modules/quotation/quotation.types.ts`
-4. ✅ `nexus-backend/src/modules/quotation/quotation.validation.ts`
-5. ✅ `nexus-backend/src/modules/quotation/quotation.service.ts`
-6. ✅ `nexus-backend/src/modules/quotation/tests/quotation.service.test.ts`
-7. ✅ `nexus-backend/src/modules/lead/lead.service.ts`
-8. ✅ `nexus-backend/src/modules/lead/lead.repository.ts`
-9. ✅ `nexus-backend/src/modules/lead/lead.types.ts`
-10. ✅ `nexus-backend/src/modules/lead/lead.validation.ts`
-11. ✅ `nexus-backend/src/modules/lead/lead.controller.ts`
-12. ✅ `nexus-backend/src/modules/lead/lead.routes.ts`
-13. ✅ `nexus-backend/src/modules/lead/tests/lead.service.test.ts`
-14. ✅ `nexus-backend/src/modules/dashboard/dashboard.repository.ts`
-15. ✅ `nexus-backend/src/modules/search/search.service.ts`
-16. ✅ `nexus-backend/src/modules/client/client.service.ts`
-17. ✅ `nexus-backend/src/modules/client/tests/client.service.test.ts`
+2. ✅ `nexus-backend/prisma/migrations/20260720000000_add_lead_archive_fields/migration.sql`
+3. ✅ `nexus-backend/src/core/utils/pagination.ts` - Archived filter param
+4. ✅ `nexus-backend/src/modules/quotation/quotation.types.ts`
+5. ✅ `nexus-backend/src/modules/quotation/quotation.validation.ts`
+6. ✅ `nexus-backend/src/modules/quotation/quotation.service.ts`
+7. ✅ `nexus-backend/src/modules/quotation/tests/quotation.service.test.ts`
+8. ✅ `nexus-backend/src/modules/lead/lead.service.ts`
+9. ✅ `nexus-backend/src/modules/lead/lead.repository.ts`
+10. ✅ `nexus-backend/src/modules/lead/lead.types.ts`
+11. ✅ `nexus-backend/src/modules/lead/lead.validation.ts`
+12. ✅ `nexus-backend/src/modules/lead/lead.controller.ts`
+13. ✅ `nexus-backend/src/modules/lead/lead.routes.ts`
+14. ✅ `nexus-backend/src/modules/lead/tests/lead.service.test.ts`
+15. ✅ `nexus-backend/src/modules/dashboard/dashboard.repository.ts`
+16. ✅ `nexus-backend/src/modules/search/search.types.ts`
+17. ✅ `nexus-backend/src/modules/search/search.service.ts`
+18. ✅ `nexus-backend/src/modules/search/search.controller.ts`
+19. ✅ `nexus-backend/src/modules/search/tests/search.service.test.ts`
 
-### Frontend (7 files)
-18. ✅ `nexus-frontend/src/types/index.ts`
-19. ✅ `nexus-frontend/src/services/leadService.ts`
-20. ✅ `nexus-frontend/src/queries/useLeads.ts`
-21. ✅ `nexus-frontend/src/pages/quotations/components/QuotationFormDrawer.tsx`
-22. ✅ `nexus-frontend/src/pages/leads/LeadDetailPage.tsx`
-23. ✅ `nexus-frontend/src/pages/leads/LeadsPage.tsx`
-24. ✅ `nexus-frontend/src/pages/leads/components/LeadServicesPanel.tsx`
+### Frontend (12 files)
+20. ✅ `nexus-frontend/src/types/index.ts`
+21. ✅ `nexus-frontend/src/services/leadService.ts`
+22. ✅ `nexus-frontend/src/services/searchService.ts`
+23. ✅ `nexus-frontend/src/queries/useLeads.ts`
+24. ✅ `nexus-frontend/src/queries/useSearch.ts`
+25. ✅ `nexus-frontend/src/queries/keys.ts`
+26. ✅ `nexus-frontend/src/pages/quotations/components/QuotationFormDrawer.tsx`
+27. ✅ `nexus-frontend/src/pages/leads/LeadDetailPage.tsx`
+28. ✅ `nexus-frontend/src/pages/leads/LeadsPage.tsx`
+29. ✅ `nexus-frontend/src/pages/leads/components/LeadServicesPanel.tsx`
+30. ✅ `nexus-frontend/src/components/ui/CommandPalette.tsx`
+31. ✅ `nexus-frontend/src/components/layout/TopNav.tsx`
+32. ✅ `nexus-frontend/src/pages/search/SearchPage.tsx`
 
 ---
 

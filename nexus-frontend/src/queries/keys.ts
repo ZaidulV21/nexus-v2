@@ -58,7 +58,7 @@ export const queryKeys = {
   },
   globalTimeline: (params: unknown) => ['timeline', 'global', params] as const,
   globalAuditLogs: (params: unknown) => ['audit-logs', 'global', params] as const,
-  search: (q: string) => ['search', q] as const,
+  search: (q: string, type?: string) => type ? ['search', q, type] as const : ['search', q] as const,
   timeline: (entityType: string, entityId: string) => ['timeline', entityType, entityId] as const,
   auditLogs: (entityType: string, entityId: string) => ['audit-logs', entityType, entityId] as const,
 };

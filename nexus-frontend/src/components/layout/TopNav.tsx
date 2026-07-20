@@ -47,7 +47,10 @@ export function TopNav({
       </div>
 
       <div className="flex items-center gap-2">
-        <button className="hidden items-center gap-2 rounded-md border border-border bg-canvas px-3 py-1.5 text-sm text-ink-faint transition-colors hover:border-border-strong sm:flex">
+        <button
+          onClick={() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }))}
+          className="hidden items-center gap-2 rounded-md border border-border bg-canvas px-3 py-1.5 text-sm text-ink-faint transition-colors hover:border-border-strong sm:flex"
+        >
           <Search className="h-3.5 w-3.5" />
           <span>Search...</span>
           <kbd className="ml-4 rounded border border-border bg-surface px-1.5 py-0.5 font-mono text-[10px] text-ink-faint">
