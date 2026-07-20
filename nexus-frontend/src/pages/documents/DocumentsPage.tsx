@@ -1,7 +1,8 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { ColumnDef } from '@tanstack/react-table';
-import { Download, FileImage, FileText, Trash2, Upload } from 'lucide-react';
+import { Download, FileImage, FileText, Eye, Trash2, Upload, X } from 'lucide-react';
+import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
@@ -20,6 +21,7 @@ import { documentService } from '@/services/documentService';
 import { ApiError } from '@/lib/api';
 import { formatDate } from '@/lib/format';
 import { ROUTES } from '@/routes/routes';
+import { cn } from '@/lib/utils';
 import type { NexusDocument } from '@/types';
 
 const PAGE_SIZE = 20;
@@ -47,6 +49,113 @@ function formatFileSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function DocumentPreviewModal({
+  document,
+  open,
+  onOpenChange,
+}: {
+  document: NexusDocument | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  // Fetch download URL when document changes
+  useEffect(() => {
+    if (!document || !open) {
+      setPreviewUrl(null);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    documentService
+      .getDownload(document.id)
+      .then((result) => {
+        if (!cancelled) {
+          setPreviewUrl(result.url);
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [document?.id, open]);
+
+  const isImage = document?.mimeType.startsWith('image/');
+  const isPdf = document?.mimeType === 'application/pdf';
+
+  return (
+    <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-ink/50 backdrop-blur-[2px] animate-fade-in" />
+        <DialogPrimitive.Content
+          className={cn(
+            'fixed left-1/2 top-1/2 z-50 w-full max-w-4xl -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border bg-surface-raised p-0 shadow-lg animate-scale-in',
+            'max-h-[90vh] flex flex-col'
+          )}
+        >
+          <div className="flex items-center justify-between border-b border-border px-6 py-4">
+            <div>
+              <DialogPrimitive.Title className="text-lg font-semibold text-ink">
+                {document?.fileName ?? 'Preview'}
+              </DialogPrimitive.Title>
+              {document && (
+                <p className="mt-0.5 text-xs text-ink-muted">
+                  {formatDocumentType(document.documentType)} · {formatFileSize(document.fileSize)}
+                </p>
+              )}
+            </div>
+            <DialogPrimitive.Close className="rounded p-1 text-ink-faint transition-colors hover:bg-canvas hover:text-ink">
+              <X className="h-4 w-4" />
+            </DialogPrimitive.Close>
+          </div>
+          <div className="flex-1 overflow-auto p-6">
+            {loading && (
+              <div className="flex items-center justify-center py-20">
+                <div className="h-8 w-8 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+              </div>
+            )}
+            {!loading && !previewUrl && (
+              <div className="flex items-center justify-center py-20 text-ink-muted">Unable to load preview</div>
+            )}
+            {!loading && previewUrl && isImage && (
+              <img
+                src={previewUrl}
+                alt={document?.fileName ?? 'Preview'}
+                className="mx-auto max-h-[70vh] rounded object-contain"
+              />
+            )}
+            {!loading && previewUrl && isPdf && (
+              <iframe
+                src={previewUrl}
+                title={document?.fileName ?? 'PDF Preview'}
+                className="h-[70vh] w-full rounded border-0"
+              />
+            )}
+            {!loading && previewUrl && !isImage && !isPdf && (
+              <div className="flex flex-col items-center justify-center gap-4 py-16 text-ink-muted">
+                <FileText className="h-12 w-12" />
+                <p>Preview not available for this file type.</p>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => window.open(previewUrl, '_blank', 'noopener,noreferrer')}
+                >
+                  <Download className="h-3.5 w-3.5" /> Open in new tab
+                </Button>
+              </div>
+            )}
+          </div>
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
+  );
 }
 
 function UploadDocumentDrawer({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
@@ -179,7 +288,10 @@ export function DocumentsPage() {
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState(FILTER_ALL);
   const [entityFilter, setEntityFilter] = useState(FILTER_ALL);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<NexusDocument | null>(null);
+  const [previewTarget, setPreviewTarget] = useState<NexusDocument | null>(null);
   const debouncedSearch = useDebounce(search, 350);
   const uploadDrawer = useDisclosure(false);
   const deleteDocument = useDeleteDocument();
@@ -190,6 +302,8 @@ export function DocumentsPage() {
     search: debouncedSearch || undefined,
     documentType: typeFilter === FILTER_ALL ? undefined : typeFilter,
     entityType: entityFilter === FILTER_ALL ? undefined : entityFilter,
+    dateFrom: dateFrom || undefined,
+    dateTo: dateTo || undefined,
   });
 
   async function handleDownload(document: NexusDocument) {
@@ -203,6 +317,10 @@ export function DocumentsPage() {
         variant: 'danger',
       });
     }
+  }
+
+  function handlePreview(document: NexusDocument) {
+    setPreviewTarget(document);
   }
 
   async function handleDelete() {
@@ -339,6 +457,28 @@ export function DocumentsPage() {
             ))}
           </SelectContent>
         </Select>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-ink-muted">From</span>
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => {
+              setDateFrom(e.target.value);
+              setPage(1);
+            }}
+            className="h-9 rounded-md border border-border bg-canvas px-2 text-sm text-ink"
+          />
+          <span className="text-xs text-ink-muted">To</span>
+          <input
+            type="date"
+            value={dateTo}
+            onChange={(e) => {
+              setDateTo(e.target.value);
+              setPage(1);
+            }}
+            className="h-9 rounded-md border border-border bg-canvas px-2 text-sm text-ink"
+          />
+        </div>
       </div>
 
       <DataTable
@@ -366,8 +506,11 @@ export function DocumentsPage() {
         }
         rowActions={(row) => (
           <div className="flex items-center gap-1.5">
+            <Button variant="secondary" size="sm" onClick={() => handlePreview(row)}>
+              <Eye className="h-3.5 w-3.5" /> Preview
+            </Button>
             <Button variant="secondary" size="sm" onClick={() => handleDownload(row)}>
-              <Download className="h-3.5 w-3.5" /> View
+              <Download className="h-3.5 w-3.5" /> Open
             </Button>
             <Button variant="ghost" size="sm" onClick={() => setDeleteTarget(row)}>
               <Trash2 className="h-3.5 w-3.5 text-danger" />
@@ -387,6 +530,12 @@ export function DocumentsPage() {
         destructive
         loading={deleteDocument.isPending}
         onConfirm={handleDelete}
+      />
+
+      <DocumentPreviewModal
+        document={previewTarget}
+        open={!!previewTarget}
+        onOpenChange={(open) => !open && setPreviewTarget(null)}
       />
     </div>
   );

@@ -45,6 +45,21 @@ export const documentsController = {
     }
   },
 
+  async listByEntity(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.user) throw new UnauthorizedError();
+      const { entityType, entityId } = req.params as { entityType: string; entityId: string };
+      const normalizedType = entityType.toUpperCase();
+      if (normalizedType !== 'LEAD' && normalizedType !== 'PROJECT') {
+        throw new ValidationError('entityType must be LEAD or PROJECT');
+      }
+      const docs = await documentsService.listForEntity(normalizedType as 'LEAD' | 'PROJECT', entityId, req.user);
+      return ok(res, docs);
+    } catch (err) {
+      next(err);
+    }
+  },
+
   async listAll(req: Request, res: Response, next: NextFunction) {
     try {
       const pagination = parsePagination(req);
@@ -54,12 +69,18 @@ export const documentsController = {
         typeof req.query.entityType === 'string' && req.query.entityType
           ? req.query.entityType.toUpperCase()
           : undefined;
+      const dateFrom =
+        typeof req.query.dateFrom === 'string' && req.query.dateFrom ? req.query.dateFrom : undefined;
+      const dateTo =
+        typeof req.query.dateTo === 'string' && req.query.dateTo ? req.query.dateTo : undefined;
       const { items, total } = await documentsService.listAll({
         skip: pagination.skip,
         take: pagination.take,
         search: pagination.search,
         documentType,
         entityType,
+        dateFrom,
+        dateTo,
       });
       return paginated(res, items, { page: pagination.page, pageSize: pagination.pageSize, total });
     } catch (err) {

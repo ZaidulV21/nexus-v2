@@ -7,6 +7,8 @@ export interface DocumentListParams {
   search?: string;
   documentType?: string;
   entityType?: string;
+  dateFrom?: string;
+  dateTo?: string;
 }
 
 export interface UploadDocumentInput {
@@ -28,10 +30,12 @@ export const documentService = {
       search: params.search,
       documentType: params.documentType,
       entityType: params.entityType,
+      dateFrom: params.dateFrom,
+      dateTo: params.dateTo,
     }),
 
   listForEntity: (entityType: 'LEAD' | 'PROJECT', entityId: string) =>
-    api.get<NexusDocument[]>('/documents', { entityType, entityId }),
+    api.get<NexusDocument[]>(`/documents/entity/${entityType}/${entityId}`),
 
   upload: (input: UploadDocumentInput) => {
     const formData = new FormData();

@@ -89,6 +89,8 @@ export const documentsService = {
     search?: string;
     documentType?: string;
     entityType?: string;
+    dateFrom?: string;
+    dateTo?: string;
   }) {
     return documentsRepository.listAll(params);
   },
