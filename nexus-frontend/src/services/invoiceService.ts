@@ -53,4 +53,8 @@ export const invoiceService = {
 
   recordPayment: (invoiceId: string, input: RecordPaymentInput) =>
     api.post<Payment>(`/invoices/${invoiceId}/payments`, input),
+
+  getPdfUrl: (id: string) => api.get<{ pdfUrl: string }>(`/pdf/INVOICE/${id}`),
+  regeneratePdf: (id: string) =>
+    api.post<{ pdfUrl: string; generatedAt: string; fileSize: number }>(`/pdf/INVOICE/${id}/regenerate`),
 };

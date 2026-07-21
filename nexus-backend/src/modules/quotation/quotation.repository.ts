@@ -78,7 +78,13 @@ export const quotationRepository = {
       include: {
         lead: { select: { ...LEAD_SUMMARY_SELECT, client: { select: CLIENT_SUMMARY_SELECT } } },
         client: { select: CLIENT_SUMMARY_SELECT },
-        versions: { include: { items: true, approvals: true }, orderBy: { versionNumber: 'desc' } },
+        versions: {
+          include: {
+            items: true,
+            approvals: true,
+          },
+          orderBy: { versionNumber: 'desc' },
+        },
       },
     });
   },
@@ -97,7 +103,10 @@ export const quotationRepository = {
         include: {
           lead: { select: LEAD_SUMMARY_SELECT },
           client: { select: CLIENT_SUMMARY_SELECT },
-          versions: { where: { isActive: true } },
+          versions: {
+            where: { isActive: true },
+            include: { items: true },
+          },
         },
       }),
       prisma.quotation.count({ where }),
@@ -133,7 +142,10 @@ export const quotationRepository = {
         orderBy: { [pagination.sortBy || 'createdAt']: pagination.sortOrder },
         include: {
           lead: { select: { id: true, leadNumber: true } },
-          versions: { where: { isActive: true }, include: { items: true } },
+          versions: {
+            where: { isActive: true },
+            include: { items: true },
+          },
         },
       }),
       prisma.quotation.count({ where }),
@@ -185,7 +197,10 @@ export const quotationVersionRepository = {
   },
 
   findById(id: string) {
-    return prisma.quotationVersion.findFirst({ where: { id }, include: { items: true, quotation: true } });
+    return prisma.quotationVersion.findFirst({
+      where: { id },
+      include: { items: true, quotation: true },
+    });
   },
 
   createApproval(

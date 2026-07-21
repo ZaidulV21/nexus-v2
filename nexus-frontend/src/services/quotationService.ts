@@ -65,4 +65,7 @@ export const quotationService = {
   reject: (id: string, input: RejectQuotationInput) => api.post<Quotation>(`/quotations/${id}/reject`, input),
   requestRevision: (id: string, input: RequestQuotationRevisionInput) =>
     api.post<Quotation>(`/quotations/${id}/request-revision`, input),
+
+  getPdfUrl: (id: string) => api.get<{ pdfUrl: string }>(`/pdf/QUOTATION/${id}`),
+  regeneratePdf: (id: string) => api.post<{ pdfUrl: string; generatedAt: string; fileSize: number }>(`/pdf/QUOTATION/${id}/regenerate`),
 };

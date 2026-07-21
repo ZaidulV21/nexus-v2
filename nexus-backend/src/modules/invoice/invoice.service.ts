@@ -128,6 +128,10 @@ export const invoiceService = {
       payload: { invoiceNumber: invoice.invoiceNumber, grandTotal, clientId: input.clientId },
     });
 
+    import('../pdf/pdf.service').then(({ pdfService }) => {
+      pdfService.generate('INVOICE', invoice.id, actorUserId).catch(() => {});
+    });
+
     return this.getById(invoice.id);
   },
 
@@ -169,6 +173,10 @@ export const invoiceService = {
       },
     });
 
+    import('../pdf/pdf.service').then(({ pdfService }) => {
+      pdfService.generate('INVOICE', id, actorUserId).catch(() => {});
+    });
+
     return this.getById(id);
   },
 
@@ -203,6 +211,10 @@ export const invoiceService = {
       entityId: id,
       recipient: 'client-on-file',
       payload: { invoiceNumber: invoice.invoiceNumber, reason: input.reason },
+    });
+
+    import('../pdf/pdf.service').then(({ pdfService }) => {
+      pdfService.generate('INVOICE', id, actorUserId).catch(() => {});
     });
 
     return cancelled;
@@ -253,6 +265,10 @@ export const invoiceService = {
       entityId: invoiceId,
       recipient: 'client-on-file',
       payload: { amount: input.amount, invoiceNumber: invoice.invoiceNumber, clientId: invoice.clientId },
+    });
+
+    import('../pdf/pdf.service').then(({ pdfService }) => {
+      pdfService.generate('INVOICE', invoiceId, actorUserId).catch(() => {});
     });
 
     return payment;

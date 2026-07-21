@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { CheckCircle2, CornerDownLeft, CornerDownRight, History } from 'lucide-react';
+import { CheckCircle2, CornerDownLeft, CornerDownRight, Download, Eye, History, Loader2, Printer, RotateCcw } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
@@ -13,59 +13,12 @@ import { StatusBadge, Badge } from '@/components/ui/StatusBadge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/Tabs';
 import { Textarea } from '@/components/ui/Textarea';
 import { EntityTimeline } from '@/components/common/EntityTimeline';
-import { useClientQuotation, useAcceptQuotation, useRejectQuotation, useRequestQuotationRevision } from '@/queries/useQuotations';
+import { useClientQuotation, useAcceptQuotation, useRejectQuotation, useRequestQuotationRevision, useQuotationPdfUrl } from '@/queries/useQuotations';
 import { useDisclosure } from '@/hooks/useDisclosure';
 import { useToast } from '@/hooks/useToast';
 import { ApiError } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { ROUTES } from '@/routes/routes';
-import type { QuotationVersion } from '@/types';
-
-function PricingBreakdown({ version }: { version: QuotationVersion }) {
-  const rows: Array<{ label: string; value: string; emphasize?: boolean }> = [
-    { label: 'Subtotal', value: formatCurrency(version.subtotal) },
-    { label: 'Discount', value: `- ${formatCurrency(version.discount)}` },
-    { label: 'GST', value: formatCurrency(version.gstAmount) },
-    { label: 'Transportation', value: formatCurrency(version.transportation) },
-    { label: 'Installation', value: formatCurrency(version.installation) },
-    { label: 'Grand total', value: formatCurrency(version.grandTotal), emphasize: true },
-  ];
-
-  return (
-    <dl className="divide-y divide-border rounded-lg border border-border">
-      {rows.map((row) => (
-        <div key={row.label} className="flex items-center justify-between px-4 py-2.5">
-          <dt className={row.emphasize ? 'text-sm font-medium text-ink' : 'text-sm text-ink-muted'}>{row.label}</dt>
-          <dd className={row.emphasize ? 'font-mono text-base font-semibold text-ink' : 'font-mono text-sm text-ink'}>
-            {row.value}
-          </dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
-
-function VersionItems({ version }: { version: QuotationVersion }) {
-  if (version.items.length === 0) {
-    return <EmptyState title="No quotation items" description="Quotation line items will appear here." />;
-  }
-  return (
-    <ul className="divide-y divide-border rounded-lg border border-border">
-      {version.items.map((item) => (
-        <li key={item.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-medium text-ink">{item.description}</p>
-            <p className="text-xs text-ink-faint">
-              {Number(item.quantity)} × {formatCurrency(item.unitPrice)} · Tax {Number(item.taxRate)}% (
-              {formatCurrency(item.taxAmount)})
-            </p>
-          </div>
-          <span className="text-sm font-medium text-ink">{formatCurrency(item.lineTotal)}</span>
-        </li>
-      ))}
-    </ul>
-  );
-}
 
 function DecisionDialog({
   open,
@@ -130,6 +83,7 @@ export function PortalQuotationDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { data: quotation, isLoading, isError, refetch } = useClientQuotation(id);
+  const { data: pdfData, isLoading: isPdfLoading, isError: isPdfError, refetch: refetchPdf } = useQuotationPdfUrl(id);
   const acceptQuotation = useAcceptQuotation(id ?? '');
   const rejectQuotation = useRejectQuotation(id ?? '');
   const requestRevision = useRequestQuotationRevision(id ?? '');
@@ -137,10 +91,13 @@ export function PortalQuotationDetailPage() {
   const revisionDialog = useDisclosure(false);
   const { toast } = useToast();
 
-  const activeVersion = useMemo(
-    () => quotation?.versions.find((version) => version.id === quotation.activeVersionId) ?? quotation?.versions[0],
-    [quotation]
-  );
+  const pdfUrl = pdfData?.pdfUrl ?? quotation?.pdfUrl ?? null;
+
+  const handlePrintPdf = useCallback(() => {
+    if (pdfUrl) {
+      window.open(pdfUrl, '_blank');
+    }
+  }, [pdfUrl]);
 
   if (isLoading) {
     return (
@@ -159,9 +116,6 @@ export function PortalQuotationDetailPage() {
     try {
       const result = await acceptQuotation.mutateAsync();
       toast({ title: 'Quotation accepted', variant: 'success' });
-      // Redirect to the newly created project; if the payload ever lacks
-      // one, stay here - the cache was already updated with the ACCEPTED
-      // quotation, so the page reflects the new state either way.
       if (result.project?.id) {
         navigate(ROUTES.portal.projectDetail(result.project.id));
       }
@@ -191,6 +145,20 @@ export function PortalQuotationDetailPage() {
             <Button size="sm" onClick={handleAccept} disabled={quotation.status !== 'SENT'} loading={acceptQuotation.isPending}>
               <CheckCircle2 className="h-3.5 w-3.5" /> Accept
             </Button>
+            {pdfUrl && (
+              <>
+                <Button asChild variant="secondary" size="sm">
+                  <a href={pdfUrl} target="_blank" rel="noreferrer">
+                    <Eye className="h-3.5 w-3.5" /> Preview PDF
+                  </a>
+                </Button>
+                <Button asChild variant="secondary" size="sm">
+                  <a href={pdfUrl} download>
+                    <Download className="h-3.5 w-3.5" /> Download PDF
+                  </a>
+                </Button>
+              </>
+            )}
           </div>
         }
       />
@@ -205,45 +173,47 @@ export function PortalQuotationDetailPage() {
             </TabsList>
 
             <TabsContent value="overview" className="pt-5">
-              <div className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-3">
-                  <div className="rounded-lg border border-border bg-canvas p-4">
-                    <p className="text-xs uppercase tracking-wide text-ink-faint">Status</p>
-                    <p className="mt-1 font-medium text-ink"><StatusBadge status={quotation.status} /></p>
-                  </div>
-                  <div className="rounded-lg border border-border bg-canvas p-4">
-                    <p className="text-xs uppercase tracking-wide text-ink-faint">Active version</p>
-                    <p className="mt-1 font-medium text-ink">{activeVersion ? `v${activeVersion.versionNumber}` : '-'}</p>
-                  </div>
-                  <div className="rounded-lg border border-border bg-canvas p-4">
-                    <p className="text-xs uppercase tracking-wide text-ink-faint">Created</p>
-                    <p className="mt-1 font-medium text-ink">{formatDate(quotation.createdAt)}</p>
-                  </div>
+              {isPdfLoading ? (
+                <div className="flex items-center justify-center py-20">
+                  <Loader2 className="h-6 w-6 animate-spin text-ink-muted" />
+                  <span className="ml-2 text-sm text-ink-muted">Loading quotation PDF...</span>
                 </div>
-
-                {activeVersion ? (
-                  <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Line items (v{activeVersion.versionNumber})</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <VersionItems version={activeVersion} />
-                      </CardContent>
-                    </Card>
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Pricing</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <PricingBreakdown version={activeVersion} />
-                      </CardContent>
-                    </Card>
+              ) : isPdfError || !pdfUrl ? (
+                <EmptyState
+                  icon={RotateCcw}
+                  title="PDF not available"
+                  description="The quotation PDF could not be loaded. This may be because it has not been generated yet."
+                  actionLabel="Retry"
+                  onAction={() => refetchPdf()}
+                />
+              ) : (
+                <div className="rounded-lg border border-border overflow-hidden">
+                  <div className="flex items-center justify-between border-b border-border bg-surface px-4 py-2">
+                    <p className="text-sm font-medium text-ink">Quotation Document</p>
+                    <div className="flex items-center gap-2">
+                      <Button asChild variant="secondary" size="sm">
+                        <a href={pdfUrl} target="_blank" rel="noreferrer">
+                          <Eye className="h-3.5 w-3.5" /> Open
+                        </a>
+                      </Button>
+                      <Button asChild variant="secondary" size="sm">
+                        <a href={pdfUrl} download>
+                          <Download className="h-3.5 w-3.5" /> Download
+                        </a>
+                      </Button>
+                      <Button variant="secondary" size="sm" onClick={handlePrintPdf}>
+                        <Printer className="h-3.5 w-3.5" /> Print
+                      </Button>
+                    </div>
                   </div>
-                ) : (
-                  <EmptyState title="No active version" description="A quotation version will appear here once the business creates one." />
-                )}
-              </div>
+                  <iframe
+                    src={pdfUrl}
+                    title={`Quotation ${quotation.quotationNumber}`}
+                    className="w-full border-0"
+                    style={{ height: 'calc(100vh - 280px)', minHeight: '500px' }}
+                  />
+                </div>
+              )}
             </TabsContent>
 
             <TabsContent value="versions" className="pt-5">
@@ -266,9 +236,22 @@ export function PortalQuotationDetailPage() {
                           </div>
                         </div>
                       </CardHeader>
-                      <CardContent className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
-                        <VersionItems version={version} />
-                        <PricingBreakdown version={version} />
+                      <CardContent>
+                        <div className="flex flex-wrap gap-4 text-sm text-ink-muted">
+                          <span>Subtotal {formatCurrency(version.subtotal)}</span>
+                          <span>Discount {formatCurrency(version.discount)}</span>
+                          <span>GST {formatCurrency(version.gstAmount)}</span>
+                          <span>Grand total {formatCurrency(version.grandTotal)}</span>
+                        </div>
+                        {version.approvals && version.approvals.length > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {version.approvals.map((approval) => (
+                              <span key={approval.id} className="rounded border border-border px-2 py-0.5 text-xs text-ink-muted">
+                                {approval.approvalMethod} · {formatDate(approval.approvedAt)}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </CardContent>
                     </Card>
                   ))}

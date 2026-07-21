@@ -93,3 +93,22 @@ export function useRecordPayment(invoiceId: string, projectId?: string) {
     },
   });
 }
+
+export function useInvoicePdfUrl(invoiceId: string | undefined) {
+  return useQuery({
+    queryKey: [...queryKeys.invoices.detail(invoiceId ?? ''), 'pdf'] as const,
+    queryFn: () => invoiceService.getPdfUrl(invoiceId as string),
+    enabled: !!invoiceId,
+  });
+}
+
+export function useRegenerateInvoicePdf() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (invoiceId: string) => invoiceService.regeneratePdf(invoiceId),
+    onSuccess: (_result, invoiceId) => {
+      queryClient.invalidateQueries({ queryKey: [...queryKeys.invoices.detail(invoiceId), 'pdf'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.timeline('INVOICE', invoiceId) });
+    },
+  });
+}

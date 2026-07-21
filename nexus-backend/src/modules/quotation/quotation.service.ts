@@ -178,6 +178,10 @@ export const quotationService = {
       actorUserId,
     });
 
+    import('../pdf/pdf.service').then(({ pdfService }) => {
+      pdfService.generate('QUOTATION', result.quotation.id, actorUserId).catch(() => {});
+    });
+
     return quotationRepository.findById(result.quotation.id);
   },
 
@@ -242,6 +246,10 @@ export const quotationService = {
       actorUserId,
     });
 
+    import('../pdf/pdf.service').then(({ pdfService }) => {
+      pdfService.generate('QUOTATION', quotationId, actorUserId).catch(() => {});
+    });
+
     return quotationRepository.findById(quotationId);
   },
 
@@ -267,6 +275,10 @@ export const quotationService = {
       description: `Quotation approved via ${input.approvalMethod}`,
       actorUserId,
       metadata: { approvalMethod: input.approvalMethod, approvedByUserId: actorUserId },
+    });
+
+    import('../pdf/pdf.service').then(({ pdfService }) => {
+      pdfService.generate('QUOTATION', version.quotationId, actorUserId).catch(() => {});
     });
 
     return quotationRepository.findById(version.quotationId);
@@ -322,6 +334,10 @@ export const quotationService = {
       payload: { quotationId, quotationNumber: quotation.quotationNumber, resend, clientId: quotation.clientId },
     });
 
+    import('../pdf/pdf.service').then(({ pdfService }) => {
+      pdfService.generate('QUOTATION', quotationId, actorUserId).catch(() => {});
+    });
+
     return quotationRepository.findById(quotationId);
   },
 
@@ -374,6 +390,10 @@ export const quotationService = {
       payload: { quotationId, quotationNumber: quotation.quotationNumber, reason },
     });
 
+    import('../pdf/pdf.service').then(({ pdfService }) => {
+      pdfService.generate('QUOTATION', quotationId, actorUserId).catch(() => {});
+    });
+
     return quotationRepository.findById(quotationId);
   },
 
@@ -384,7 +404,7 @@ export const quotationService = {
       throw new ValidationError('Only sent quotations can be accepted');
     }
 
-    const quotationClientId = quotation.clientId ?? quotation.lead?.client?.id;
+    const quotationClientId = (quotation as any).clientId ?? (quotation as any).lead?.client?.id;
     if (!quotationClientId || quotationClientId !== clientId) {
       throw new ValidationError('Quotation does not belong to this Client');
     }
@@ -447,6 +467,10 @@ export const quotationService = {
       payload: { quotationId, projectId: project.id, clientId: quotationClientId },
     });
 
+    import('../pdf/pdf.service').then(({ pdfService }) => {
+      pdfService.generate('QUOTATION', quotationId, clientId).catch(() => {});
+    });
+
     return { quotation: await quotationRepository.findById(quotationId), project };
   },
 
@@ -454,7 +478,7 @@ export const quotationService = {
     const quotation = await quotationRepository.findById(quotationId);
     if (!quotation) throw new NotFoundError('Quotation not found');
 
-    const quotationClientId = quotation.clientId ?? quotation.lead?.client?.id;
+    const quotationClientId = (quotation as any).clientId ?? (quotation as any).lead?.client?.id;
     if (!quotationClientId || quotationClientId !== clientId) {
       throw new ValidationError('Quotation does not belong to this Client');
     }
@@ -501,6 +525,10 @@ export const quotationService = {
       payload: { quotationId, reason },
     });
 
+    import('../pdf/pdf.service').then(({ pdfService }) => {
+      pdfService.generate('QUOTATION', quotationId, clientId).catch(() => {});
+    });
+
     return quotationRepository.findById(quotationId);
   },
 
@@ -521,7 +549,7 @@ export const quotationService = {
   async getForClient(id: string, clientId: string) {
     const quotation = await quotationRepository.findById(id);
     if (!quotation) throw new NotFoundError('Quotation not found');
-    const quotationClientId = quotation.clientId ?? quotation.lead?.client?.id;
+    const quotationClientId = (quotation as any).clientId ?? (quotation as any).lead?.client?.id;
     if (!quotationClientId || quotationClientId !== clientId) {
       throw new ValidationError('Quotation does not belong to this Client');
     }

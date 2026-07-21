@@ -287,6 +287,83 @@ There are no unfinished tasks for the core single-workflow implementation. All b
 - **Email channel**: Reads company branding (name, logo, sender, address) for future template use
 - **Downstream consumers**: `getCompanyBranding()` + `clearBrandingCache()` available for PDF generation, invoice branding, quotation headers, etc.
 
+### ✅ PDF Generation Module — Professional Branded Documents
+
+**Backend:**
+- `pdf.types.ts` — Types: `PdfDocumentType`, `CompanyBrandingData`, `PdfLineItem` (with `serviceName`), `PdfRecipient` (with `gstin`), `PdfQuotationData` (with `validUntil`, `notes`, `termsAndConditions`, `paymentTerms`), `PdfInvoiceData` (with `displayStatus`), `GeneratePdfInput`, `PdfGenerationResult`
+- `templates/base.template.ts` — Reusable `BASE_TEMPLATE` with `createDocument()`, `drawHeader()`, `drawDocumentTitle()`, `drawRecipientBlock()`, `drawTable()`, `drawTotals()`, `drawBankDetails()`, `drawSignatureAndStamp()`, `drawFooter()`, `drawAmountInWords()`, `drawWatermark()` (diagonal rotated watermark for DRAFT/REJECTED statuses), `formatCurrency()`, `formatDate()`; page numbering via `bufferedPageRange()`
+- `templates/quotation.template.ts` — Enhanced quotation PDF: status watermark overlay (DRAFT/REJECTED), Valid Until date in document info, client GSTIN in recipient block, 6-column table (Description, Service, Qty, Rate, Tax %, Amount), Notes/Terms & Conditions/Payment Terms sections, full GST breakdown in summary
+- `templates/invoice.template.ts` — Enhanced invoice PDF: Bill To recipient with GSTIN, HSN/SAC column when present, payment summary (subtotal/GST/total/paid/outstanding), bank details, signature/stamp, status watermarks (CANCELLED/PAID/PARTIALLY PAID)
+- `pdf.service.ts` — `generate()`, `regenerateIfNeeded()`, `getOrCreate()`; fetches company branding, downloads images, generates PDF buffer, uploads via storage, stores `pdfUrl`/`pdfGeneratedAt`, records timeline + audit entries; `fetchQuotationData()` includes `validUntil`, `notes`, `termsAndConditions`, `paymentTerms`, client `gstin`, item `serviceName`/`hsnSacCode`; `fetchInvoiceData()` includes `displayStatus`, client `gstin`
+- `pdf.controller.ts` — `generate` (POST body), `download` (GET params + `PDF_DOWNLOADED` timeline event), `regenerate` (POST params)
+- `pdf.routes.ts` — `POST /generate`, `GET /:documentType/:documentId`, `POST /:documentType/:documentId/regenerate`
+- `prisma/schema.prisma` — Added `pdfUrl/pdfGeneratedAt` to Quotation+Invoice; `validUntil/notes/termsAndConditions/paymentTerms` to Quotation; `hsnSacCode/serviceName` to QuotationItem; `gstin` to Client
+- `prisma/migrations/20260721000000_add_pdf_fields/migration.sql` — DDL for pdfUrl/pdfGeneratedAt
+- `prisma/migrations/20260721000001_add_pdf_enhancement_fields/migration.sql` — DDL for validUntil, notes, termsAndConditions, paymentTerms, gstin, serviceName, hsnSacCode
+- Fire-and-forget integration in `quotation.service.ts` — after `create`, `revise`, `approve`, `send`, `requestRevision`, `accept`, `reject`
+- Fire-and-forget integration in `invoice.service.ts` — after `create`, `send`, `cancel`, `recordPayment`
+- Routes mounted in `app.ts` as `app.use('/api/pdf', pdfRoutes)`
+- `pdf.service.test.ts` — 32 tests (formatCurrency, formatDate, BASE_TEMPLATE, renderQuotationPdf including watermark/notes/terms, renderInvoicePdf including watermark/GSTIN/branding/items, validation)
+
+**Frontend:**
+- `types/index.ts` — Added `pdfUrl`, `pdfGeneratedAt`, `validUntil`, `notes`, `termsAndConditions`, `paymentTerms` to `Quotation` type
+- `services/quotationService.ts` — Added `getPdfUrl()` and `regeneratePdf()` API methods
+- `queries/useQuotations.ts` — Added `useQuotationPdfUrl()` query hook and `useRegenerateQuotationPdf()` mutation hook
+- `pages/quotations/QuotationDetailPage.tsx` — Added Preview PDF, Download PDF, and Regenerate PDF buttons in page header actions
+
+**Key Design Decisions:**
+- PDF generation is fire-and-forget (`.catch(() => {})`) — failures never block main operations
+- Uses built-in Node v24 `fetch()` for downloading company branding images
+- Dynamic imports (`import('../pdf/pdf.service').then(...)`) used to avoid circular dependencies between quotation/invoice services and the pdf service
+- `PDFDocument` type from `@types/pdfkit` requires `type PDFDocumentInstance = InstanceType<typeof PDFDocument>` workaround
+- `valign: 'top'` removed from `doc.image()` calls (unsupported option)
+- `tsconfig.json` updated: `"module": "commonjs"`, `"moduleResolution": "node"` — aligns with CJS runtime, allows no `.js` extensions in dynamic imports, fixes `ts-node-dev` compatibility
+- `jest.config.js` `moduleNameMapper` for `.js` extension resolution retained as safety net
+- Watermark uses `doc.save()`/`doc.restore()` with `doc.rotate()` for proper PDF graphics state management
+- Frontend PDF preview/download uses same Pattern A as invoices: direct `<a href={pdfUrl} target="_blank">` links
+- Prisma `findFirst` with `include` requires `as any` casts on related fields due to type inference issues after schema changes
+
+### ✅ Frontend PDF Integration (Quotation + Invoice Detail)
+
+**Quotation Detail Page (Admin):**
+- **Preview PDF**: Opens PDF in new browser tab (`target="_blank"`)
+- **Download PDF**: Downloads PDF via `<a download>` attribute
+- **Regenerate PDF**: Calls `POST /api/pdf/QUOTATION/:id/regenerate`, invalidates query cache, shows toast
+
+**Invoice Detail Page (Admin):**
+- **Preview PDF**: Opens PDF in new browser tab (`target="_blank"`)
+- **Download PDF**: Downloads PDF via `<a download>` attribute
+- **Regenerate PDF**: Calls `POST /api/pdf/INVOICE/:id/regenerate`, invalidates query cache, shows toast
+- Both pages use `useInvoicePdfUrl()` / `useQuotationPdfUrl()` hooks to fetch the latest PDF URL
+- PDF URL resolved from query cache → entity record (`pdfUrl` field) as fallback
+
+### ✅ Client Portal Quotation PDF — Single Source of Truth (v2)
+
+**Frontend:**
+- `pages/portal/PortalQuotationDetailPage.tsx` — REWRITTEN: PDF is the ONLY quotation view (no HTML fallback)
+  - Fetches PDF URL via `useQuotationPdfUrl(id)` (same hook as admin detail page — byte-for-byte identical PDF)
+  - Resolves `pdfUrl` from query cache → entity record `pdfUrl` field as fallback
+  - When `pdfUrl` exists: renders embedded `<iframe>` with viewport-filling height (`calc(100vh - 280px)`, min 500px) and toolbar (Open, Download, Print buttons)
+  - When no `pdfUrl` or PDF fails to load: shows error state with Retry button (no HTML fallback)
+  - Removed all duplicate HTML quotation layout (PricingBreakdown, VersionItems components removed)
+  - Preserves all acceptance workflow: Approve, Reject, Request Revision buttons
+  - Preserves Version History tab (version metadata only: number, date, status, approvals) and Timeline tab
+  - Header actions: Status badge + workflow buttons + PDF actions (Preview PDF, Download PDF) when available
+
+**Backend (PDF generation fix):**
+- `templates/base.template.ts` — `drawFooter()` rewritten: explicitly iterates all pages with `switchToPage()`, draws footer line and company info only on the last page, page numbers on all pages. Prevents implicit page creation from stale `doc.y` state after watermark/content operations.
+
+**Key Design Decisions:**
+- PDF is the single source of truth — client sees exact same document as admin (header, footer, branding, line items, totals, terms, signature, stamp, watermarks)
+- No duplicate rendering logic — uses the admin-generated PDF directly via iframe
+- No backend endpoint changes needed — `GET /api/pdf/QUOTATION/:id` already accessible to authenticated clients
+- Admin PDF == Client PDF — both use `useQuotationPdfUrl(id)` hook which calls the same `GET /api/pdf/QUOTATION/:id` endpoint
+- Error state with Retry instead of silent HTML fallback — ensures client always sees the authoritative PDF
+- iframe height uses viewport-relative sizing to prevent blank space artifacts from fixed-height containers
+- No new hooks or services needed — reuses existing `useQuotationPdfUrl` hook
+- HTML fallback for quotations generated before PDF system was added
+- Print uses `window.open(pdfUrl)` to leverage browser's native PDF viewer print dialog
+
 ### Optional Future Enhancements (Not Part of Current Scope)
 - Update PRD Section 10 to clarify single workflow
 - Update Technical Blueprint documentation
@@ -338,11 +415,34 @@ There are no unfinished tasks for the core single-workflow implementation. All b
 36. `nexus-backend/src/modules/search/search.service.ts` — Full rewrite with type filter, includes
 37. `nexus-backend/src/modules/search/search.controller.ts` — type query parameter
 38. `nexus-backend/src/modules/search/tests/search.service.test.ts` — 10 new search tests
-39. `nexus-backend/src/app.ts` — Notification + company routes mounted
+39. `nexus-backend/src/app.ts` — Notification + company + PDF routes mounted
+40. `nexus-backend/src/modules/pdf/pdf.types.ts` — PDF type definitions (enhanced: serviceName, gstin, validUntil, notes, termsAndConditions, paymentTerms)
+41. `nexus-backend/src/modules/pdf/templates/base.template.ts` — Reusable PDF layout (enhanced: drawWatermark)
+42. `nexus-backend/src/modules/pdf/templates/quotation.template.ts` — Quotation PDF (enhanced: watermark, expanded table, notes/terms/payment, GST breakdown)
+43. `nexus-backend/src/modules/pdf/templates/invoice.template.ts` — Invoice PDF template (enhanced: Bill To with GSTIN, HSN/SAC column, payment summary, status watermarks)
+44. `nexus-backend/src/modules/pdf/pdf.service.ts` — PDF generation + upload + timeline/audit (enhanced: fetchQuotationData with new fields, fetchInvoiceData with displayStatus/gstin)
+45. `nexus-backend/src/modules/pdf/pdf.controller.ts` — REST endpoints (enhanced: PDF_DOWNLOADED timeline)
+46. `nexus-backend/src/modules/pdf/pdf.routes.ts` — Route definitions
+47. `nexus-backend/src/modules/pdf/tests/pdf.service.test.ts` — 32 tests (enhanced: watermark, notes, terms tests; new: invoice watermark/GSTIN/branding/items tests)
+48. `nexus-backend/prisma/schema.prisma` — Added pdfUrl/pdfGeneratedAt + validUntil/notes/termsAndConditions/paymentTerms + serviceName/hsnSacCode + gstin
+49. `nexus-backend/prisma/migrations/20260721000000_add_pdf_fields/migration.sql` — DDL for pdfUrl/pdfGeneratedAt
+50. `nexus-backend/prisma/migrations/20260721000001_add_pdf_enhancement_fields/migration.sql` — DDL for enhancement fields
+51. `nexus-backend/src/modules/quotation/quotation.service.ts` — Added fire-and-forget PDF calls
+52. `nexus-backend/src/modules/quotation/quotation.repository.ts` — Enhanced findById/list with new Prisma includes
+53. `nexus-backend/src/modules/project/project.service.ts` — Fixed Prisma type casts for quotationVersion
+54. `nexus-backend/src/modules/invoice/invoice.service.ts` — Added fire-and-forget PDF calls
+55. `nexus-backend/jest.config.js` — Added moduleNameMapper for .js extension resolution
+56. `nexus-backend/tsconfig.json` — Changed `module: "commonjs"`, `moduleResolution: "node"` for ts-node-dev compatibility
 
 ### Frontend (26 files)
-40. `nexus-frontend/src/types/index.ts` — Lead archive fields + CompanySetting interface
-41. `nexus-frontend/src/services/leadService.ts` — Archive/restore API
+40. `nexus-frontend/src/types/index.ts` — Lead archive fields + CompanySetting + Quotation PDF fields (pdfUrl, pdfGeneratedAt, validUntil, notes, termsAndConditions, paymentTerms) + Invoice pdfUrl
+41. `nexus-frontend/src/services/quotationService.ts` — Added getPdfUrl() and regeneratePdf()
+42. `nexus-frontend/src/queries/useQuotations.ts` — Added useQuotationPdfUrl() and useRegenerateQuotationPdf()
+43. `nexus-frontend/src/pages/quotations/QuotationDetailPage.tsx` — Added Preview/Download/Regenerate PDF buttons
+44. `nexus-frontend/src/services/invoiceService.ts` — Added getPdfUrl() and regeneratePdf()
+45. `nexus-frontend/src/queries/useInvoices.ts` — Added useInvoicePdfUrl() and useRegenerateInvoicePdf()
+46. `nexus-frontend/src/pages/invoices/InvoiceDetailPage.tsx` — Added Preview/Download/Regenerate PDF buttons
+44. `nexus-frontend/src/services/leadService.ts` — Archive/restore API
 42. `nexus-frontend/src/services/searchService.ts` — search(q, type?) API
 43. `nexus-frontend/src/services/notificationService.ts` — NEW: Notification API
 44. `nexus-frontend/src/services/companyService.ts` — NEW: Company settings API
@@ -370,8 +470,10 @@ There are no unfinished tasks for the core single-workflow implementation. All b
 68. `nexus-frontend/src/components/layout/Sidebar.tsx` — Notifications nav item
 63. `nexus-frontend/src/app/PortalLayout.tsx` — Bell icon + Notifications nav
 69. `nexus-frontend/src/app/PortalLayout.tsx` — Bell icon + Notifications nav
-70. `nexus-frontend/src/routes/routes.ts` — Notification + company routes
-71. `nexus-frontend/src/App.tsx` — Notification + company routes
+70. `nexus-frontend/src/pages/portal/PortalQuotationDetailPage.tsx` — REWRITTEN: PDF-only view, no HTML fallback, error state with Retry, Download/Open/Print, workflow preserved
+71. `nexus-backend/src/modules/pdf/templates/base.template.ts` — Fixed drawFooter to iterate all pages with explicit switchToPage
+72. `nexus-frontend/src/routes/routes.ts` — Notification + company routes
+73. `nexus-frontend/src/App.tsx` — Notification + company routes
 
 ### Documentation (4 files)
 72. `IMPLEMENTATION.md`
@@ -382,6 +484,6 @@ There are no unfinished tasks for the core single-workflow implementation. All b
 ---
 
 **STATUS: ✅ IMPLEMENTATION COMPLETE**
-**BACKEND: Build ✓ | 164 Tests ✓**
+**BACKEND: Build ✓ | 195 Tests ✓**
 **FRONTEND: Build ✓ | tsc ✓**
 **ALL WORKFLOW PATHS VERIFIED**

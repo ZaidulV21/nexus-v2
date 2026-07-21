@@ -1,5 +1,5 @@
 import { useParams } from 'react-router-dom';
-import { CheckCircle2, PencilLine, Send } from 'lucide-react';
+import { CheckCircle2, Download, Eye, PencilLine, RefreshCw, Send } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent } from '@/components/ui/Card';
@@ -11,7 +11,7 @@ import { EntityTimeline } from '@/components/common/EntityTimeline';
 import { EntityAuditLog } from '@/components/common/EntityAuditLog';
 import { useDisclosure } from '@/hooks/useDisclosure';
 import { useToast } from '@/hooks/useToast';
-import { useQuotation, useSendQuotation } from '@/queries/useQuotations';
+import { useQuotation, useSendQuotation, useQuotationPdfUrl, useRegenerateQuotationPdf } from '@/queries/useQuotations';
 import { ApiError } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { QuotationFormDrawer } from './components/QuotationFormDrawer';
@@ -20,6 +20,8 @@ import { ApproveQuotationDialog } from './components/ApproveQuotationDialog';
 export function QuotationDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { data: quotation, isLoading, isError, refetch } = useQuotation(id);
+  const { data: pdfData } = useQuotationPdfUrl(id);
+  const regeneratePdf = useRegenerateQuotationPdf();
   const reviseModal = useDisclosure(false);
   const approveModal = useDisclosure(false);
   const sendQuotation = useSendQuotation(id ?? '');
@@ -40,9 +42,6 @@ export function QuotationDetailPage() {
 
   const activeVersion = quotation.versions.find((version) => version.id === quotation.activeVersionId) ?? quotation.versions[0];
 
-  // Business identifiers only - never render raw UUIDs in the UI. Mirrors
-  // the backend's ownership fallback: direct client link, else the client
-  // the quotation's lead was converted into.
   const client = quotation.client ?? quotation.lead?.client ?? null;
   const clientName = client ? client.companyName || client.contactName : null;
   const leadName = quotation.lead ? quotation.lead.companyName || quotation.lead.contactName : null;
@@ -51,6 +50,8 @@ export function QuotationDetailPage() {
     client ? `Client ${client.clientNumber}` : null,
     clientName ?? leadName,
   ].filter(Boolean);
+
+  const pdfUrl = pdfData?.pdfUrl ?? quotation.pdfUrl ?? null;
 
   async function handleSend(resend: boolean) {
     try {
@@ -65,6 +66,20 @@ export function QuotationDetailPage() {
     }
   }
 
+  async function handleRegeneratePdf() {
+    if (!id) return;
+    try {
+      await regeneratePdf.mutateAsync(id);
+      toast({ title: 'PDF regenerated', variant: 'success' });
+    } catch (err) {
+      toast({
+        title: 'Could not regenerate PDF',
+        description: err instanceof ApiError ? err.message : 'Something went wrong.',
+        variant: 'danger',
+      });
+    }
+  }
+
   return (
     <div>
       <PageHeader
@@ -72,6 +87,28 @@ export function QuotationDetailPage() {
         description={headerParts.join(' · ')}
         actions={
           <div className="flex items-center gap-2">
+            {pdfUrl && (
+              <>
+                <Button asChild variant="secondary" size="sm">
+                  <a href={pdfUrl} target="_blank" rel="noreferrer">
+                    <Eye className="h-3.5 w-3.5" /> Preview PDF
+                  </a>
+                </Button>
+                <Button asChild variant="secondary" size="sm">
+                  <a href={pdfUrl} download>
+                    <Download className="h-3.5 w-3.5" /> Download PDF
+                  </a>
+                </Button>
+              </>
+            )}
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleRegeneratePdf}
+              loading={regeneratePdf.isPending}
+            >
+              <RefreshCw className="h-3.5 w-3.5" /> Regenerate PDF
+            </Button>
             <Button variant="secondary" size="sm" onClick={reviseModal.open}>
               <PencilLine className="h-3.5 w-3.5" /> Revise
             </Button>

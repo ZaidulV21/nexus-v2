@@ -150,6 +150,17 @@ REJECTED → DRAFT (Admin revises)
 - Admin revises and resends
 - Cycle repeats until acceptance
 
+### Quotation PDF Generation
+- **Trigger**: Fire-and-forget after `create`, `revise`, `approve`, `send`, `requestRevision`, `accept`, `reject`
+- **Process**: Fetches company branding → Downloads images (logo, QR, signature, stamp) → Generates PDF buffer → Uploads to storage (Cloudinary/localStorage) → Stores `pdfUrl`/`pdfGeneratedAt` on Quotation record
+- **Content**: Header with logo/company details, document info with version/date/status/valid until, recipient block with GSTIN, 6-column services table (Description, Service, Qty, Rate, Tax %, Amount), amount in words, summary with GST breakdown, notes/terms & conditions/payment terms sections, bank details, signature/stamp, footer with page numbers
+- **Watermarks**: DRAFT and REJECTED statuses render diagonal rotated watermark overlay on every page
+- **Timeline**: Records `QUOTATION_PDF_GENERATED` on generation, `QUOTATION_PDF_DOWNLOADED` on download
+- **Error handling**: PDF failures are silently caught (`.catch(() => {})`) — never block the main workflow
+- **Download**: `GET /api/pdf/QUOTATION/:quotationId` — returns PDF URL; records `PDF_DOWNLOADED` timeline event
+- **Regenerate**: `POST /api/pdf/QUOTATION/:quotationId/regenerate` — forces regeneration even if PDF exists
+- **Frontend**: Preview (opens in new tab), Download (via `<a download>`), Regenerate (button with toast feedback) on QuotationDetailPage
+
 ---
 
 ## Project Lifecycle
@@ -185,6 +196,18 @@ REJECTED → DRAFT (Admin revises)
 2. **SENT** - Sent to Client
 3. **PAID** - Payment received
 4. **OVERDUE** - Payment late
+
+### Invoice PDF Generation
+- **Trigger**: Fire-and-forget after `create`, `send`, `cancel`, `recordPayment`
+- **Process**: Same as Quotation PDF — fetches branding → downloads images → generates buffer → uploads → stores URL
+- **Bill To block**: Shows client contact name, company name, GSTIN, email, phone
+- **HSN/SAC codes**: Shown in 6-column table (Description, Qty, HSN/SAC, Rate, Tax %, Amount) when present
+- **Payment summary**: Subtotal, GST, Grand Total, Amount Paid, Outstanding
+- **Status watermarks**: CANCELLED (red), PAID (green), PARTIALLY PAID (amber)
+- **Bank details + signature/stamp**: From company branding
+- **Download**: `GET /api/pdf/INVOICE/:invoiceId` — returns redirect to storage URL
+- **Regenerate**: `POST /api/pdf/INVOICE/:invoiceId/regenerate` — forces regeneration
+- **Frontend**: Preview PDF, Download PDF, Regenerate PDF buttons on InvoiceDetailPage
 
 ---
 
@@ -387,6 +410,7 @@ REJECTED → DRAFT (Admin revises)
 - File uploads via **Cloudinary** (logo, favicon, QR code, signature, stamp) — falls back to local storage when `CLOUDINARY_*` env vars are not set
 - Settings available via `GET /api/company/settings` for all consumers
 - **Branding helper** (`getCompanyBranding()` + `clearBrandingCache()`) for backend consumers (PDF generation, emails, invoices, quotations)
+- **PDF Generation**: `POST /api/pdf/generate`, `GET /api/pdf/:documentType/:documentId`, `POST /api/pdf/:documentType/:documentId/regenerate` — Professional branded PDFs for Quotations and Invoices with company logo, address, GST, bank details, signature, and stamp
 - **Frontend consumers**: Admin sidebar (logo + name), Login page (logo + name), Client portal header (logo + name), Settings page (company profile summary card), Browser favicon (dynamic from settings.faviconUrl)
 - Frontend: Sectioned card layout at `/settings/company` with unsaved changes protection
 

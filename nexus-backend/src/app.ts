@@ -21,6 +21,7 @@ import timelineRoutes from './modules/timeline/timeline.routes';
 import auditRoutes from './modules/audit/audit.routes';
 import notificationRoutes from './modules/notifications/notifications.routes';
 import companyRoutes from './modules/company/company.routes';
+import pdfRoutes from './modules/pdf/pdf.routes';
 
 export function createApp(): Express {
   const app = express();
@@ -49,6 +50,7 @@ export function createApp(): Express {
   app.use('/api/audit-logs', auditRoutes);
   app.use('/api/notifications', notificationRoutes);
   app.use('/api/company', companyRoutes);
+  app.use('/api/pdf', pdfRoutes);
 
   app.use('/uploads', express.static(path.resolve(env.localStoragePath)));
 

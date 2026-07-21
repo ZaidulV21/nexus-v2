@@ -95,6 +95,22 @@ Invoice (projectId) → Project
 - ✅ `prisma/migrations/20260720020000_add_company_settings/`
 - ✅ `company.service.test.ts` — 5 tests (get, get with default, update with timeline/audit, audit before/after, file upload)
 
+#### PDF Generation Module — Professional Branded Documents
+- ✅ `pdf.types.ts` — Types: `PdfDocumentType`, `CompanyBrandingData`, `PdfLineItem` (with `serviceName`), `PdfRecipient` (with `gstin`), `PdfQuotationData` (with `validUntil`, `notes`, `termsAndConditions`, `paymentTerms`), `PdfInvoiceData` (with `displayStatus`), `GeneratePdfInput`, `PdfGenerationResult`
+- ✅ `templates/base.template.ts` — Reusable `BASE_TEMPLATE` with `createDocument()`, `drawHeader()`, `drawDocumentTitle()`, `drawRecipientBlock()`, `drawTable()`, `drawTotals()`, `drawBankDetails()`, `drawSignatureAndStamp()`, `drawFooter()`, `drawAmountInWords()`, `drawWatermark()`, `formatCurrency()`, `formatDate()`; page numbering via `bufferedPageRange()`
+- ✅ `templates/quotation.template.ts` — Enhanced quotation PDF: status watermark (DRAFT/REJECTED), Valid Until date, client GSTIN, 6-column table (Description, Service, Qty, Rate, Tax %, Amount), Notes/Terms & Conditions/Payment Terms sections, GST breakdown in summary
+- ✅ `templates/invoice.template.ts` — Enhanced invoice PDF: Bill To recipient with GSTIN, HSN/SAC column when present, payment summary (subtotal/GST/total/paid/outstanding), bank details, signature/stamp, status watermarks (CANCELLED/PAID/PARTIALLY PAID)
+- ✅ `pdf.service.ts` — `generate()`, `regenerateIfNeeded()`, `getOrCreate()`; fetches company branding, downloads images, generates PDF buffer, uploads via storage provider, stores `pdfUrl`/`pdfGeneratedAt` on document record, records timeline + audit entries; `fetchQuotationData()` includes all new fields; `fetchInvoiceData()` includes `displayStatus`, client `gstin`
+- ✅ `pdf.controller.ts` — `generate` (POST body), `download` (GET params + `PDF_DOWNLOADED` timeline), `regenerate` (POST params)
+- ✅ `pdf.routes.ts` — `POST /generate`, `GET /:documentType/:documentId`, `POST /:documentType/:documentId/regenerate`
+- ✅ `prisma/schema.prisma` — `pdfUrl/pdfGeneratedAt` on Quotation+Invoice; `validUntil/notes/termsAndConditions/paymentTerms` on Quotation; `hsnSacCode/serviceName` on QuotationItem; `gstin` on Client
+- ✅ `prisma/migrations/20260721000000_add_pdf_fields/` — DDL for pdfUrl/pdfGeneratedAt
+- ✅ `prisma/migrations/20260721000001_add_pdf_enhancement_fields/` — DDL for validUntil, notes, termsAndConditions, paymentTerms, gstin, serviceName, hsnSacCode
+- ✅ Fire-and-forget integration in `quotation.service.ts` — after `create`, `revise`, `approve`, `send`, `requestRevision`, `accept`, `reject`
+- ✅ Fire-and-forget integration in `invoice.service.ts` — after `create`, `send`, `cancel`, `recordPayment`
+- ✅ Routes mounted in `app.ts` as `app.use('/api/pdf', pdfRoutes)`
+- ✅ `pdf.service.test.ts` — 32 tests (formatCurrency, formatDate, BASE_TEMPLATE, renderQuotationPdf including watermark/notes/terms, renderInvoicePdf including watermark/GSTIN/branding/items, validation)
+
 #### Client Module - Already Correct
 - ✅ `client.service.ts` - Conversion logic correct
 - ✅ `client.service.test.ts` - All 4 tests passing
@@ -329,6 +345,9 @@ These statuses are NEVER manually set - backend business logic automatically upd
 - ✅ Notifications dropdown shows unread badge with real data
 - ✅ Notifications page shows All/Unread/Read filters with pagination
 - ✅ Portal notifications page with mark-as-read and navigation
+- ✅ Client portal quotation detail renders admin-generated PDF as single source of truth
+- ✅ Client portal quotation detail shows error state with Retry when PDF unavailable (no HTML fallback)
+- ✅ Client portal quotation detail preserves Accept/Reject/Request Revision workflow
 
 ### Integration Tests
 - ✅ End-to-end: Lead → Convert → Quotation → Accept → Project
@@ -345,7 +364,7 @@ These statuses are NEVER manually set - backend business logic automatically upd
 ### Backend
 ```bash
 ✅ npm run build - SUCCESS (0 errors)
-✅ npm test - 164/164 tests passing (19 test suites, ~11s)
+✅ npm test - 195/195 tests passing (20 test suites, ~39s)
 ```
 
 ### Frontend
@@ -431,8 +450,10 @@ These statuses are NEVER manually set - backend business logic automatically upd
 63. ✅ `nexus-frontend/src/components/layout/NotificationPanel.tsx`
 64. ✅ `nexus-frontend/src/components/layout/Sidebar.tsx`
 65. ✅ `nexus-frontend/src/app/PortalLayout.tsx`
-66. ✅ `nexus-frontend/src/routes/routes.ts` — Company settings route
-67. ✅ `nexus-frontend/src/App.tsx` — Company settings route
+66. ✅ `nexus-frontend/src/pages/portal/PortalQuotationDetailPage.tsx` — REWRITTEN: PDF as single source of truth (no HTML fallback), error state with Retry, Download/Open/Print actions, Accept/Reject/Revision workflow preserved
+67. ✅ `nexus-backend/src/modules/pdf/templates/base.template.ts` — Fixed drawFooter to iterate all pages with explicit switchToPage, preventing implicit page creation
+68. ✅ `nexus-frontend/src/routes/routes.ts` — Company settings route
+69. ✅ `nexus-frontend/src/App.tsx` — Company settings route
 
 ---
 

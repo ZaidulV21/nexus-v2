@@ -109,7 +109,7 @@ export const projectService = {
     const quotationVersion = await quotationVersionRepository.findById(input.quotationVersionId);
     if (
       !quotationVersion ||
-      (quotationVersion.quotation.leadId !== input.leadId && quotationVersion.quotation.clientId !== input.clientId)
+      ((quotationVersion as any).quotation.leadId !== input.leadId && (quotationVersion as any).quotation.clientId !== input.clientId)
     ) {
       throw new ValidationError('Quotation version does not belong to this Lead');
     }
@@ -117,7 +117,7 @@ export const projectService = {
       throw new ValidationError('Only the active quotation version can be used to create a Project');
     }
 
-    const quotation = quotationVersion.quotation;
+    const quotation = (quotationVersion as any).quotation;
     // The public project endpoint must never bypass client acceptance. During
     // quotationService.accept the quotation is still SENT until its callback
     // flips it to ACCEPTED inside this same transaction, so that sole

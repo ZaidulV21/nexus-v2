@@ -128,3 +128,22 @@ export function useAcceptQuotation(quotationId: string) {
     },
   });
 }
+
+export function useQuotationPdfUrl(quotationId: string | undefined) {
+  return useQuery({
+    queryKey: [...queryKeys.quotations.detail(quotationId ?? ''), 'pdf'] as const,
+    queryFn: () => quotationService.getPdfUrl(quotationId as string),
+    enabled: !!quotationId,
+  });
+}
+
+export function useRegenerateQuotationPdf() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (quotationId: string) => quotationService.regeneratePdf(quotationId),
+    onSuccess: (_result, quotationId) => {
+      queryClient.invalidateQueries({ queryKey: [...queryKeys.quotations.detail(quotationId), 'pdf'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.timeline('QUOTATION', quotationId) });
+    },
+  });
+}

@@ -250,6 +250,12 @@ export interface Quotation {
   client?: ClientSummary | null;
   status: QuotationStatus;
   activeVersionId?: string | null;
+  validUntil?: string | null;
+  notes?: string | null;
+  termsAndConditions?: string | null;
+  paymentTerms?: string | null;
+  pdfUrl?: string | null;
+  pdfGeneratedAt?: string | null;
   versions: QuotationVersion[];
   createdAt: string;
 }

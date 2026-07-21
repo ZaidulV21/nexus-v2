@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Ban, CreditCard, Download, ExternalLink, Mail, Receipt, RefreshCw } from 'lucide-react';
+import { Ban, CreditCard, Download, Eye, ExternalLink, Mail, Receipt, RefreshCw } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
@@ -16,7 +16,7 @@ import { EntityAuditLog } from '@/components/common/EntityAuditLog';
 import { EntityTimeline } from '@/components/common/EntityTimeline';
 import { useDisclosure } from '@/hooks/useDisclosure';
 import { useToast } from '@/hooks/useToast';
-import { useCancelInvoice, useInvoice, useSendInvoice } from '@/queries/useInvoices';
+import { useCancelInvoice, useInvoice, useInvoicePdfUrl, useRegenerateInvoicePdf, useSendInvoice } from '@/queries/useInvoices';
 import { ApiError } from '@/lib/api';
 import { formatCurrency, formatDateTime } from '@/lib/format';
 import { ROUTES } from '@/routes/routes';
@@ -196,6 +196,8 @@ function CancelInvoiceModal({
 export function InvoiceDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { data: invoice, isLoading, isError, refetch } = useInvoice(id);
+  const { data: pdfData } = useInvoicePdfUrl(id);
+  const regeneratePdf = useRegenerateInvoicePdf();
   const paymentModal = useDisclosure(false);
   const cancelModal = useDisclosure(false);
   const { toast } = useToast();
@@ -214,6 +216,8 @@ export function InvoiceDetailPage() {
     return <ErrorState description="Couldn't load this invoice." onRetry={refetch} />;
   }
 
+  const pdfUrl = pdfData?.pdfUrl ?? invoice.pdfUrl ?? null;
+
   async function handleSend(resend: boolean) {
     try {
       await sendInvoice.mutateAsync(resend);
@@ -221,6 +225,20 @@ export function InvoiceDetailPage() {
     } catch (err) {
       toast({
         title: resend ? 'Could not resend invoice' : 'Could not send invoice',
+        description: err instanceof ApiError ? err.message : 'Something went wrong.',
+        variant: 'danger',
+      });
+    }
+  }
+
+  async function handleRegeneratePdf() {
+    if (!id) return;
+    try {
+      await regeneratePdf.mutateAsync(id);
+      toast({ title: 'PDF regenerated', variant: 'success' });
+    } catch (err) {
+      toast({
+        title: 'Could not regenerate PDF',
         description: err instanceof ApiError ? err.message : 'Something went wrong.',
         variant: 'danger',
       });
@@ -237,19 +255,34 @@ export function InvoiceDetailPage() {
             <span className="hidden items-center gap-2 text-sm text-ink-muted sm:flex">
               <Receipt className="h-4 w-4" /> Invoice
             </span>
+            {pdfUrl && (
+              <>
+                <Button asChild variant="secondary" size="sm">
+                  <a href={pdfUrl} target="_blank" rel="noreferrer">
+                    <Eye className="h-3.5 w-3.5" /> Preview PDF
+                  </a>
+                </Button>
+                <Button asChild variant="secondary" size="sm">
+                  <a href={pdfUrl} download>
+                    <Download className="h-3.5 w-3.5" /> Download PDF
+                  </a>
+                </Button>
+              </>
+            )}
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleRegeneratePdf}
+              loading={regeneratePdf.isPending}
+            >
+              <RefreshCw className="h-3.5 w-3.5" /> Regenerate PDF
+            </Button>
             <Button variant="secondary" size="sm" loading={sendInvoice.isPending} onClick={() => handleSend(false)}>
               <Mail className="h-3.5 w-3.5" /> Send
             </Button>
             <Button variant="secondary" size="sm" loading={sendInvoice.isPending} onClick={() => handleSend(true)}>
               <RefreshCw className="h-3.5 w-3.5" /> Resend
             </Button>
-            {invoice.pdfUrl && (
-              <Button asChild variant="secondary" size="sm">
-                <a href={invoice.pdfUrl} target="_blank" rel="noreferrer">
-                  <Download className="h-3.5 w-3.5" /> Download PDF
-                </a>
-              </Button>
-            )}
             <Button size="sm" onClick={paymentModal.open}>
               <CreditCard className="h-3.5 w-3.5" /> Record payment
             </Button>
