@@ -165,6 +165,16 @@ REJECTED → DRAFT (Admin revises)
 - Lead number remains clickable to Lead Detail page in all views (admin detail, admin list, portal detail, portal list)
 - **No additional API requests** — lead data is fetched as a nested include in the quotation response
 
+### Quotation Service Name Display
+- Each quotation item belongs to a Service from the catalog
+- `serviceName` is a denormalized snapshot stored on `QuotationItem` — populated at creation/revision time
+- **Creation time**: `enrichItemsWithServiceNames()` batch-fetches Service names from catalog and writes them to the DB
+- **Read time**: `enrichItemsWithServiceNames()` fills `serviceName` for older items where it is NULL (backward compatibility)
+- **PDF**: Service column shows `serviceName` for each item row
+- **Email**: Service names shown as a summary line (e.g., "Services: Solar Installation · CCTV Installation")
+- **Admin detail**: Items grouped by service with uppercase headings
+- **Portal**: Same grouping visible in the PDF rendered in the iframe
+
 ### Quotation PDF Generation
 - **Trigger**: Fire-and-forget after `create`, `revise`, `approve`, `send`, `requestRevision`, `accept`, `reject`
 - **Process**: Fetches company branding → Downloads images (logo, QR, signature, stamp) → Generates PDF buffer → Uploads to storage (Cloudinary/localStorage) → Stores `pdfUrl`/`pdfGeneratedAt` on Quotation record
@@ -484,6 +494,7 @@ Lead ← Quotation.client.sourceLead (display resolution for converted quotation
 10. **Payment Management** - Auto-calculated invoice status, transaction references, duplicate prevention, sorted payment history
 11. **Email Delivery** - Production Resend integration with branded HTML templates, company branding from single source, graceful degradation
 12. **Lead Display** - Client-owned quotations show originating lead via `Client.sourceLead` relation — no schema or constraint changes
+13. **Service Name Display** - Quotation items show their associated service name via denormalized `serviceName` snapshot — populated at creation time, enriched at read time for backward compatibility
 
 ---
 

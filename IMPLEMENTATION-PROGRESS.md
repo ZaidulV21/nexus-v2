@@ -600,3 +600,38 @@ The database enforces `CHECK (("leadId" IS NULL) <> ("clientId" IS NULL))` — e
 | `payment.receipt_sent` registered | ✅ In KNOWN_EVENT_TYPES |
 | No schema changes | ✅ |
 | No workflow changes | ✅ |
+
+---
+
+# Phase 3 — Quotation Service Name Display
+
+**Date**: 2026-07-22  
+**Status**: ✅ PHASE 3 COMPLETE
+
+## Summary
+
+Fixed the missing service/category information throughout the quotation system. The `serviceName` denormalized column on `QuotationItem` was designed but never populated.
+
+## Changes Made
+
+### Backend
+1. `src/modules/quotation/quotation.types.ts` — Added `serviceName?: string` to `QuotationItemInput`
+2. `src/modules/quotation/quotation.service.ts` — `computeTotals()` passes `serviceName` through; new `enrichItemsWithServiceNames()` batch-fetches from catalog; applied in `create()` and `revise()`; `send()` emits `serviceNames` in email payload
+3. `src/modules/quotation/quotation.repository.ts` — New read-time `enrichItemsWithServiceNames()` for backward compatibility; applied in `findById()`, `list()`, `listForClient()`
+4. `src/modules/pdf/pdf.service.ts` — New `enrichItemsForPdf()`; applied in `fetchQuotationData()` — PDF Service column now populated
+5. `src/modules/email/templates/quotation-sent.template.ts` — `serviceNames` in interface + renders as "Services: Solar · CCTV" row
+6. `src/modules/notifications/channels/email.channel.ts` — Passes `serviceNames` to template
+
+### Frontend
+1. `src/pages/quotations/QuotationDetailPage.tsx` — Items grouped by `serviceName` with service headings
+
+## Verification
+- Backend Tests: 213/213 passing ✅
+- Backend TypeScript: Clean ✅
+- Frontend TypeScript: Clean ✅
+- serviceName populated on create/revise ✅
+- Backward compatibility via read-time enrichment ✅
+- PDF Service column populated ✅
+- Email template shows services ✅
+- Frontend groups by service ✅
+- No schema/workflow/pricing changes ✅

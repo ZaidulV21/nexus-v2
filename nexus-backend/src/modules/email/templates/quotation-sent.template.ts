@@ -9,6 +9,7 @@ export interface QuotationSentEmailData {
   currency?: string;
   portalUrl: string;
   resend?: boolean;
+  serviceNames?: string[];
 }
 
 const BRAND_PRIMARY = '#1a56db';
@@ -22,12 +23,16 @@ function formatCurrency(amount: number, symbol = '₹'): string {
 }
 
 export function renderQuotationSentEmail(data: QuotationSentEmailData, branding: EmailBranding): string {
-  const { clientName, quotationNumber, grandTotal, subtotal, gstAmount, currency, portalUrl, resend } = data;
+  const { clientName, quotationNumber, grandTotal, subtotal, gstAmount, currency, portalUrl, resend, serviceNames } = data;
   const companyName = branding.companyName || 'Nexus';
   const title = resend ? 'Revised Quotation Available' : 'New Quotation';
   const body = resend
     ? `A revised quotation has been prepared for you.`
     : `A new quotation has been prepared for you.`;
+
+  const serviceListHtml = serviceNames && serviceNames.length > 0
+    ? `<tr><td colspan="2" style="border-top: 1px solid ${BRAND_BORDER}; padding: 12px 16px;"><p style="margin: 0 0 4px; font-size: 12px; color: ${BRAND_SECONDARY}; text-transform: uppercase; letter-spacing: 0.5px;">Services</p><p style="margin: 0; font-size: 14px; color: ${BRAND_TEXT};">${serviceNames.join(' · ')}</p></td></tr>`
+    : '';
 
   const breakdownRows = [
     subtotal ? `<tr><td style="padding: 8px 16px; font-size: 13px; color: ${BRAND_SECONDARY};">Subtotal</td><td style="padding: 8px 16px; font-size: 13px; color: ${BRAND_TEXT}; text-align: right;">${formatCurrency(subtotal, currency)}</td></tr>` : '',
@@ -57,6 +62,7 @@ export function renderQuotationSentEmail(data: QuotationSentEmailData, branding:
         </td>
       </tr>
       ${breakdownRows ? `<tr><td colspan="2" style="border-top: 1px solid ${BRAND_BORDER};"><table role="presentation" width="100%" cellpadding="0" cellspacing="0">${breakdownRows}</table></td></tr>` : ''}
+      ${serviceListHtml}
     </table>
 
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0">

@@ -1,5 +1,6 @@
 export interface QuotationItemInput {
   serviceId: string;
+  serviceName?: string;
   description: string;
   quantity: number;
   unitPrice: number;

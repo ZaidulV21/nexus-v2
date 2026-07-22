@@ -18,6 +18,23 @@ import { renderQuotationPdf } from './templates/quotation.template';
 import { renderInvoicePdf } from './templates/invoice.template';
 import { renderReceiptPdf } from './templates/receipt.template';
 
+// Batch-fetch Service names for items where serviceName is NULL.
+// Backward compatibility for older quotations created before the field was populated.
+async function enrichItemsForPdf(items: any[]): Promise<any[]> {
+  const missing = items.filter((item: any) => !item.serviceName && item.serviceId);
+  if (missing.length === 0) return items;
+  const uniqueIds = [...new Set(missing.map((item: any) => item.serviceId))];
+  const services = await prisma.service.findMany({
+    where: { id: { in: uniqueIds } },
+    select: { id: true, name: true },
+  });
+  const nameMap = new Map(services.map((s) => [s.id, s.name]));
+  return items.map((item: any) => ({
+    ...item,
+    serviceName: item.serviceName || nameMap.get(item.serviceId) || null,
+  }));
+}
+
 const storageProvider = env.cloudinaryCloudName ? cloudinaryProvider : localStorageProvider;
 
 async function fetchImageAsBuffer(url: string): Promise<Buffer | null> {
@@ -70,6 +87,10 @@ async function fetchQuotationData(id: string): Promise<PdfQuotationData> {
   const activeVersion = quotation.versions[0];
   if (!activeVersion) throw new ValidationError('Quotation has no active version');
 
+  // Backward compatibility: fill serviceName for older items where it is NULL
+  const rawItems = (activeVersion as any).items;
+  const enrichedItems = await enrichItemsForPdf(rawItems);
+
   const recipient = (quotation as any).client
     ? {
         contactName: (quotation as any).client.contactName,
@@ -93,7 +114,7 @@ async function fetchQuotationData(id: string): Promise<PdfQuotationData> {
     status: quotation.status,
     createdAt: quotation.createdAt,
     validUntil: quotation.validUntil,
-    items: activeVersion.items.map((item: any) => ({
+    items: enrichedItems.map((item: any) => ({
       description: item.description,
       serviceName: item.serviceName ?? undefined,
       quantity: Number(item.quantity),

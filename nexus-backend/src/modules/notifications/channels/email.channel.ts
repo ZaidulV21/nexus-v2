@@ -91,6 +91,7 @@ function buildHtml(
         currency: payload.currency as string | undefined,
         portalUrl: `${appUrl}/portal/quotations/${payload.quotationId || ''}`,
         resend: Boolean(payload.resend),
+        serviceNames: Array.isArray(payload.serviceNames) ? payload.serviceNames as string[] : undefined,
       },
       branding
     );

@@ -190,21 +190,35 @@ export function QuotationDetailPage() {
                       </div>
                       {activeVersion.isActive ? <StatusBadge status="APPROVED" className="opacity-80" /> : <StatusBadge status="DRAFT" />}
                     </div>
-                    <div className="mt-4 space-y-2">
-                      {activeVersion.items.map((item) => (
-                        <div key={item.id} className="rounded border border-border bg-canvas px-3 py-2">
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <p className="text-sm font-medium text-ink">{item.description}</p>
-                              {item.serviceName && (
-                                <p className="text-xs text-ink-muted">{item.serviceName}</p>
-                              )}
-                              <p className="text-xs text-ink-muted">{item.quantity} × {formatCurrency(item.unitPrice)} · Tax {item.taxRate}%</p>
+                    <div className="mt-4 space-y-3">
+                      {(() => {
+                        const grouped = new Map<string, typeof activeVersion.items>();
+                        for (const item of activeVersion.items) {
+                          const key = item.serviceName || '';
+                          if (!grouped.has(key)) grouped.set(key, []);
+                          grouped.get(key)!.push(item);
+                        }
+                        return Array.from(grouped.entries()).map(([serviceName, items]) => (
+                          <div key={serviceName || items[0].id} className="rounded border border-border bg-canvas">
+                            {serviceName && (
+                              <div className="border-b border-border px-3 py-2">
+                                <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">{serviceName}</p>
+                              </div>
+                            )}
+                            <div className="divide-y divide-border">
+                              {items.map((item) => (
+                                <div key={item.id} className="flex items-start justify-between gap-3 px-3 py-2">
+                                  <div>
+                                    <p className="text-sm font-medium text-ink">{item.description}</p>
+                                    <p className="text-xs text-ink-muted">{item.quantity} × {formatCurrency(item.unitPrice)} · Tax {item.taxRate}%</p>
+                                  </div>
+                                  <span className="text-sm font-medium text-ink">{formatCurrency(item.lineTotal)}</span>
+                                </div>
+                              ))}
                             </div>
-                            <span className="text-sm font-medium text-ink">{formatCurrency(item.lineTotal)}</span>
                           </div>
-                        </div>
-                      ))}
+                        ));
+                      })()}
                     </div>
                   </div>
                 )}

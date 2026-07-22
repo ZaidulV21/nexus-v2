@@ -525,6 +525,100 @@ This is the correct business model:
 
 ---
 
+# Phase 3 — Quotation Service Name Display
+
+**Date**: 2026-07-22  
+**Status**: ✅ IMPLEMENTATION COMPLETE
+
+## Summary
+
+Fixed the missing service/category information throughout the quotation system. The `serviceName` denormalized column on `QuotationItem` was designed but never populated — `QuotationItemInput` didn't accept it, `computeTotals()` stripped it, so it was always `NULL` in the database.
+
+## Root Cause
+
+Two issues at creation time:
+1. `QuotationItemInput` had no `serviceName` field — frontend couldn't send it
+2. `computeTotals()` explicitly enumerated output fields and omitted `serviceName`
+
+Every downstream consumer (PDF Service column, frontend display, email template) correctly handled the field but always received `NULL`.
+
+## Backend Changes
+
+### Quotation Types (`quotation.types.ts`)
+- Added `serviceName?: string` to `QuotationItemInput`
+
+### Quotation Service (`quotation.service.ts`)
+- **`computeTotals()`**: Now passes `serviceName` through to output items
+- **NEW: `enrichItemsWithServiceNames()`**: Batch-fetches Service names from catalog for items missing `serviceName`, returns enriched items
+- **`create()`**: Calls `enrichItemsWithServiceNames()` before `computeTotals()` — new quotations get `serviceName` populated at creation time
+- **`revise()`**: Same enrichment — revised quotations also get `serviceName` populated
+- **`send()`**: Emits `serviceNames` (unique list) in the `quotation.sent` email payload
+
+### Quotation Repository (`quotation.repository.ts`)
+- **NEW: `enrichItemsWithServiceNames()`**: Read-time batch enrichment for backward compatibility with older quotations where `serviceName` is NULL
+- **`findById()`**: Applies enrichment to all version items before returning
+- **`list()`**: Applies enrichment to all version items
+- **`listForClient()`**: Applies enrichment to all version items
+
+### PDF Service (`pdf.service.ts`)
+- **NEW: `enrichItemsForPdf()`**: Same batch enrichment for PDF generation
+- **`fetchQuotationData()`**: Applies enrichment before mapping items — PDF Service column now populated
+
+### Email Template (`quotation-sent.template.ts`)
+- Added `serviceNames?: string[]` to `QuotationSentEmailData` interface
+- Renders service names as "Services: Solar · CCTV" row in the email card
+
+### Email Channel (`email.channel.ts`)
+- Passes `serviceNames` from payload to `renderQuotationSentEmail()`
+
+## Frontend Changes
+
+### Quotation Detail Page (`QuotationDetailPage.tsx`)
+- Items now grouped by `serviceName` with service headings
+- Each group has an uppercase service name header followed by its items
+- Single-service quotations show one heading; multi-service show multiple
+
+## Key Design Decisions
+
+1. **Dual-layer approach**: Populate at creation time (new data) + enrich at read time (backward compatibility)
+2. **No schema changes**: `serviceName` column already existed, just wasn't populated
+3. **Batch lookups**: Single `SELECT ... WHERE id IN (...)` per query, not N+1
+4. **PDF Service column**: Already had header + rendering logic — just needed data
+5. **Email template**: Service names shown as a summary line, not itemized (email is a notification, not a document)
+6. **Frontend grouping**: Items grouped under service headings for clear visual hierarchy
+
+## Verification
+
+| Check | Result |
+|-------|--------|
+| Backend Tests (213/213) | ✅ |
+| Backend TypeScript Clean | ✅ |
+| Frontend TypeScript Clean | ✅ |
+| serviceName populated on create | ✅ |
+| serviceName populated on revise | ✅ |
+| Backward compatibility (old items) | ✅ Read-time enrichment |
+| PDF Service column populated | ✅ |
+| Email template shows services | ✅ |
+| Frontend groups by service | ✅ |
+| No schema changes | ✅ |
+| No workflow changes | ✅ |
+| No pricing/tax changes | ✅ |
+
+## Files Modified
+
+### Backend (6 files)
+1. `src/modules/quotation/quotation.types.ts` — Added `serviceName` to `QuotationItemInput`
+2. `src/modules/quotation/quotation.service.ts` — `computeTotals()` passthrough, `enrichItemsWithServiceNames()`, create/revise/send updates
+3. `src/modules/quotation/quotation.repository.ts` — Read-time `enrichItemsWithServiceNames()`, applied in findById/list/listForClient
+4. `src/modules/pdf/pdf.service.ts` — `enrichItemsForPdf()`, applied in fetchQuotationData
+5. `src/modules/email/templates/quotation-sent.template.ts` — `serviceNames` in interface + rendering
+6. `src/modules/notifications/channels/email.channel.ts` — Passes `serviceNames` to template
+
+### Frontend (1 file)
+1. `src/pages/quotations/QuotationDetailPage.tsx` — Grouped item display by service
+
+---
+
 ## Files Modified
 
 ### Backend (31 files)

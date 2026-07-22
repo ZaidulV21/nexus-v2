@@ -24,6 +24,7 @@ function computeTotals(items: QuotationItemInput[], discount: number, transporta
     gstAmount += taxAmount;
     return {
       serviceId: item.serviceId,
+      serviceName: item.serviceName ?? null,
       description: item.description,
       quantity: item.quantity,
       unitPrice: item.unitPrice,
@@ -55,6 +56,20 @@ async function assertItemServicesExist(items: QuotationItemInput[], requireSelec
       throw new ValidationError(`Service "${service.name}" is not available for new quotations`);
     }
   }
+}
+
+// Batch-fetch service names for items that are missing serviceName.
+// Populates the denormalized serviceName column at creation/revision time.
+async function enrichItemsWithServiceNames(items: QuotationItemInput[]): Promise<QuotationItemInput[]> {
+  const missing = items.filter((item) => !item.serviceName);
+  if (missing.length === 0) return items;
+  const uniqueIds = [...new Set(missing.map((item) => item.serviceId))];
+  const services = await Promise.all(uniqueIds.map((id) => serviceRepository.findById(id)));
+  const nameMap = new Map(services.filter(Boolean).map((s) => [s!.id, s!.name]));
+  return items.map((item) => ({
+    ...item,
+    serviceName: item.serviceName || nameMap.get(item.serviceId) || undefined,
+  }));
 }
 
 function getActiveVersion(quotation: any) {
@@ -105,11 +120,12 @@ export const quotationService = {
 
     await assertItemServicesExist(input.items, true);
 
+    const enrichedItems = await enrichItemsWithServiceNames(input.items);
     const discount = input.discount || 0;
     const transportation = input.transportation || 0;
     const installation = input.installation || 0;
     const { computedItems, subtotal, gstAmount, grandTotal } = computeTotals(
-      input.items,
+      enrichedItems,
       discount,
       transportation,
       installation
@@ -193,11 +209,12 @@ export const quotationService = {
 
     await assertItemServicesExist(input.items, false);
 
+    const enrichedItems = await enrichItemsWithServiceNames(input.items);
     const discount = input.discount || 0;
     const transportation = input.transportation || 0;
     const installation = input.installation || 0;
     const { computedItems, subtotal, gstAmount, grandTotal } = computeTotals(
-      input.items,
+      enrichedItems,
       discount,
       transportation,
       installation
@@ -328,6 +345,8 @@ export const quotationService = {
 
     const activeVersion = getActiveVersion(quotation);
     const clientName = quotation.client?.contactName ?? quotation.lead?.contactName ?? null;
+    const items = (activeVersion as any)?.items ?? [];
+    const serviceNames = [...new Set(items.map((item: any) => item.serviceName).filter(Boolean))] as string[];
 
     await notificationsService.emitEvent({
       eventType: 'quotation.sent',
@@ -343,6 +362,7 @@ export const quotationService = {
         grandTotal: activeVersion?.grandTotal ?? 0,
         subtotal: activeVersion?.subtotal ?? 0,
         gstAmount: activeVersion?.gstAmount ?? 0,
+        serviceNames,
       },
     });
 
