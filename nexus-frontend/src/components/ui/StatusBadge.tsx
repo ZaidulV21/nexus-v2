@@ -29,6 +29,7 @@ const STATUS_TONE_MAP: Record<string, BadgeTone> = {
   ISSUED: 'accent',
   PAID: 'success',
   'PARTIALLY PAID': 'warning',
+  OVERDUE: 'danger',
   CANCELLED: 'danger',
 };
 

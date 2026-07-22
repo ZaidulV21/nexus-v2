@@ -20,7 +20,8 @@ export const cancelInvoiceSchema = z.object({
 });
 
 export const recordPaymentSchema = z.object({
-  amount: z.number().positive(),
-  method: z.string().min(1),
+  amount: z.number().positive('Payment amount must be greater than zero'),
+  method: z.string().min(1, 'Payment method is required'),
+  transactionReference: z.string().optional(),
   referenceNote: z.string().optional(),
 });

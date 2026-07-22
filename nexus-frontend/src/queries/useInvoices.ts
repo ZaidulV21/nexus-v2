@@ -94,6 +94,14 @@ export function useRecordPayment(invoiceId: string, projectId?: string) {
   });
 }
 
+export function usePaymentHistory(invoiceId: string | undefined, sortOrder: 'asc' | 'desc' = 'desc') {
+  return useQuery({
+    queryKey: [...queryKeys.invoices.detail(invoiceId ?? ''), 'payments', sortOrder] as const,
+    queryFn: () => invoiceService.listPayments(invoiceId as string, sortOrder),
+    enabled: !!invoiceId,
+  });
+}
+
 export function useInvoicePdfUrl(invoiceId: string | undefined) {
   return useQuery({
     queryKey: [...queryKeys.invoices.detail(invoiceId ?? ''), 'pdf'] as const,
@@ -109,6 +117,50 @@ export function useRegenerateInvoicePdf() {
     onSuccess: (_result, invoiceId) => {
       queryClient.invalidateQueries({ queryKey: [...queryKeys.invoices.detail(invoiceId), 'pdf'] });
       queryClient.invalidateQueries({ queryKey: queryKeys.timeline('INVOICE', invoiceId) });
+    },
+  });
+}
+
+export function useReceiptUrl(paymentId: string | undefined) {
+  return useQuery({
+    queryKey: ['receipt', paymentId ?? ''] as const,
+    queryFn: () => invoiceService.getReceiptUrl(paymentId as string),
+    enabled: !!paymentId,
+  });
+}
+
+export function useRegenerateReceipt() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (paymentId: string) => invoiceService.regenerateReceipt(paymentId),
+    onSuccess: (_result, paymentId) => {
+      queryClient.invalidateQueries({ queryKey: ['receipt', paymentId] });
+    },
+  });
+}
+
+export function useSendReceipt(invoiceId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (paymentId: string) => invoiceService.sendReceipt(invoiceId, paymentId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.invoices.detail(invoiceId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.invoices.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.timeline('INVOICE', invoiceId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.auditLogs('INVOICE', invoiceId) });
+    },
+  });
+}
+
+export function useResendReceipt(invoiceId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (paymentId: string) => invoiceService.resendReceipt(invoiceId, paymentId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.invoices.detail(invoiceId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.invoices.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.timeline('INVOICE', invoiceId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.auditLogs('INVOICE', invoiceId) });
     },
   });
 }

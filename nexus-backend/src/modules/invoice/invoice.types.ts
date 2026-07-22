@@ -20,5 +20,6 @@ export interface CancelInvoiceInput {
 export interface RecordPaymentInput {
   amount: number;
   method: string;
+  transactionReference?: string;
   referenceNote?: string;
 }

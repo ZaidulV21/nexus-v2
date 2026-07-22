@@ -23,6 +23,8 @@ export const adminDashboardService = {
       monthlyInvoices,
       [prevLeads, prevClients, prevQuotations, prevProjects, prevInvoices],
       [thisLeads, thisClients, thisQuotations, thisProjects, thisInvoices],
+      paymentAgg,
+      paymentMethods,
     ] = await Promise.all([
       dashboardRepository.countLeadsBySource(),
       dashboardRepository.countLeadServicesByStatus(),
@@ -39,6 +41,8 @@ export const adminDashboardService = {
       dashboardRepository.monthlyRevenue(12),
       dashboardRepository.previousMonthCounts(),
       dashboardRepository.thisMonthCounts(),
+      dashboardRepository.paymentMetrics(),
+      dashboardRepository.paymentMethodsDistribution(),
     ]);
 
     const totalInvoiced = allIssuedInvoices.reduce((sum, inv) => sum + Number(inv.grandTotal), 0);
@@ -62,6 +66,10 @@ export const adminDashboardService = {
 
     const monthlyRevenue = aggregateMonthlyRevenue(monthlyInvoices);
 
+    const totalPaymentsReceived = Number(paymentAgg._sum.amount || 0);
+    const totalPaymentCount = paymentAgg._count || 0;
+    const avgPaymentSize = Number(paymentAgg._avg.amount || 0);
+
     return {
       kpis: {
         totalActiveProjects: activeProjectsCount,
@@ -74,6 +82,9 @@ export const adminDashboardService = {
         outstandingAmount: totalInvoiced - totalPaid,
         pendingQuotations,
         projectsInProgress,
+        totalPaymentsReceived,
+        totalPaymentCount,
+        avgPaymentSize,
       },
       comparisons: {
         leads: { thisMonth: thisLeads, prevMonth: prevLeads },
@@ -87,6 +98,7 @@ export const adminDashboardService = {
         leadsBySource: leadsBySource.map((s) => ({ source: s.source, count: s._count })),
         monthlyRevenue,
         projectsByStatus: projectsByStatus.map((s) => ({ status: s.status, count: s._count })),
+        paymentMethods: paymentMethods.map((m) => ({ method: m.method, count: m._count, total: Number(m._sum.amount || 0) })),
       },
       recentActivity: recentEvents.map((e) => ({
         id: e.id,

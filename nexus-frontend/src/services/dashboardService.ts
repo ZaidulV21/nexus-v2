@@ -11,6 +11,9 @@ export interface DashboardKpis {
   outstandingAmount: number;
   pendingQuotations: number;
   projectsInProgress: number;
+  totalPaymentsReceived: number;
+  totalPaymentCount: number;
+  avgPaymentSize: number;
 }
 
 export interface MonthComparison {
@@ -31,6 +34,7 @@ export interface DashboardCharts {
   leadsBySource: { source: string; count: number }[];
   monthlyRevenue: { month: string; invoiced: number; received: number }[];
   projectsByStatus: { status: string; count: number }[];
+  paymentMethods: { method: string; count: number; total: number }[];
 }
 
 export interface DashboardActivity {

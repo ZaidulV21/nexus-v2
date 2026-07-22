@@ -108,4 +108,34 @@ export const invoiceController = {
       next(err);
     }
   },
+
+  async listPayments(req: Request, res: Response, next: NextFunction) {
+    try {
+      const sortOrder = (req.query.sort as string) === 'asc' ? 'asc' : 'desc';
+      const payments = await invoiceService.listPayments(req.params.id, sortOrder);
+      return ok(res, payments);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async sendReceipt(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.user) throw new UnauthorizedError();
+      const payment = await invoiceService.sendReceipt(req.params.paymentId, req.user.id);
+      return ok(res, payment);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async resendReceipt(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.user) throw new UnauthorizedError();
+      const payment = await invoiceService.resendReceipt(req.params.paymentId, req.user.id);
+      return ok(res, payment);
+    } catch (err) {
+      next(err);
+    }
+  },
 };

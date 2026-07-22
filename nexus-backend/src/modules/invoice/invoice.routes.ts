@@ -15,5 +15,8 @@ router.get('/:id', authenticate, authorize('invoice.view'), invoiceController.ge
 router.post('/:id/send', authenticate, authorize('invoice.create'), invoiceController.send);
 router.patch('/:id/cancel', authenticate, authorize('invoice.cancel'), invoiceController.cancel);
 router.post('/:id/payments', authenticate, authorize('invoice.create'), invoiceController.recordPayment);
+router.get('/:id/payments', authenticate, authorize('invoice.view'), invoiceController.listPayments);
+router.post('/:id/payments/:paymentId/send-receipt', authenticate, authorize('invoice.create'), invoiceController.sendReceipt);
+router.post('/:id/payments/:paymentId/resend-receipt', authenticate, authorize('invoice.create'), invoiceController.resendReceipt);
 
 export default router;

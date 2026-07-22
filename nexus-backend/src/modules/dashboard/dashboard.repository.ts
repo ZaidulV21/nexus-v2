@@ -142,4 +142,28 @@ export const dashboardRepository = {
       include: { projectServices: true, invoices: { include: { payments: true } } },
     });
   },
+
+  paymentMetrics() {
+    return prisma.payment.aggregate({
+      _count: true,
+      _sum: { amount: true },
+      _avg: { amount: true },
+    });
+  },
+
+  paymentMethodsDistribution() {
+    return prisma.payment.groupBy({
+      by: ['method'],
+      _count: true,
+      _sum: { amount: true },
+    });
+  },
+
+  recentPayments(take: number) {
+    return prisma.payment.findMany({
+      take,
+      orderBy: { paidAt: 'desc' },
+      include: { invoice: { select: { invoiceNumber: true } } },
+    });
+  },
 };

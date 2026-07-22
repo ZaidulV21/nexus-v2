@@ -24,6 +24,12 @@ jest.mock('../dashboard.repository', () => ({
     previousMonthCounts: jest.fn().mockResolvedValue([3, 2, 4, 1, 2]),
     thisMonthCounts: jest.fn().mockResolvedValue([5, 3, 2, 2, 3]),
     clientProjectSummary: jest.fn(),
+    paymentMetrics: jest.fn().mockResolvedValue({ _count: 5, _sum: { amount: 8000 }, _avg: { amount: 1600 } }),
+    paymentMethodsDistribution: jest.fn().mockResolvedValue([
+      { method: 'BANK_TRANSFER', _count: 3, _sum: { amount: 5000 } },
+      { method: 'UPI', _count: 2, _sum: { amount: 3000 } },
+    ]),
+    recentPayments: jest.fn().mockResolvedValue([]),
   },
 }));
 
@@ -41,6 +47,9 @@ describe('adminDashboardService.getSummary', () => {
     expect(summary.kpis.totalRevenueInvoiced).toBe(15000);
     expect(summary.kpis.totalRevenueReceived).toBe(2000);
     expect(summary.kpis.outstandingAmount).toBe(13000);
+    expect(summary.kpis.totalPaymentsReceived).toBe(8000);
+    expect(summary.kpis.totalPaymentCount).toBe(5);
+    expect(summary.kpis.avgPaymentSize).toBe(1600);
   });
 
   it('returns correct entity counts', async () => {
@@ -70,6 +79,10 @@ describe('adminDashboardService.getSummary', () => {
     expect(summary.charts.projectsByStatus).toEqual([
       { status: 'IN PROGRESS', count: 3 },
       { status: 'COMPLETED', count: 5 },
+    ]);
+    expect(summary.charts.paymentMethods).toEqual([
+      { method: 'BANK_TRANSFER', count: 3, total: 5000 },
+      { method: 'UPI', count: 2, total: 3000 },
     ]);
   });
 

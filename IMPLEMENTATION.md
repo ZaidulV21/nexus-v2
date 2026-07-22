@@ -475,3 +475,142 @@ The single "Convert First" workflow is fully implemented and operational. All co
 **Status**: ✅ IMPLEMENTATION COMPLETE  
 **Builds**: Backend ✓ | Frontend ✓  
 **Tests**: Passing ✓
+
+---
+
+# Phase 1 — Professional Payment Management (Core)
+
+**Date**: 2026-07-22  
+**Status**: ✅ IMPLEMENTATION COMPLETE
+
+## Summary
+
+Enhanced the Invoice & Payment module with professional payment management features without breaking existing workflow.
+
+## Backend Changes
+
+### Database Schema
+- **Payment model**: Added `transactionReference` field for UTR/transaction numbers
+
+### Invoice Service (`invoice.service.ts`)
+- **Auto-calculated `displayStatus`**: Computes DRAFT → SENT → PARTIALLY PAID → PAID → CANCELLED from payment state
+- **`paymentCount`**: Enriched invoice response includes count of payments
+- **Business rules in `recordPayment`**:
+  - Rejects zero and negative payments
+  - Rejects payments exceeding outstanding balance
+  - Rejects duplicate transaction references (globally unique)
+  - Supports full payment, partial payment, and multiple payments
+- **`listPayments`**: New method with ascending/descending sort support
+
+### Invoice Repository (`invoice.repository.ts`)
+- **`paymentRepository.findByTransactionReference`**: Checks for duplicate transaction references
+- **`paymentRepository.listForInvoice`**: Accepts `sortOrder` parameter (asc/desc)
+
+### Invoice Validation (`invoice.validation.ts`)
+- Enhanced `recordPaymentSchema` with descriptive error messages
+- Added `transactionReference` optional field
+
+### Invoice Types (`invoice.types.ts`)
+- Added `transactionReference` to `RecordPaymentInput`
+
+### Invoice Routes (`invoice.routes.ts`)
+- Added `GET /:id/payments` endpoint for payment history with sort support
+
+### Invoice Controller (`invoice.controller.ts`)
+- Added `listPayments` handler with sort query parameter
+
+### PDF Service (`pdf.service.ts`)
+- Updated `displayStatus` computation to match new status logic (SENT vs DRAFT)
+
+## Frontend Changes
+
+### Types (`types/index.ts`)
+- `Payment`: Added `transactionReference` and `recordedByUserId` fields
+- `Invoice`: Added `paymentCount` field
+
+### Services (`invoiceService.ts`)
+- Added `transactionReference` to `RecordPaymentInput`
+- Added `listPayments(invoiceId, sortOrder)` API method
+
+### Queries (`useInvoices.ts`)
+- Added `usePaymentHistory(invoiceId, sortOrder)` hook
+
+### Admin Invoice Detail Page (`InvoiceDetailPage.tsx`)
+- **Payment Summary Cards**: 5 cards showing Invoice Total, Total Paid, Outstanding Balance, Number of Payments, Status
+- **Enhanced Payment History**: Displays Amount, Date & Time, Payment Method, Transaction Reference, Notes with sort toggle
+
+### Record Payment Modal (`RecordPaymentModal.tsx`)
+- Added Transaction / UTR / Reference Number field
+- Renamed "Reference / notes" to "Notes"
+- Shows outstanding balance in modal description
+- Added max amount constraint based on outstanding balance
+
+### Client Portal Invoice Detail (`PortalInvoiceDetailPage.tsx`)
+- **Payment Summary Cards**: 4 cards showing Invoice Total, Total Paid, Outstanding Balance, Status
+- **Enhanced Payment History**: Displays Date, Amount, Payment Method, Transaction Reference, Notes with sort toggle
+- Client access remains fully read-only (no payment recording/editing/deletion)
+
+### StatusBadge (`StatusBadge.tsx`)
+- Added OVERDUE status with danger tone
+
+## Business Rules Implemented
+
+| Rule | Status |
+|------|--------|
+| Full Payment → Paid | ✅ |
+| Partial Payment → Partially Paid | ✅ |
+| Multiple Payments | ✅ |
+| Reject negative payments | ✅ |
+| Reject zero payments | ✅ |
+| Reject overpayment | ✅ |
+| Duplicate transaction reference check | ✅ |
+| Auto-calculated status (no manual editing) | ✅ |
+
+## Existing Integrations Preserved
+
+| Feature | Status |
+|---------|--------|
+| Timeline Events | ✅ Working |
+| Audit Log | ✅ Working |
+| Notifications | ✅ Working |
+| Invoice PDF | ✅ Working |
+| Email | ✅ Working |
+| Client Portal | ✅ Working |
+
+## Verification
+
+| Check | Result |
+|-------|--------|
+| Backend Tests (213/213) | ✅ |
+| Backend TypeScript | ✅ |
+| Frontend TypeScript | ✅ |
+| Frontend Production Build | ✅ |
+| Admin/Client see identical payment history | ✅ |
+| Prisma migration applied | ✅ |
+
+## Files Modified
+
+### Backend (8 files)
+1. `prisma/schema.prisma` — Added `transactionReference` to Payment
+2. `src/modules/invoice/invoice.types.ts` — Added `transactionReference` to input
+3. `src/modules/invoice/invoice.validation.ts` — Enhanced payment validation
+4. `src/modules/invoice/invoice.repository.ts` — Added sorting + duplicate check
+5. `src/modules/invoice/invoice.service.ts` — Status calculation, business rules, listPayments
+6. `src/modules/invoice/invoice.controller.ts` — Added listPayments handler
+7. `src/modules/invoice/invoice.routes.ts` — Added payment history route
+8. `src/modules/pdf/pdf.service.ts` — Updated displayStatus computation
+9. `src/modules/invoice/tests/invoice.service.test.ts` — 26 tests (was 6)
+
+### Frontend (9 files)
+1. `src/types/index.ts` — Payment + Invoice type updates
+2. `src/services/invoiceService.ts` — transactionReference + listPayments
+3. `src/queries/useInvoices.ts` — usePaymentHistory hook
+4. `src/components/ui/StatusBadge.tsx` — OVERDUE status
+5. `src/pages/invoices/InvoiceDetailPage.tsx` — Summary cards + enhanced payment history
+6. `src/pages/invoices/components/RecordPaymentModal.tsx` — Transaction reference field
+7. `src/pages/portal/PortalInvoiceDetailPage.tsx` — Summary cards + enhanced payment history
+
+### Documentation (3 files)
+1. `IMPLEMENTATION.md` — Phase 1 section added
+2. `IMPLEMENTATION-PROGRESS.md` — Phase 1 section added
+3. `WORKFLOW.md` — Invoice lifecycle updated

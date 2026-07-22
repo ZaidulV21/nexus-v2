@@ -44,20 +44,27 @@ function enrichInvoice(invoice: any) {
   const paidAmount = invoice.payments?.reduce((sum: number, payment: any) => sum + Number(payment.amount), 0) ?? 0;
   const grandTotal = Number(invoice.grandTotal);
   const outstandingAmount = invoice.status === 'CANCELLED' ? 0 : grandTotal - paidAmount;
-  const displayStatus =
-    invoice.status === 'CANCELLED'
-      ? 'CANCELLED'
-      : outstandingAmount <= 0
-        ? 'PAID'
-        : paidAmount > 0
-          ? 'PARTIALLY PAID'
-          : invoice.status;
+  const paymentCount = invoice.payments?.length ?? 0;
+
+  let displayStatus: string;
+  if (invoice.status === 'CANCELLED') {
+    displayStatus = 'CANCELLED';
+  } else if (outstandingAmount <= 0) {
+    displayStatus = 'PAID';
+  } else if (paidAmount > 0) {
+    displayStatus = 'PARTIALLY PAID';
+  } else if (invoice.status === 'ISSUED') {
+    displayStatus = 'SENT';
+  } else {
+    displayStatus = 'DRAFT';
+  }
 
   return {
     ...invoice,
     dueDate: null,
     paidAmount,
     outstandingAmount,
+    paymentCount,
     displayStatus,
     relatedQuotation: getRelatedQuotation(invoice),
   };
@@ -228,17 +235,32 @@ export const invoiceService = {
     const paidSoFar = await paymentRepository.sumForInvoice(invoiceId);
     const alreadyPaid = Number(paidSoFar._sum.amount || 0);
     const grandTotal = Number(invoice.grandTotal);
+    const outstanding = grandTotal - alreadyPaid;
 
-    if (alreadyPaid + input.amount > grandTotal) {
+    if (input.amount <= 0) {
+      throw new ValidationError('Payment amount must be greater than zero');
+    }
+
+    if (input.amount > outstanding) {
       throw new ValidationError(
-        `Payment of ${input.amount} would exceed the invoice's outstanding balance of ${grandTotal - alreadyPaid}`
+        `Payment of ${input.amount} would exceed the invoice's outstanding balance of ${outstanding}`
       );
+    }
+
+    if (input.transactionReference) {
+      const existing = await paymentRepository.findByTransactionReference(input.transactionReference);
+      if (existing) {
+        throw new ValidationError(
+          `A payment with transaction reference "${input.transactionReference}" already exists`
+        );
+      }
     }
 
     const payment = await paymentRepository.create({
       invoiceId,
       amount: input.amount,
       method: input.method,
+      transactionReference: input.transactionReference,
       referenceNote: input.referenceNote,
       recordedByUserId: actorUserId,
     });
@@ -247,7 +269,7 @@ export const invoiceService = {
       entityType: 'INVOICE',
       entityId: invoiceId,
       eventType: 'PAYMENT_RECORDED',
-      description: `Payment of ${input.amount} recorded via ${input.method}`,
+      description: `Payment of ${input.amount} recorded via ${input.method}${input.transactionReference ? ` (Ref: ${input.transactionReference})` : ''}`,
       actorUserId,
     });
 
@@ -269,9 +291,60 @@ export const invoiceService = {
 
     import('../pdf/pdf.service').then(({ pdfService }) => {
       pdfService.generate('INVOICE', invoiceId, actorUserId).catch(() => {});
+      pdfService.generateReceipt(payment.id, actorUserId).catch(() => {});
     });
 
     return payment;
+  },
+
+  async sendReceipt(paymentId: string, actorUserId: string) {
+    const payment = await paymentRepository.findById(paymentId);
+    if (!payment) throw new NotFoundError('Payment not found');
+
+    const invoice = await invoiceRepository.findById(payment.invoiceId);
+    if (!invoice) throw new NotFoundError('Invoice not found');
+
+    const recipient = invoice.client?.email;
+    if (!recipient) throw new ValidationError('Invoice client does not have an email address');
+
+    await timelineService.recordEvent({
+      entityType: 'INVOICE',
+      entityId: payment.invoiceId,
+      eventType: 'RECEIPT_SENT',
+      description: `Payment receipt sent to client for payment of ${payment.amount}`,
+      actorUserId,
+    });
+
+    await auditService.recordAudit({
+      entityType: 'INVOICE',
+      entityId: payment.invoiceId,
+      action: 'RECEIPT_SENT',
+      afterState: { paymentId, recipient },
+      actorUserId,
+    });
+
+    await notificationsService.emitEvent({
+      eventType: 'payment.receipt_sent',
+      entityType: 'INVOICE',
+      entityId: payment.invoiceId,
+      recipient,
+      payload: {
+        paymentId,
+        amount: payment.amount,
+        invoiceNumber: invoice.invoiceNumber,
+        clientId: invoice.clientId,
+      },
+    });
+
+    import('../pdf/pdf.service').then(({ pdfService }) => {
+      pdfService.generateReceipt(paymentId, actorUserId).catch(() => {});
+    });
+
+    return payment;
+  },
+
+  async resendReceipt(paymentId: string, actorUserId: string) {
+    return this.sendReceipt(paymentId, actorUserId);
   },
 
   async getById(id: string) {
@@ -304,6 +377,12 @@ export const invoiceService = {
     if (!project) throw new NotFoundError('Project not found');
     const invoices = await invoiceRepository.listForProject(projectId);
     return invoices.map(enrichInvoice);
+  },
+
+  async listPayments(invoiceId: string, sortOrder: 'asc' | 'desc' = 'desc') {
+    const invoice = await invoiceRepository.findById(invoiceId);
+    if (!invoice) throw new NotFoundError('Invoice not found');
+    return paymentRepository.listForInvoice(invoiceId, sortOrder);
   },
 
   // Project Total / Total Invoiced / Total Paid / Outstanding - always

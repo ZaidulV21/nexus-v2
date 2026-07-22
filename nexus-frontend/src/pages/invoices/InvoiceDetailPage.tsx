@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Ban, CreditCard, Download, Eye, ExternalLink, Mail, Receipt, RefreshCw } from 'lucide-react';
+import { Ban, CreditCard, Download, Eye, ExternalLink, Mail, Receipt, RefreshCw, Printer } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
@@ -16,11 +16,11 @@ import { EntityAuditLog } from '@/components/common/EntityAuditLog';
 import { EntityTimeline } from '@/components/common/EntityTimeline';
 import { useDisclosure } from '@/hooks/useDisclosure';
 import { useToast } from '@/hooks/useToast';
-import { useCancelInvoice, useInvoice, useInvoicePdfUrl, useRegenerateInvoicePdf, useSendInvoice } from '@/queries/useInvoices';
+import { useCancelInvoice, useInvoice, useInvoicePdfUrl, usePaymentHistory, useRegenerateInvoicePdf, useSendInvoice, useReceiptUrl, useSendReceipt, useResendReceipt } from '@/queries/useInvoices';
 import { ApiError } from '@/lib/api';
 import { formatCurrency, formatDateTime } from '@/lib/format';
 import { ROUTES } from '@/routes/routes';
-import type { Invoice } from '@/types';
+import type { Invoice, Payment } from '@/types';
 import { RecordPaymentModal } from './components/RecordPaymentModal';
 
 function Field({ label, value }: { label: string; value: ReactNode }) {
@@ -39,6 +39,45 @@ function getClientName(invoice: Invoice) {
 
 function getProjectNumber(invoice: Invoice) {
   return invoice.project?.projectNumber ?? '—';
+}
+
+function PaymentSummaryCards({ invoice }: { invoice: Invoice }) {
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <Card>
+        <CardContent className="pt-4 pb-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">Invoice Total</p>
+          <p className="mt-1 font-mono text-lg font-semibold text-ink">{formatCurrency(invoice.grandTotal)}</p>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardContent className="pt-4 pb-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">Total Paid</p>
+          <p className="mt-1 font-mono text-lg font-semibold text-success">{formatCurrency(invoice.paidAmount ?? 0)}</p>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardContent className="pt-4 pb-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">Outstanding Balance</p>
+          <p className="mt-1 font-mono text-lg font-semibold text-ink">{formatCurrency(invoice.outstandingAmount ?? 0)}</p>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardContent className="pt-4 pb-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">Payments</p>
+          <p className="mt-1 font-mono text-lg font-semibold text-ink">{invoice.paymentCount ?? invoice.payments.length}</p>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardContent className="pt-4 pb-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">Status</p>
+          <div className="mt-1">
+            <StatusBadge status={invoice.displayStatus ?? invoice.status} />
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
 }
 
 function InvoiceOverview({ invoice }: { invoice: Invoice }) {
@@ -118,21 +157,142 @@ function InvoiceOverview({ invoice }: { invoice: Invoice }) {
 }
 
 function PaymentHistory({ invoice }: { invoice: Invoice }) {
-  if (invoice.payments.length === 0) {
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const { data: payments, isLoading } = usePaymentHistory(invoice.id, sortOrder);
+  const displayPayments = payments ?? invoice.payments;
+  const { toast } = useToast();
+  const sendReceipt = useSendReceipt(invoice.id);
+  const resendReceipt = useResendReceipt(invoice.id);
+
+  if (isLoading) {
+    return <Skeleton className="h-32 w-full" />;
+  }
+
+  if (displayPayments.length === 0) {
     return <EmptyState title="No payments recorded" description="Payments recorded through the backend will appear here." />;
   }
 
+  async function handleSendReceipt(paymentId: string) {
+    try {
+      await sendReceipt.mutateAsync(paymentId);
+      toast({ title: 'Receipt sent', variant: 'success' });
+    } catch (err) {
+      toast({
+        title: 'Could not send receipt',
+        description: err instanceof ApiError ? err.message : 'Something went wrong.',
+        variant: 'danger',
+      });
+    }
+  }
+
+  async function handleResendReceipt(paymentId: string) {
+    try {
+      await resendReceipt.mutateAsync(paymentId);
+      toast({ title: 'Receipt resent', variant: 'success' });
+    } catch (err) {
+      toast({
+        title: 'Could not resend receipt',
+        description: err instanceof ApiError ? err.message : 'Something went wrong.',
+        variant: 'danger',
+      });
+    }
+  }
+
   return (
-    <ul className="divide-y divide-border rounded-lg border border-border">
-      {invoice.payments.map((payment) => (
-        <li key={payment.id} className="grid gap-3 px-4 py-3 md:grid-cols-4">
-          <Field label="Payment date" value={formatDateTime(payment.paidAt)} />
-          <Field label="Amount" value={formatCurrency(payment.amount)} />
-          <Field label="Method" value={payment.method} />
-          <Field label="Reference / notes" value={payment.referenceNote ?? '-'} />
-        </li>
-      ))}
-    </ul>
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-ink-muted">
+          {displayPayments.length} payment{displayPayments.length !== 1 ? 's' : ''} recorded
+        </p>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc')}
+        >
+          {sortOrder === 'desc' ? 'Newest first' : 'Oldest first'}
+        </Button>
+      </div>
+      <ul className="divide-y divide-border rounded-lg border border-border">
+        {displayPayments.map((payment) => (
+          <PaymentRow
+            key={payment.id}
+            payment={payment}
+            onSendReceipt={handleSendReceipt}
+            onResendReceipt={handleResendReceipt}
+            isSending={sendReceipt.isPending || resendReceipt.isPending}
+          />
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function PaymentRow({
+  payment,
+  onSendReceipt,
+  onResendReceipt,
+  isSending,
+}: {
+  payment: Payment;
+  onSendReceipt: (paymentId: string) => void;
+  onResendReceipt: (paymentId: string) => void;
+  isSending: boolean;
+}) {
+  const { data: receiptData } = useReceiptUrl(payment.id);
+  const receiptUrl = receiptData?.pdfUrl ?? payment.receiptUrl ?? null;
+
+  return (
+    <li className="px-4 py-3">
+      <div className="grid gap-3 md:grid-cols-5">
+        <Field label="Amount" value={formatCurrency(payment.amount)} />
+        <Field label="Date & Time" value={formatDateTime(payment.paidAt)} />
+        <Field label="Payment Method" value={payment.method} />
+        <Field label="Transaction Reference" value={payment.transactionReference ?? '-'} />
+        <Field label="Notes" value={payment.referenceNote ?? '-'} />
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        {receiptUrl && (
+          <>
+            <Button asChild variant="secondary" size="sm">
+              <a href={receiptUrl} target="_blank" rel="noreferrer">
+                <Eye className="h-3.5 w-3.5" /> Receipt
+              </a>
+            </Button>
+            <Button asChild variant="secondary" size="sm">
+              <a href={receiptUrl} download>
+                <Download className="h-3.5 w-3.5" /> Download Receipt
+              </a>
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                const win = window.open(receiptUrl, '_blank');
+                win?.print();
+              }}
+            >
+              <Printer className="h-3.5 w-3.5" /> Print
+            </Button>
+          </>
+        )}
+        <Button
+          variant="secondary"
+          size="sm"
+          loading={isSending}
+          onClick={() => onSendReceipt(payment.id)}
+        >
+          <Mail className="h-3.5 w-3.5" /> Send Receipt
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
+          loading={isSending}
+          onClick={() => onResendReceipt(payment.id)}
+        >
+          <RefreshCw className="h-3.5 w-3.5" /> Resend Receipt
+        </Button>
+      </div>
+    </li>
   );
 }
 
@@ -283,9 +443,11 @@ export function InvoiceDetailPage() {
             <Button variant="secondary" size="sm" loading={sendInvoice.isPending} onClick={() => handleSend(true)}>
               <RefreshCw className="h-3.5 w-3.5" /> Resend
             </Button>
-            <Button size="sm" onClick={paymentModal.open}>
-              <CreditCard className="h-3.5 w-3.5" /> Record payment
-            </Button>
+            {(invoice.outstandingAmount ?? 0) > 0 && (
+              <Button size="sm" onClick={paymentModal.open}>
+                <CreditCard className="h-3.5 w-3.5" /> Record payment
+              </Button>
+            )}
             <Button variant="danger" size="sm" onClick={cancelModal.open}>
               <Ban className="h-3.5 w-3.5" /> Cancel
             </Button>
@@ -293,7 +455,9 @@ export function InvoiceDetailPage() {
         }
       />
 
-      <Card>
+      <PaymentSummaryCards invoice={invoice} />
+
+      <Card className="mt-4">
         <CardContent className="pt-5">
           <Tabs defaultValue="overview">
             <TabsList>

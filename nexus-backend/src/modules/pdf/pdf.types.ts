@@ -1,4 +1,4 @@
-export type PdfDocumentType = 'QUOTATION' | 'INVOICE';
+export type PdfDocumentType = 'QUOTATION' | 'INVOICE' | 'RECEIPT';
 
 export interface CompanyBrandingData {
   companyName: string | null;
@@ -86,6 +86,24 @@ export interface PdfInvoiceData {
   grandTotal: number;
   paidAmount: number;
   outstandingAmount: number;
+  recipient: PdfRecipient;
+  projectName?: string;
+  projectNumber?: string;
+}
+
+export interface PdfReceiptData {
+  receiptNumber: string;
+  paymentId: string;
+  amount: number;
+  method: string;
+  transactionReference?: string | null;
+  referenceNote?: string | null;
+  paidAt: Date;
+  invoiceNumber: string;
+  invoiceLabel: string;
+  invoiceGrandTotal: number;
+  invoicePaidAmount: number;
+  invoiceOutstandingAmount: number;
   recipient: PdfRecipient;
   projectName?: string;
   projectNumber?: string;

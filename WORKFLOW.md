@@ -192,18 +192,29 @@ REJECTED → DRAFT (Admin revises)
 - **Numbering**: Gapless sequential under concurrency
 
 ### Invoice Workflow
-1. **DRAFT** - Created by Admin
-2. **SENT** - Sent to Client
-3. **PAID** - Payment received
-4. **OVERDUE** - Payment late
+1. **DRAFT** - Created by Admin (no payments, not yet sent)
+2. **SENT** - Sent to Client (ISSUED status, no payments yet)
+3. **PARTIALLY PAID** - Some payments recorded, outstanding balance remains
+4. **PAID** - Fully paid (outstanding balance = 0)
+5. **OVERDUE** - Payment late (reserved for future due date support)
+6. **CANCELLED** - Invoice cancelled by Admin
+
+**Note**: Status is auto-calculated from payment state. No manual status editing allowed.
+
+### Payment Recording
+- **Full Payment**: Single payment covers entire grand total
+- **Partial Payment**: Payment less than grand total, multiple allowed
+- **Business Rules**: Rejects negative, zero, overpayment, and duplicate transaction references
+- **Fields**: Amount, Method, Transaction/UTR Reference, Notes, Recorded By
 
 ### Invoice PDF Generation
 - **Trigger**: Fire-and-forget after `create`, `send`, `cancel`, `recordPayment`
 - **Process**: Same as Quotation PDF — fetches branding → downloads images → generates buffer → uploads → stores URL
 - **Bill To block**: Shows client contact name, company name, GSTIN, email, phone
 - **HSN/SAC codes**: Shown in 6-column table (Description, Qty, HSN/SAC, Rate, Tax %, Amount) when present
-- **Payment summary**: Subtotal, GST, Grand Total, Amount Paid, Outstanding
-- **Status watermarks**: CANCELLED (red), PAID (green), PARTIALLY PAID (amber)
+- **Payment summary**: Subtotal, GST, Grand Total, Amount Paid, Outstanding, Payment Count
+- **Auto-calculated status**: DRAFT → SENT → PARTIALLY PAID → PAID → CANCELLED (never stored, always computed)
+- **Status watermarks**: CANCELLED (red), PAID (green), PARTIALLY PAID (amber), SENT (blue)
 - **Bank details + signature/stamp**: From company branding
 - **Download**: `GET /api/pdf/INVOICE/:invoiceId` — returns redirect to storage URL
 - **Regenerate**: `POST /api/pdf/INVOICE/:invoiceId/regenerate` — forces regeneration
@@ -444,6 +455,7 @@ Lead ← Quotation (automatic status sync via sourceLeadId)
 7. **Timeline, Audit Log, Notifications, Portal** - Remain synchronized
 8. **Lead Archiving** - Soft archive with mandatory reason, excludes from dashboard/search, fully reversible
 9. **Global Search** - Backend-first architecture, type filtering, related entity includes, Cmd+K integration
+10. **Payment Management** - Auto-calculated invoice status, transaction references, duplicate prevention, sorted payment history
 
 ---
 
@@ -454,3 +466,4 @@ The Nexus platform implements a clear, single-path workflow from Lead capture th
 **Status**: ✅ WORKFLOW IMPLEMENTATION COMPLETE  
 **Builds**: Backend ✓ | Frontend ✓  
 **Tests**: Passing ✓
+ 

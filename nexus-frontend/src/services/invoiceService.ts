@@ -12,6 +12,7 @@ export interface InvoiceListParams {
 export interface RecordPaymentInput {
   amount: number;
   method: string;
+  transactionReference?: string;
   referenceNote?: string;
 }
 
@@ -54,7 +55,18 @@ export const invoiceService = {
   recordPayment: (invoiceId: string, input: RecordPaymentInput) =>
     api.post<Payment>(`/invoices/${invoiceId}/payments`, input),
 
+  listPayments: (invoiceId: string, sortOrder: 'asc' | 'desc' = 'desc') =>
+    api.get<Payment[]>(`/invoices/${invoiceId}/payments`, { sort: sortOrder }),
+
   getPdfUrl: (id: string) => api.get<{ pdfUrl: string }>(`/pdf/INVOICE/${id}`),
   regeneratePdf: (id: string) =>
     api.post<{ pdfUrl: string; generatedAt: string; fileSize: number }>(`/pdf/INVOICE/${id}/regenerate`),
+
+  getReceiptUrl: (paymentId: string) => api.get<{ pdfUrl: string }>(`/pdf/RECEIPT/${paymentId}`),
+  regenerateReceipt: (paymentId: string) =>
+    api.post<{ pdfUrl: string; generatedAt: string; fileSize: number }>(`/pdf/RECEIPT/${paymentId}/regenerate`),
+  sendReceipt: (invoiceId: string, paymentId: string) =>
+    api.post<Payment>(`/invoices/${invoiceId}/payments/${paymentId}/send-receipt`),
+  resendReceipt: (invoiceId: string, paymentId: string) =>
+    api.post<Payment>(`/invoices/${invoiceId}/payments/${paymentId}/resend-receipt`),
 };

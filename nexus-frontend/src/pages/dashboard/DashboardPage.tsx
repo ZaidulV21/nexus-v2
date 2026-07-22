@@ -19,6 +19,7 @@ import {
   Banknote,
   CalendarClock,
   Eye,
+  CreditCard,
 } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/Button';
@@ -91,7 +92,7 @@ export function DashboardPage() {
       />
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {isLoading ? (
           Array.from({ length: 10 }).map((_, i) => <SkeletonStatCard key={i} />)
         ) : (
@@ -155,6 +156,16 @@ export function DashboardPage() {
               label="Projects In Progress"
               value={formatNumber(kpis!.projectsInProgress)}
               icon={TrendingUp}
+            />
+            <StatCard
+              label="Total Payments"
+              value={formatNumber(kpis!.totalPaymentCount)}
+              icon={CreditCard}
+            />
+            <StatCard
+              label="Avg Payment Size"
+              value={formatCurrency(kpis!.avgPaymentSize)}
+              icon={Banknote}
             />
           </>
         )}
@@ -230,6 +241,23 @@ export function DashboardPage() {
             ) : (
               <DistributionDonutChart
                 data={charts.projectsByStatus.map((s) => ({ name: s.status, value: s.count }))}
+              />
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Payment Methods</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <Skeleton className="h-56 w-full" />
+            ) : !charts?.paymentMethods?.length ? (
+              <p className="py-16 text-center text-sm text-ink-muted">No payments yet.</p>
+            ) : (
+              <DistributionDonutChart
+                data={charts.paymentMethods.map((m) => ({ name: m.method, value: m.count }))}
               />
             )}
           </CardContent>

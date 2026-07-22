@@ -276,8 +276,12 @@ export interface Payment {
   invoiceId: string;
   amount: string;
   method: string;
+  transactionReference?: string | null;
   referenceNote?: string | null;
   paidAt: string;
+  recordedByUserId?: string;
+  receiptUrl?: string | null;
+  receiptGeneratedAt?: string | null;
 }
 
 export type InvoiceStatus = 'ISSUED' | 'CANCELLED';
@@ -301,6 +305,7 @@ export interface Invoice {
   payments: Payment[];
   paidAmount?: number;
   outstandingAmount?: number;
+  paymentCount?: number;
   relatedQuotation?: ProjectQuotationSummary | null;
   pdfUrl?: string | null;
   issuedAt: string;

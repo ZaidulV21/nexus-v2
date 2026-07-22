@@ -11,10 +11,12 @@ import {
   PdfDocumentType,
   PdfQuotationData,
   PdfInvoiceData,
+  PdfReceiptData,
   PdfGenerationResult,
 } from './pdf.types';
 import { renderQuotationPdf } from './templates/quotation.template';
 import { renderInvoicePdf } from './templates/invoice.template';
+import { renderReceiptPdf } from './templates/receipt.template';
 
 const storageProvider = env.cloudinaryCloudName ? cloudinaryProvider : localStorageProvider;
 
@@ -151,7 +153,9 @@ async function fetchInvoiceData(id: string): Promise<PdfInvoiceData> {
         ? 'PAID'
         : paidAmount > 0
           ? 'PARTIALLY PAID'
-          : invoice.status;
+          : invoice.status === 'ISSUED'
+            ? 'SENT'
+            : 'DRAFT';
 
   return {
     invoiceNumber: invoice.invoiceNumber,
@@ -173,6 +177,55 @@ async function fetchInvoiceData(id: string): Promise<PdfInvoiceData> {
     grandTotal,
     paidAmount,
     outstandingAmount,
+    recipient: {
+      contactName: invoice.client.contactName,
+      companyName: invoice.client.companyName,
+      email: invoice.client.email,
+      phone: invoice.client.phone,
+      gstin: invoice.client.gstin,
+    },
+    projectName: invoice.project?.projectNumber,
+    projectNumber: invoice.project?.projectNumber,
+  };
+}
+
+async function fetchReceiptData(paymentId: string): Promise<PdfReceiptData> {
+  const payment = await prisma.payment.findFirst({
+    where: { id: paymentId },
+    include: {
+      invoice: {
+        include: {
+          client: true,
+          project: true,
+          payments: true,
+        },
+      },
+    },
+  });
+
+  if (!payment) throw new NotFoundError('Payment not found');
+
+  const invoice = payment.invoice;
+  const paidAmount = invoice.payments.reduce(
+    (sum, p) => sum + Number(p.amount),
+    0
+  );
+  const grandTotal = Number(invoice.grandTotal);
+  const outstandingAmount = grandTotal - paidAmount;
+
+  return {
+    receiptNumber: `RCT-${invoice.invoiceNumber}-${payment.id.slice(0, 8).toUpperCase()}`,
+    paymentId: payment.id,
+    amount: Number(payment.amount),
+    method: payment.method,
+    transactionReference: payment.transactionReference,
+    referenceNote: payment.referenceNote,
+    paidAt: payment.paidAt,
+    invoiceNumber: invoice.invoiceNumber,
+    invoiceLabel: invoice.label,
+    invoiceGrandTotal: grandTotal,
+    invoicePaidAmount: paidAmount,
+    invoiceOutstandingAmount: outstandingAmount,
     recipient: {
       contactName: invoice.client.contactName,
       companyName: invoice.client.companyName,
@@ -217,6 +270,9 @@ async function generatePdfBuffer(
   } else if (documentType === 'INVOICE') {
     const data = await fetchInvoiceData(documentId);
     renderInvoicePdf(doc, preparedBranding, data);
+  } else if (documentType === 'RECEIPT') {
+    const data = await fetchReceiptData(documentId);
+    renderReceiptPdf(doc, preparedBranding, data);
   }
 
   doc.end();
@@ -227,15 +283,17 @@ export const pdfService = {
   async generate(documentType: PdfDocumentType, documentId: string, actorUserId?: string): Promise<PdfGenerationResult> {
     const buffer = await generatePdfBuffer(documentType, documentId);
 
-    const title = documentType === 'QUOTATION'
-      ? await (async () => {
-          const q = await prisma.quotation.findUnique({ where: { id: documentId }, select: { quotationNumber: true } });
-          return q?.quotationNumber || documentId;
-        })()
-      : await (async () => {
-          const inv = await prisma.invoice.findUnique({ where: { id: documentId }, select: { invoiceNumber: true } });
-          return inv?.invoiceNumber || documentId;
-        })();
+    let title: string;
+    if (documentType === 'QUOTATION') {
+      const q = await prisma.quotation.findUnique({ where: { id: documentId }, select: { quotationNumber: true } });
+      title = q?.quotationNumber || documentId;
+    } else if (documentType === 'INVOICE') {
+      const inv = await prisma.invoice.findUnique({ where: { id: documentId }, select: { invoiceNumber: true } });
+      title = inv?.invoiceNumber || documentId;
+    } else {
+      const payment = await prisma.payment.findUnique({ where: { id: documentId }, include: { invoice: { select: { invoiceNumber: true } } } });
+      title = payment ? `RCT-${payment.invoice.invoiceNumber}-${documentId.slice(0, 8).toUpperCase()}` : documentId;
+    }
 
     const fileName = `${getDocumentTitle(documentType, title)}.pdf`;
     const stored = await storageProvider.save(fileName, buffer, 'application/pdf');
@@ -248,16 +306,21 @@ export const pdfService = {
         where: { id: documentId },
         data: { pdfUrl, pdfGeneratedAt: now },
       });
-    } else {
+    } else if (documentType === 'INVOICE') {
       await prisma.invoice.update({
         where: { id: documentId },
         data: { pdfUrl, pdfGeneratedAt: now },
       });
+    } else {
+      await prisma.payment.update({
+        where: { id: documentId },
+        data: { receiptUrl: pdfUrl, receiptGeneratedAt: now },
+      });
     }
 
     await timelineService.recordEvent({
-      entityType: documentType,
-      entityId: documentId,
+      entityType: documentType === 'RECEIPT' ? 'INVOICE' : documentType,
+      entityId: documentType === 'RECEIPT' ? (await prisma.payment.findUnique({ where: { id: documentId }, select: { invoiceId: true } }))?.invoiceId || documentId : documentId,
       eventType: `${documentType}_PDF_GENERATED`,
       description: `PDF generated for ${documentType.toLowerCase()} ${title}`,
       actorUserId,
@@ -265,8 +328,8 @@ export const pdfService = {
     });
 
     await auditService.recordAudit({
-      entityType: documentType,
-      entityId: documentId,
+      entityType: documentType === 'RECEIPT' ? 'INVOICE' : documentType,
+      entityId: documentType === 'RECEIPT' ? (await prisma.payment.findUnique({ where: { id: documentId }, select: { invoiceId: true } }))?.invoiceId || documentId : documentId,
       action: 'PDF_GENERATED',
       afterState: { pdfUrl, generatedAt: now.toISOString(), fileSize: buffer.length },
       actorUserId,
@@ -281,9 +344,12 @@ export const pdfService = {
     if (documentType === 'QUOTATION') {
       const q = await prisma.quotation.findUnique({ where: { id: documentId }, select: { pdfUrl: true } });
       existingUrl = q?.pdfUrl ?? null;
-    } else {
+    } else if (documentType === 'INVOICE') {
       const inv = await prisma.invoice.findUnique({ where: { id: documentId }, select: { pdfUrl: true } });
       existingUrl = inv?.pdfUrl ?? null;
+    } else {
+      const payment = await prisma.payment.findUnique({ where: { id: documentId }, select: { receiptUrl: true } });
+      existingUrl = payment?.receiptUrl ?? null;
     }
 
     if (existingUrl) {
@@ -299,14 +365,30 @@ export const pdfService = {
     if (documentType === 'QUOTATION') {
       const q = await prisma.quotation.findUnique({ where: { id: documentId }, select: { pdfUrl: true } });
       existingUrl = q?.pdfUrl ?? null;
-    } else {
+    } else if (documentType === 'INVOICE') {
       const inv = await prisma.invoice.findUnique({ where: { id: documentId }, select: { pdfUrl: true } });
       existingUrl = inv?.pdfUrl ?? null;
+    } else {
+      const payment = await prisma.payment.findUnique({ where: { id: documentId }, select: { receiptUrl: true } });
+      existingUrl = payment?.receiptUrl ?? null;
     }
 
     if (existingUrl) return existingUrl;
 
     const result = await this.generate(documentType, documentId);
     return result.pdfUrl;
+  },
+
+  async getReceiptUrl(paymentId: string): Promise<string | null> {
+    const payment = await prisma.payment.findUnique({ where: { id: paymentId }, select: { receiptUrl: true } });
+    return payment?.receiptUrl ?? null;
+  },
+
+  async generateReceipt(paymentId: string, actorUserId?: string): Promise<PdfGenerationResult> {
+    return this.generate('RECEIPT', paymentId, actorUserId);
+  },
+
+  async regenerateReceipt(paymentId: string, actorUserId?: string): Promise<PdfGenerationResult> {
+    return this.generate('RECEIPT', paymentId, actorUserId);
   },
 };

@@ -487,3 +487,43 @@ There are no unfinished tasks for the core single-workflow implementation. All b
 **BACKEND: Build ✓ | 195 Tests ✓**
 **FRONTEND: Build ✓ | tsc ✓**
 **ALL WORKFLOW PATHS VERIFIED**
+
+---
+
+# Phase 1 — Professional Payment Management (Core)
+
+**Date**: 2026-07-22  
+**Status**: ✅ PHASE 1 COMPLETE
+
+## Changes Made
+
+### Backend Files Modified
+1. `nexus-backend/prisma/schema.prisma` — Added `transactionReference` to Payment model
+2. `nexus-backend/src/modules/invoice/invoice.types.ts` — Added `transactionReference` to RecordPaymentInput
+3. `nexus-backend/src/modules/invoice/invoice.validation.ts` — Enhanced payment validation with descriptive errors
+4. `nexus-backend/src/modules/invoice/invoice.repository.ts` — Added `findByTransactionReference`, `listForInvoice` with sort
+5. `nexus-backend/src/modules/invoice/invoice.service.ts` — Auto-calculated status, business rules, listPayments
+6. `nexus-backend/src/modules/invoice/invoice.controller.ts` — Added `listPayments` handler
+7. `nexus-backend/src/modules/invoice/invoice.routes.ts` — Added `GET /:id/payments` route
+8. `nexus-backend/src/modules/pdf/pdf.service.ts` — Updated displayStatus computation
+9. `nexus-backend/src/modules/invoice/tests/invoice.service.test.ts` — 26 tests (was 6)
+
+### Frontend Files Modified
+1. `nexus-frontend/src/types/index.ts` — Payment + Invoice type updates
+2. `nexus-frontend/src/services/invoiceService.ts` — transactionReference + listPayments
+3. `nexus-frontend/src/queries/useInvoices.ts` — usePaymentHistory hook
+4. `nexus-frontend/src/components/ui/StatusBadge.tsx` — OVERDUE status
+5. `nexus-frontend/src/pages/invoices/InvoiceDetailPage.tsx` — Summary cards + enhanced payment history
+6. `nexus-frontend/src/pages/invoices/components/RecordPaymentModal.tsx` — Transaction reference field
+7. `nexus-frontend/src/pages/portal/PortalInvoiceDetailPage.tsx` — Summary cards + enhanced payment history
+
+### Documentation Updated
+1. `IMPLEMENTATION.md` — Phase 1 section
+2. `IMPLEMENTATION-PROGRESS.md` — Phase 1 section (this file)
+3. `WORKFLOW.md` — Invoice lifecycle updated
+
+## Verification
+- Backend Tests: 213/213 passing ✅
+- Backend TypeScript: Clean ✅
+- Frontend TypeScript: Clean ✅
+- Frontend Production Build: Successful ✅

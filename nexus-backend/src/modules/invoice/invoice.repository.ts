@@ -123,16 +123,29 @@ export const invoiceRepository = {
 
 export const paymentRepository = {
   create(
-    data: { invoiceId: string; amount: number; method: string; referenceNote?: string; recordedByUserId: string }
+    data: { invoiceId: string; amount: number; method: string; transactionReference?: string; referenceNote?: string; recordedByUserId: string }
   ) {
     return prisma.payment.create({ data });
+  },
+
+  findById(id: string) {
+    return prisma.payment.findFirst({ where: { id } });
   },
 
   sumForInvoice(invoiceId: string) {
     return prisma.payment.aggregate({ where: { invoiceId }, _sum: { amount: true } });
   },
 
-  listForInvoice(invoiceId: string) {
-    return prisma.payment.findMany({ where: { invoiceId }, orderBy: { paidAt: 'desc' } });
+  listForInvoice(invoiceId: string, sortOrder: 'asc' | 'desc' = 'desc') {
+    return prisma.payment.findMany({ where: { invoiceId }, orderBy: { paidAt: sortOrder } });
+  },
+
+  findByTransactionReference(transactionReference: string, excludePaymentId?: string) {
+    return prisma.payment.findFirst({
+      where: {
+        transactionReference,
+        ...(excludePaymentId ? { id: { not: excludePaymentId } } : {}),
+      },
+    });
   },
 };
