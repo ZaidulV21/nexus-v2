@@ -163,7 +163,7 @@ docker-compose.yml - local Postgres for development
 
 - No payment gateway — payments are manually recorded by Admin (PRD §8.2).
 - Questionnaires are developer-seeded, not admin-editable (PRD §5) — see `prisma/seed.ts` for the placeholder question set; replace with real questions per service before go-live.
-- Email notification channel is a console-log placeholder (`src/modules/notifications/channels/email.channel.ts`) — wire to a real provider (SES/SendGrid/SMTP) before deployment.
+- Email notification channel uses **Resend** (`src/modules/email/email.service.ts`) — requires `RESEND_API_KEY` env var; `EMAIL_FROM` and `APP_URL` optional with sensible defaults. Missing API key → emails silently skipped.
 - `s3Storage.provider.ts` is a stub — implement before deploying to production; `local` storage driver works for development as-is.
 - Admin Dashboard metrics (`adminDashboard.service.ts`) use a reasonable default set, flagged in the PRD as pending your confirmation (§19) — adjust freely, the module boundary won't change.
 

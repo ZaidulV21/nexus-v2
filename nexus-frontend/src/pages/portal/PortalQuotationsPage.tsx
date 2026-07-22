@@ -39,12 +39,16 @@ export function PortalQuotationsPage() {
       {
         accessorKey: 'quotationNumber',
         header: 'Quotation',
-        cell: (info) => (
-          <div>
-            <p className="font-mono text-sm font-medium text-ink">{info.getValue()}</p>
-            <p className="text-xs text-ink-faint">{info.row.original.lead?.leadNumber ?? '—'}</p>
-          </div>
-        ),
+        cell: (info) => {
+          const row = info.row.original;
+          const leadNumber = row.lead?.leadNumber ?? row.client?.sourceLead?.leadNumber ?? null;
+          return (
+            <div>
+              <p className="font-mono text-sm font-medium text-ink">{info.getValue()}</p>
+              <p className="text-xs text-ink-faint">{leadNumber ?? '—'}</p>
+            </div>
+          );
+        },
       },
       {
         id: 'version',

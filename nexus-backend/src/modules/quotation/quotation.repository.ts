@@ -32,6 +32,8 @@ const CLIENT_SUMMARY_SELECT = {
   companyName: true,
   email: true,
   phone: true,
+  sourceLeadId: true,
+  sourceLead: { select: { id: true, leadNumber: true, contactName: true } },
 } as const;
 
 export const quotationRepository = {
@@ -142,6 +144,7 @@ export const quotationRepository = {
         orderBy: { [pagination.sortBy || 'createdAt']: pagination.sortOrder },
         include: {
           lead: { select: { id: true, leadNumber: true } },
+          client: { select: { sourceLead: { select: { id: true, leadNumber: true } } } },
           versions: {
             where: { isActive: true },
             include: { items: true },

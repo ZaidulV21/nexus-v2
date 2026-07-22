@@ -326,12 +326,24 @@ export const quotationService = {
       actorUserId,
     });
 
+    const activeVersion = getActiveVersion(quotation);
+    const clientName = quotation.client?.contactName ?? quotation.lead?.contactName ?? null;
+
     await notificationsService.emitEvent({
       eventType: 'quotation.sent',
       entityType: 'QUOTATION',
       entityId: quotationId,
       recipient,
-      payload: { quotationId, quotationNumber: quotation.quotationNumber, resend, clientId: quotation.clientId },
+      payload: {
+        quotationId,
+        quotationNumber: quotation.quotationNumber,
+        resend,
+        clientId: quotation.clientId,
+        clientName,
+        grandTotal: activeVersion?.grandTotal ?? 0,
+        subtotal: activeVersion?.subtotal ?? 0,
+        gstAmount: activeVersion?.gstAmount ?? 0,
+      },
     });
 
     import('../pdf/pdf.service').then(({ pdfService }) => {

@@ -200,6 +200,7 @@ export interface QuotationItem {
   taxRate: string;
   taxAmount: string;
   lineTotal: string;
+  serviceName?: string | null;
 }
 
 export interface QuotationVersion {
@@ -239,6 +240,8 @@ export interface ClientSummary {
   companyName?: string | null;
   email: string;
   phone: string;
+  sourceLeadId?: string | null;
+  sourceLead?: { id: string; leadNumber: string; contactName: string } | null;
 }
 
 export interface Quotation {

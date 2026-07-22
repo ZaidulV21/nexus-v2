@@ -262,7 +262,7 @@ The old error message only exists in `SINGLE-WORKFLOW-COMPLETE.md:279` (historic
 ### Backend
 ```bash
 ✅ npm run build — SUCCESS (0 errors)
-✅ npm test — 164/164 tests passing (19 test suites, ~14s)
+✅ npm test — 213/213 tests passing (20 test suites, ~10s)
 ```
 
 ### Frontend
@@ -527,3 +527,76 @@ There are no unfinished tasks for the core single-workflow implementation. All b
 - Backend TypeScript: Clean ✅
 - Frontend TypeScript: Clean ✅
 - Frontend Production Build: Successful ✅
+
+---
+
+# Phase 2 — Resend Email Infrastructure & Quotation Lead Display
+
+**Date**: 2026-07-22  
+**Status**: ✅ PHASE 2 COMPLETE
+
+## Summary
+
+Implemented production email delivery via Resend, added branded email templates for all business events, fixed quotation email payload data mapping, and resolved lead display in client-owned quotations using the existing `Client.sourceLead` relationship. No schema or workflow changes.
+
+## Architecture Decision: Lead XOR Client Constraint
+
+The database enforces `CHECK (("leadId" IS NULL) <> ("clientId" IS NULL))` — exactly one must be non-null. This is the correct business model. The lead is resolved for display through `Client.sourceLead`, not by violating the constraint.
+
+## Changes Made
+
+### Backend — Resend Email Integration
+1. `src/modules/email/email.service.ts` — NEW: Centralized Resend EmailService with lazy init, graceful degradation when `RESEND_API_KEY` missing
+2. `src/modules/email/templates/base-email.template.ts` — NEW: Shared responsive HTML wrapper with branding
+3. `src/modules/email/templates/client-welcome.template.ts` — NEW: Welcome email with portal credentials
+4. `src/modules/email/templates/quotation-sent.template.ts` — NEW: Quotation notification with subtotal/GST/grand total breakdown
+5. `src/modules/email/templates/invoice-sent.template.ts` — NEW: Invoice notification with outstanding amount
+6. `src/modules/email/templates/payment-receipt.template.ts` — NEW: Payment receipt confirmation
+7. `src/modules/notifications/channels/email.channel.ts` — REWRITTEN: Resend delivery + template matching by payload shape + company branding
+8. `src/modules/notifications/notifications.service.ts` — Added `payment.receipt_sent` to KNOWN_EVENT_TYPES
+
+### Backend — Email Payload Fixes
+9. `src/modules/quotation/quotation.service.ts` — `send()` now emits `grandTotal`, `subtotal`, `gstAmount`, `clientName` from active version; `leadId: null` on creation
+10. `src/modules/client/client.service.ts` — `client.account.created` payload includes `clientName`
+
+### Backend — Lead Display via Client.sourceLead
+11. `src/modules/quotation/quotation.repository.ts` — Extended `CLIENT_SUMMARY_SELECT` with `sourceLeadId` + `sourceLead { id, leadNumber, contactName }`; added `client.sourceLead` to `listForClient()` include
+
+### Backend — Configuration
+12. `src/config/env.ts` — Added `resendApiKey`, `emailFrom`, `appUrl`
+
+### Frontend — Lead Display Resolution
+13. `src/types/index.ts` — `ClientSummary` now includes `sourceLeadId` and `sourceLead`
+14. `src/pages/quotations/QuotationDetailPage.tsx` — Resolves lead via `quotation.lead ?? client.sourceLead`
+15. `src/pages/quotations/QuotationsPage.tsx` — Lead column resolves via fallback chain
+16. `src/pages/portal/PortalQuotationDetailPage.tsx` — Header lead display via fallback
+17. `src/pages/portal/PortalQuotationsPage.tsx` — Subtitle lead resolution
+
+### Package Changes
+18. `nexus-backend/package.json` — Added `resend` dependency
+
+## Key Design Decisions
+
+1. **XOR constraint preserved** — No schema migration, no workflow change
+2. **Lead resolved through existing relation** — `Client.sourceLead` Prisma relation already existed; just wasn't being fetched
+3. **No additional API requests** — Lead data travels as nested include in quotation response
+4. **Fire-and-forget email delivery** — Email channel never blocks business transactions
+5. **Graceful degradation** — Missing `RESEND_API_KEY` → emails skipped with console warning, not errors
+6. **Template selection by payload shape** — Detects `quotationNumber`, `invoiceNumber`, or `loginEmail`+`tempPassword`
+7. **Company branding from single source** — `CompanySetting` → `getCompanyBranding()` → email templates
+
+## Verification
+
+| Check | Result |
+|-------|--------|
+| Backend Tests (213/213) | ✅ |
+| Backend TypeScript Clean | ✅ |
+| Frontend TypeScript Clean | ✅ |
+| XOR constraint respected | ✅ `leadId: null` on all new quotations |
+| Lead displayed for converted quotations | ✅ Via `client.sourceLead` |
+| Lead displayed for unconverted quotations | ✅ Via `quotation.lead` |
+| Welcome email sent with clientName | ✅ |
+| Quotation email includes correct totals | ✅ subtotal/GST/grandTotal |
+| `payment.receipt_sent` registered | ✅ In KNOWN_EVENT_TYPES |
+| No schema changes | ✅ |
+| No workflow changes | ✅ |

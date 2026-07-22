@@ -47,11 +47,12 @@ export function QuotationsPage() {
         id: 'lead',
         header: 'Lead',
         cell: (info) => {
-          const lead = info.row.original.lead;
+          const row = info.row.original;
+          const lead = row.lead ?? row.client?.sourceLead ?? null;
           return lead ? (
             <div>
               <p className="font-mono text-sm text-ink-muted">{lead.leadNumber}</p>
-              <p className="text-xs text-ink-faint">{lead.companyName || lead.contactName}</p>
+              <p className="text-xs text-ink-faint">{lead.contactName}</p>
             </div>
           ) : (
             <span className="text-ink-faint">—</span>

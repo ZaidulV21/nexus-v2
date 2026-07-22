@@ -26,20 +26,22 @@ QUOTE_PREPARING
   ↓
 Admin converts Lead → Client
   ↓
-Client account created, credentials emailed
-  ↓
+Client account created
+  ↓ Welcome email sent via Resend (credentials + portal link)
 Admin creates quotation for Client only
   ↓
 Admin approves quotation
   ↓
-Admin sends quotation
+Admin sends quotation → Email sent via Resend (branded, with totals breakdown)
   ↓
 Lead Service status automatically → QUOTE_SENT
+  ↓
+Client views quotation in portal (PDF as single source of truth)
   ↓
 Client requests revision
   → Lead Service → NEGOTIATION
   ↓
-Admin revises & sends again
+Admin revises & sends again → Revised quotation email via Resend
   → Lead Service → QUOTE_SENT
   ↓
 Client accepts quotation
@@ -54,6 +56,10 @@ Project Module
   → ON_HOLD
   → COMPLETED
   → CANCELLED
+  ↓
+Invoice created → Invoice email sent via Resend
+  ↓
+Payment recorded → Payment receipt email sent via Resend
 ```
 
 ---
@@ -110,8 +116,9 @@ Project Module
 ### Client Creation
 - Triggered by Lead conversion
 - Account created with credentials
-- Credentials emailed to Client
+- **Welcome email sent via Resend** with portal login credentials (email + temporary password) and portal URL
 - `sourceLeadId` set for historical traceability
+- `clientName` included in notification payload for personalized email
 
 ### Client Portal Access
 - Client can log in after conversion
@@ -131,7 +138,7 @@ Project Module
 ### Quotation Workflow
 1. **DRAFT** - Created by Admin
 2. **APPROVED** - Admin approves internally
-3. **SENT** - Admin sends to Client (email sent)
+3. **SENT** - Admin sends to Client (**branded email via Resend** with subtotal/GST/grand total breakdown, portal link)
 4. **ACCEPTED** - Client accepts in portal
 5. **REJECTED** - Client rejects in portal
 
@@ -147,8 +154,16 @@ REJECTED → DRAFT (Admin revises)
 ### Quotation Revision
 - Client can request revision
 - Quotation moves to NEGOTIATION status
-- Admin revises and resends
+- Admin revises and resends — **"Revised Quotation" email sent via Resend**
 - Cycle repeats until acceptance
+
+### Quotation Lead Display (XOR Constraint)
+- Database enforces `CHECK (("leadId" IS NULL) <> ("clientId" IS NULL))` — a quotation belongs to either a Lead OR a Client, never both
+- **Before conversion**: `leadId` is set, `clientId = NULL` — lead displayed via `quotation.lead`
+- **After conversion**: `leadId = NULL`, `clientId` is set — lead displayed via `quotation.client.sourceLead`
+- The original lead is always visible through the existing `Client.sourceLead` Prisma relation
+- Lead number remains clickable to Lead Detail page in all views (admin detail, admin list, portal detail, portal list)
+- **No additional API requests** — lead data is fetched as a nested include in the quotation response
 
 ### Quotation PDF Generation
 - **Trigger**: Fire-and-forget after `create`, `revise`, `approve`, `send`, `requestRevision`, `accept`, `reject`
@@ -319,29 +334,35 @@ REJECTED → DRAFT (Admin revises)
 
 ## Notifications
 
-### Email Notifications
-- Client credentials (on conversion)
-- Quotation sent to Client
-- Quotation accepted by Client
-- Invoice sent to Client
+### Email Notifications (via Resend)
+- **Client welcome** — portal credentials (email + temp password) on Lead → Client conversion
+- **Quotation sent** — branded email with subtotal/GST/grand total breakdown and portal link
+- **Quotation resent** — "Revised Quotation" variant with same breakdown
+- **Invoice sent** — branded email with grand total, outstanding amount, and portal link
+- **Invoice reminder** — "Invoice Reminder" variant
+- **Payment receipt** — confirmation with amount paid, payment date/method
+
+**Email infrastructure**: Resend SDK (`resend` npm package), centralized `EmailService`, 5 HTML templates (base, client-welcome, quotation-sent, invoice-sent, payment-receipt), company branding from `CompanySetting` → `getCompanyBranding()`. Graceful degradation: missing `RESEND_API_KEY` → emails skipped, not errors.
 
 ### In-App Notifications
 - Lead status changes
 - Quotation events
 - Project updates
 - Invoice events
+- Payment receipt sent
 
 ---
 
 ## Client Portal
 
 ### Client Capabilities
-- View quotations
+- View quotations (PDF as single source of truth, originating lead displayed)
 - Accept/reject quotations
 - Request quotation revisions
 - View projects
-- View invoices
+- View invoices (payment summary + payment history)
 - Download documents
+- Receive email notifications (welcome, quotation sent, invoice sent, payment receipt)
 
 ### Portal Access
 - Requires login
@@ -354,8 +375,9 @@ REJECTED → DRAFT (Admin revises)
 
 ### Pre-Conversion Quotations
 - If quotations exist before conversion
-- Migrated to Client on conversion
-- `leadId` preserved for backward compatibility
+- Migrated to Client on conversion (`leadId → NULL, clientId → client.id`)
+- `leadId` set to `NULL` — enforced by XOR constraint
+- Lead still accessible via `Client.sourceLead` for display purposes
 
 ### Converted Leads
 - Cannot create new quotations
@@ -409,9 +431,10 @@ REJECTED → DRAFT (Admin revises)
 - Before/after values
 
 ### Notification Integration
-- Email delivery on key events
-- In-app notifications
-- Configurable preferences
+- Email delivery via **Resend** on key events (welcome, quotation sent, invoice sent, payment receipt)
+- In-app notifications for all 18+ event types
+- Company branding (name, logo, address, support email) injected into every email
+- Configurable via `RESEND_API_KEY`, `EMAIL_FROM`, `APP_URL` environment variables
 
 ### Company Settings Integration
 - Centralized company profile, branding, and business configuration — **single source of truth**
@@ -420,8 +443,9 @@ REJECTED → DRAFT (Admin revises)
 - Every update creates Timeline and Audit Log entries
 - File uploads via **Cloudinary** (logo, favicon, QR code, signature, stamp) — falls back to local storage when `CLOUDINARY_*` env vars are not set
 - Settings available via `GET /api/company/settings` for all consumers
-- **Branding helper** (`getCompanyBranding()` + `clearBrandingCache()`) for backend consumers (PDF generation, emails, invoices, quotations)
+- **Branding helper** (`getCompanyBranding()` + `clearBrandingCache()`) for downstream consumers (PDF generation, emails, invoices, quotations)
 - **PDF Generation**: `POST /api/pdf/generate`, `GET /api/pdf/:documentType/:documentId`, `POST /api/pdf/:documentType/:documentId/regenerate` — Professional branded PDFs for Quotations and Invoices with company logo, address, GST, bank details, signature, and stamp
+- **Email Integration**: Company branding (name, logo, support email, address) injected into all Resend emails via `getCompanyBranding()`
 - **Frontend consumers**: Admin sidebar (logo + name), Login page (logo + name), Client portal header (logo + name), Settings page (company profile summary card), Browser favicon (dynamic from settings.faviconUrl)
 - Frontend: Sectioned card layout at `/settings/company` with unsaved changes protection
 
@@ -435,11 +459,13 @@ REJECTED → DRAFT (Admin revises)
 ## Data Flow Summary
 
 ```
-Lead → Client (conversion)
-Client → Quotation (ownership)
+Lead → Client (conversion, welcome email via Resend)
+Client → Quotation (ownership, XOR constraint: leadId OR clientId)
 Quotation → Project (acceptance)
-Project → Invoice (creation)
+Project → Invoice (creation, invoice email via Resend)
+Invoice → Payment (recording, receipt email via Resend)
 Lead ← Quotation (automatic status sync via sourceLeadId)
+Lead ← Quotation.client.sourceLead (display resolution for converted quotations)
 ```
 
 ---
@@ -456,6 +482,8 @@ Lead ← Quotation (automatic status sync via sourceLeadId)
 8. **Lead Archiving** - Soft archive with mandatory reason, excludes from dashboard/search, fully reversible
 9. **Global Search** - Backend-first architecture, type filtering, related entity includes, Cmd+K integration
 10. **Payment Management** - Auto-calculated invoice status, transaction references, duplicate prevention, sorted payment history
+11. **Email Delivery** - Production Resend integration with branded HTML templates, company branding from single source, graceful degradation
+12. **Lead Display** - Client-owned quotations show originating lead via `Client.sourceLead` relation — no schema or constraint changes
 
 ---
 

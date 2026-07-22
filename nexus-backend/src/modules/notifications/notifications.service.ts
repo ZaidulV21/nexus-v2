@@ -27,6 +27,7 @@ const KNOWN_EVENT_TYPES = new Set([
   'lead.restored',
   'project.status_changed',
   'invoice.overdue',
+  'payment.receipt_sent',
 ]);
 
 function resolve(
@@ -232,6 +233,16 @@ const EVENT_NOTIFICATION_MAP: Record<string, EventNotificationMapping> = {
     priority: 'HIGH',
     relatedEntity: 'INVOICE',
     actionUrl: (id) => `/invoices/${id}`,
+  },
+  'payment.receipt_sent': {
+    title: 'Payment receipt sent',
+    description: (p) => `Payment receipt for invoice ${p.invoiceNumber || ''} sent to client`,
+    type: 'SUCCESS',
+    priority: 'NORMAL',
+    relatedEntity: 'INVOICE',
+    adminTitle: 'Payment receipt sent',
+    adminDescription: (p) => `Receipt for ${p.amount || ''} sent for invoice ${p.invoiceNumber || ''}`,
+    adminActionUrl: (id) => `/invoices/${id}`,
   },
 };
 

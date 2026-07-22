@@ -334,6 +334,16 @@ These statuses are NEVER manually set - backend business logic automatically upd
 - ✅ Company Service: 5/5 passing (get, get default, update, audit before/after, file upload)
 - ✅ Admin Dashboard Service: 6/6 passing (revenue, entity counts, upcoming, charts, comparisons, activity)
 - ✅ Project Service: Client ownership verified
+- ✅ Invoice Service: 26/26 passing (GST math, payment rules, status calculation, number sequencing)
+- ✅ Status Engine: 30/30 passing (Lead + Project workflows, manual vs automatic, forward/backward)
+- ✅ PDF Service: 32/32 passing (templates, watermarks, formatting, branding, GSTIN, items)
+- ✅ Conversation Service: 4/4 passing (access control, sender attribution)
+- ✅ Auth Service: 6/6 passing (login, createAdminUser, role resolution)
+- ✅ Error Handler: 3/3 passing (ValidationError, NotFoundError, unknown errors)
+- ✅ Invoice Numbering: 2/2 passing (gapless sequential, FOR UPDATE locking)
+- ✅ Entity Ref: 4/4 passing (UUID resolution, client actors, null handling, batch lookups)
+- ✅ Aggregate Status: 6/6 passing (mixed statuses, completed, on hold, cancelled)
+- **Total: 213/213 passing across 20 test suites**
 
 ### Frontend Tests
 - ✅ Quotation form shows Client selection only
@@ -364,7 +374,7 @@ These statuses are NEVER manually set - backend business logic automatically upd
 ### Backend
 ```bash
 ✅ npm run build - SUCCESS (0 errors)
-✅ npm test - 195/195 tests passing (20 test suites, ~39s)
+✅ npm test - 213/213 tests passing (20 test suites, ~10s)
 ```
 
 ### Frontend
@@ -372,6 +382,146 @@ These statuses are NEVER manually set - backend business logic automatically upd
 ✅ npm run build - SUCCESS (0 errors)
 ✅ npx tsc --noEmit - SUCCESS (0 errors)
 ```
+
+---
+
+# Phase 2 — Resend Email Infrastructure & Quotation Lead Display
+
+**Date**: 2026-07-22  
+**Status**: ✅ IMPLEMENTATION COMPLETE
+
+## Summary
+
+Implemented production email delivery via Resend replacing the console-log placeholder, added branded email templates for all business events, fixed quotation email payload data mapping, and resolved lead display in client-owned quotations using the existing `Client.sourceLead` relationship — all without modifying database schema or business workflow.
+
+## Architecture Decision: Lead XOR Client Constraint
+
+**Decision**: Do NOT change the quotation ownership model.
+
+The database enforces a `CHECK` constraint (`quotations_lead_or_client_check`) requiring exactly one of `leadId` or `clientId` to be non-null on every quotation row:
+
+```sql
+CHECK (("leadId" IS NULL) <> ("clientId" IS NULL));
+```
+
+This is the correct business model:
+- **Before conversion**: quotation belongs to Lead (`leadId` set, `clientId = NULL`)
+- **After conversion**: quotation belongs to Client (`leadId = NULL`, `clientId` set)
+- `migrateLeadQuotationsToClient()` sets `leadId: null` on conversion — consistent with the constraint
+
+**Lead display resolution**: Instead of violating the constraint by setting both IDs, the original lead is exposed through the existing `Client.sourceLead` Prisma relation. The backend now returns `quotation.client.sourceLead` in all quotation queries, and the frontend resolves `lead = quotation.lead ?? quotation.client.sourceLead` as a fallback.
+
+## Backend Changes
+
+### Resend Email Service (`email.email.service.ts`)
+- **NEW**: Centralized `EmailService` using Resend SDK
+- **Config**: `RESEND_API_KEY`, `EMAIL_FROM` (defaults to `onboarding@resend.dev`), `APP_URL` (defaults to `http://localhost:5173`)
+- **Graceful degradation**: If `RESEND_API_KEY` is missing, emails are silently skipped with a console warning — never blocks business operations
+- **Lazy initialization**: Resend client created on first send, not at import time
+
+### Email Templates (`email/templates/`)
+- **NEW: `base-email.template.ts`**: Shared HTML wrapper with responsive layout, Nexus branding, header/footer, `EmailBranding` interface for company name, logo, address, support email
+- **NEW: `client-welcome.template.ts`**: Welcome email with portal URL, login credentials (email + temp password), branding
+- **NEW: `quotation-sent.template.ts`**: Quotation notification with client name, quotation number, subtotal/GST/grand total breakdown, portal link, resent variant
+- **NEW: `invoice-sent.template.ts`**: Invoice notification with client name, invoice number, grand total, outstanding amount, portal link, resent/reminder variant
+- **NEW: `payment-receipt.template.ts`**: Payment confirmation with client name, invoice number, amount paid, payment date/method, portal link
+
+### Email Channel (`notifications.channels.email.channel.ts`)
+- **REWRITTEN**: Now resolves company branding via `companyService.get()` → `getCompanyBranding()`, passes to templates
+- **Template matching**: Detects payload shape (`quotationNumber`, `invoiceNumber`, `loginEmail`+`tempPassword`) to select template
+- **Subject line builder**: Dedicated `buildSubject()` function with correct subjects per event type
+- **HTML builder**: Dedicated `buildHtml()` function rendering the appropriate template
+
+### Notifications Service (`notifications.notifications.service.ts`)
+- **`KNOWN_EVENT_TYPES`**: Added `payment.receipt_sent` (was missing — all payment receipt events were silently dropped)
+
+### Quotation Service — Email Payload Fixes (`quotation.service.ts`)
+- **`send()` method**: Now emits `grandTotal`, `subtotal`, `gstAmount`, and `clientName` from the active version — previously these were missing, causing templates to render $0.00
+- **Quotation creation**: `leadId` explicitly set to `null` (respecting XOR constraint)
+
+### Client Service — Welcome Email (`client.service.ts`)
+- **`client.account.created` payload**: Now includes `clientName` (was missing — welcome email showed "there" instead of actual name)
+
+### Quotation Repository — Lead Display (`quotation.repository.ts`)
+- **`CLIENT_SUMMARY_SELECT`**: Extended with `sourceLeadId` and `sourceLead { id, leadNumber, contactName }` — the Prisma relation already existed in the schema, now it's fetched in all quotation queries
+- **`findById()`**: Returns `quotation.client.sourceLead` for detail views
+- **`list()`**: Returns `quotation.client.sourceLead` for list views
+- **`listForClient()`**: Added `client: { select: { sourceLead: ... } }` to include for portal views
+
+### Environment Configuration (`config/env.ts`)
+- Added `resendApiKey`, `emailFrom`, `appUrl` — all with safe defaults (no required vars for email)
+
+## Frontend Changes
+
+### Types (`types/index.ts`)
+- `ClientSummary`: Added `sourceLeadId` and `sourceLead: { id, leadNumber, contactName }` — matches backend select
+- `QuotationItem`: Added `serviceName` (already existed from PDF work)
+
+### Quotation Detail Page (`pages/quotations/QuotationDetailPage.tsx`)
+- **Lead resolution**: `resolvedLead = quotation.lead ?? client.sourceLead ?? null`
+- **Lead card**: Shows `resolvedLead.leadNumber` (clickable link to Lead Detail) and `resolvedLead.contactName` instead of "Not linked"
+- **Header**: Shows `Lead L-00012 · Client C-00003 · Company Name` for converted quotations
+
+### Quotations List Page (`pages/quotations/QuotationsPage.tsx`)
+- **Lead column**: Resolves via `row.lead ?? row.client?.sourceLead ?? null` — shows lead number for both pre- and post-conversion quotations
+
+### Portal Quotation Detail (`pages/portal/PortalQuotationDetailPage.tsx`)
+- **Header description**: Shows originating lead number via `quotation.client?.sourceLead?.leadNumber` fallback
+
+### Portal Quotations List (`pages/portal/PortalQuotationsPage.tsx`)
+- **Subtitle under quotation number**: Resolves lead via `row.lead?.leadNumber ?? row.client?.sourceLead?.leadNumber`
+
+## Key Design Decisions
+
+1. **XOR constraint preserved**: Quotation ownership model unchanged — no schema migration needed
+2. **Lead resolved through existing relation**: `Client.sourceLead` Prisma relation already existed in the schema; backend just wasn't fetching it
+3. **No additional API requests**: Lead data travels with the quotation response as a nested include
+4. **Fire-and-forget email delivery**: Email channel never blocks the main business transaction
+5. **Graceful degradation**: Missing `RESEND_API_KEY` → emails skipped, not errors thrown
+6. **Template selection by payload shape**: No explicit event type needed in template layer — detects `quotationNumber`, `invoiceNumber`, or `loginEmail`+`tempPassword`
+7. **Company branding in emails**: Single source of truth from `CompanySetting` → `getCompanyBranding()` → email templates
+
+## Verification
+
+| Check | Result |
+|-------|--------|
+| Backend TypeScript | ✅ 0 errors |
+| Frontend TypeScript | ✅ 0 errors |
+| Backend Tests (213/213) | ✅ |
+| XOR constraint respected | ✅ `leadId: null` on all new quotations |
+| Lead displayed for converted quotations | ✅ Via `client.sourceLead` |
+| Lead displayed for unconverted quotations | ✅ Via `quotation.lead` |
+| Welcome email sent on conversion | ✅ With clientName |
+| Quotation email includes correct totals | ✅ subtotal/GST/grandTotal |
+| Payment receipt email registered | ✅ `payment.receipt_sent` in KNOWN_EVENT_TYPES |
+| No schema changes | ✅ |
+| No workflow changes | ✅ |
+
+## Files Modified
+
+### Backend (7 files)
+1. `src/modules/email/email.service.ts` — NEW: Centralized Resend EmailService
+2. `src/modules/email/templates/base-email.template.ts` — NEW: Shared HTML wrapper
+3. `src/modules/email/templates/client-welcome.template.ts` — NEW: Welcome credentials email
+4. `src/modules/email/templates/quotation-sent.template.ts` — NEW: Quotation notification
+5. `src/modules/email/templates/invoice-sent.template.ts` — NEW: Invoice notification
+6. `src/modules/email/templates/payment-receipt.template.ts` — NEW: Payment receipt email
+7. `src/modules/notifications/channels/email.channel.ts` — REWRITTEN: Resend + templates + branding
+8. `src/modules/notifications/notifications.service.ts` — Added `payment.receipt_sent` to KNOWN_EVENT_TYPES
+9. `src/modules/quotation/quotation.service.ts` — Email payload fixes, leadId: null
+10. `src/modules/quotation/quotation.repository.ts` — Extended CLIENT_SUMMARY_SELECT with sourceLead
+11. `src/modules/client/client.service.ts` — Added clientName to account.created payload
+12. `src/config/env.ts` — Added resendApiKey, emailFrom, appUrl
+
+### Frontend (5 files)
+1. `src/types/index.ts` — ClientSummary: added sourceLeadId + sourceLead
+2. `src/pages/quotations/QuotationDetailPage.tsx` — Lead resolution via client.sourceLead
+3. `src/pages/quotations/QuotationsPage.tsx` — Lead column resolution fallback
+4. `src/pages/portal/PortalQuotationDetailPage.tsx` — Header lead display fallback
+5. `src/pages/portal/PortalQuotationsPage.tsx` — Subtitle lead resolution fallback
+
+### Package Changes
+- `nexus-backend/package.json` — Added `resend` dependency
 
 ---
 

@@ -132,7 +132,7 @@ export function PortalQuotationDetailPage() {
     <div>
       <PageHeader
         title={quotation.quotationNumber}
-        description={quotation.lead ? `Lead ${quotation.lead.leadNumber}` : `Created ${formatDate(quotation.createdAt)}`}
+        description={quotation.lead ? `Lead ${quotation.lead.leadNumber}` : quotation.client?.sourceLead ? `Lead ${quotation.client.sourceLead.leadNumber}` : `Created ${formatDate(quotation.createdAt)}`}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge status={quotation.status} />

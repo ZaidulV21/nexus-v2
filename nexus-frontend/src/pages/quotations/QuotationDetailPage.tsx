@@ -1,4 +1,4 @@
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { CheckCircle2, Download, Eye, PencilLine, RefreshCw, Send } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/Button';
@@ -14,6 +14,7 @@ import { useToast } from '@/hooks/useToast';
 import { useQuotation, useSendQuotation, useQuotationPdfUrl, useRegenerateQuotationPdf } from '@/queries/useQuotations';
 import { ApiError } from '@/lib/api';
 import { formatCurrency, formatDate } from '@/lib/format';
+import { ROUTES } from '@/routes/routes';
 import { QuotationFormDrawer } from './components/QuotationFormDrawer';
 import { ApproveQuotationDialog } from './components/ApproveQuotationDialog';
 
@@ -44,9 +45,10 @@ export function QuotationDetailPage() {
 
   const client = quotation.client ?? quotation.lead?.client ?? null;
   const clientName = client ? client.companyName || client.contactName : null;
-  const leadName = quotation.lead ? quotation.lead.companyName || quotation.lead.contactName : null;
+  const resolvedLead = quotation.lead ?? client?.sourceLead ?? null;
+  const leadName = resolvedLead ? resolvedLead.contactName : null;
   const headerParts = [
-    quotation.lead ? `Lead ${quotation.lead.leadNumber}` : null,
+    resolvedLead ? `Lead ${resolvedLead.leadNumber}` : null,
     client ? `Client ${client.clientNumber}` : null,
     clientName ?? leadName,
   ].filter(Boolean);
@@ -147,17 +149,28 @@ export function QuotationDetailPage() {
                 <div className="grid gap-4 md:grid-cols-3">
                   <div className="rounded-lg border border-border bg-canvas p-4">
                     <p className="text-xs uppercase tracking-wide text-ink-faint">Lead</p>
-                    <p className="mt-1 font-medium text-ink">{quotation.lead?.leadNumber ?? '—'}</p>
-                    {quotation.lead && (
+                    {resolvedLead ? (
+                      <Link to={ROUTES.leadDetail(resolvedLead.id)} className="mt-1 block font-medium text-ink hover:underline">
+                        {resolvedLead.leadNumber}
+                      </Link>
+                    ) : (
+                      <p className="mt-1 font-medium text-ink-muted">Not linked</p>
+                    )}
+                    {resolvedLead && (
                       <p className="text-xs text-ink-muted">
-                        {leadName}
-                        {quotation.lead.email ? ` · ${quotation.lead.email}` : ` · ${quotation.lead.phone}`}
+                        {resolvedLead.contactName}
                       </p>
                     )}
                   </div>
                   <div className="rounded-lg border border-border bg-canvas p-4">
                     <p className="text-xs uppercase tracking-wide text-ink-faint">Client</p>
-                    <p className="mt-1 font-medium text-ink">{client?.clientNumber ?? '—'}</p>
+                    {client ? (
+                      <Link to={ROUTES.clientDetail(client.id)} className="mt-1 block font-medium text-ink hover:underline">
+                        {client.clientNumber}
+                      </Link>
+                    ) : (
+                      <p className="mt-1 font-medium text-ink-muted">—</p>
+                    )}
                     {client && (
                       <p className="text-xs text-ink-muted">{clientName} · {client.email}</p>
                     )}
@@ -183,6 +196,9 @@ export function QuotationDetailPage() {
                           <div className="flex items-start justify-between gap-3">
                             <div>
                               <p className="text-sm font-medium text-ink">{item.description}</p>
+                              {item.serviceName && (
+                                <p className="text-xs text-ink-muted">{item.serviceName}</p>
+                              )}
                               <p className="text-xs text-ink-muted">{item.quantity} × {formatCurrency(item.unitPrice)} · Tax {item.taxRate}%</p>
                             </div>
                             <span className="text-sm font-medium text-ink">{formatCurrency(item.lineTotal)}</span>
