@@ -211,7 +211,7 @@ export function ServicesPage() {
         isLoading={isLoading}
         isError={isError}
         onRetry={refetch}
-        onRowClick={(row) => navigate(ROUTES.serviceDetail(row.id))}
+        onRowClick={(row) => navigate(ROUTES.admin.serviceDetail(row.id))}
         emptyTitle={search || activeFilters.length ? 'No services match your filters' : 'No services yet'}
         emptyDescription={
           search || activeFilters.length
@@ -234,7 +234,7 @@ export function ServicesPage() {
       <ServiceFormDrawer
         open={createDrawer.isOpen}
         onOpenChange={createDrawer.setIsOpen}
-        onSaved={(serviceId) => navigate(ROUTES.serviceDetail(serviceId))}
+        onSaved={(serviceId) => navigate(ROUTES.admin.serviceDetail(serviceId))}
       />
     </div>
   );

@@ -284,7 +284,7 @@ export function DashboardPage() {
                   return (
                     <Link
                       key={event.id}
-                      to={`/${event.entityType.toLowerCase()}s/${event.entityId}`}
+                      to={`/admin/${event.entityType.toLowerCase()}s/${event.entityId}`}
                       className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm transition-colors hover:bg-canvas"
                     >
                       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-subtle">
@@ -317,35 +317,35 @@ export function DashboardPage() {
                   icon={Clock}
                   label="Pending Quotations"
                   value={upcoming!.pendingQuotations}
-                  to={ROUTES.quotations}
+                  to={ROUTES.admin.quotations}
                   color="text-amber-600"
                 />
                 <UpcomingRow
                   icon={PauseCircle}
                   label="Projects On Hold"
                   value={upcoming!.projectsOnHold}
-                  to={ROUTES.projects}
+                  to={ROUTES.admin.projects}
                   color="text-orange-600"
                 />
                 <UpcomingRow
                   icon={AlertCircle}
                   label="Overdue Invoices"
                   value={upcoming!.overdueInvoices}
-                  to={ROUTES.invoices}
+                  to={ROUTES.admin.invoices}
                   color="text-red-600"
                 />
                 <UpcomingRow
                   icon={CalendarClock}
                   label="Awaiting Payment"
                   value={upcoming!.invoicesAwaitingPayment}
-                  to={ROUTES.invoices}
+                  to={ROUTES.admin.invoices}
                   color="text-blue-600"
                 />
                 <UpcomingRow
                   icon={Bell}
                   label="Unread Notifications"
                   value={upcoming!.unreadNotifications}
-                  to={ROUTES.notifications}
+                  to={ROUTES.admin.notifications}
                   color="text-purple-600"
                 />
               </div>
@@ -363,29 +363,29 @@ export function DashboardPage() {
           <CardContent>
             <div className="flex flex-wrap gap-2">
               <Button variant="primary" size="sm" asChild>
-                <Link to={ROUTES.leads}><Plus className="h-3.5 w-3.5" /> New Lead</Link>
+                <Link to={ROUTES.admin.leads}><Plus className="h-3.5 w-3.5" /> New Lead</Link>
               </Button>
               <Button variant="primary" size="sm" asChild>
-                <Link to={ROUTES.quotations}><Plus className="h-3.5 w-3.5" /> New Quotation</Link>
+                <Link to={ROUTES.admin.quotations}><Plus className="h-3.5 w-3.5" /> New Quotation</Link>
               </Button>
               <Button variant="primary" size="sm" asChild>
-                <Link to={ROUTES.invoices}><Plus className="h-3.5 w-3.5" /> New Invoice</Link>
+                <Link to={ROUTES.admin.invoices}><Plus className="h-3.5 w-3.5" /> New Invoice</Link>
               </Button>
               <Button variant="primary" size="sm" asChild>
-                <Link to={ROUTES.projects}><Plus className="h-3.5 w-3.5" /> New Project</Link>
+                <Link to={ROUTES.admin.projects}><Plus className="h-3.5 w-3.5" /> New Project</Link>
               </Button>
               <div className="my-1 w-full border-t border-border" />
               <Button variant="secondary" size="sm" asChild>
-                <Link to={ROUTES.leads}><Eye className="h-3.5 w-3.5" /> View Leads</Link>
+                <Link to={ROUTES.admin.leads}><Eye className="h-3.5 w-3.5" /> View Leads</Link>
               </Button>
               <Button variant="secondary" size="sm" asChild>
-                <Link to={ROUTES.clients}><Eye className="h-3.5 w-3.5" /> View Clients</Link>
+                <Link to={ROUTES.admin.clients}><Eye className="h-3.5 w-3.5" /> View Clients</Link>
               </Button>
               <Button variant="secondary" size="sm" asChild>
-                <Link to={ROUTES.projects}><Eye className="h-3.5 w-3.5" /> View Projects</Link>
+                <Link to={ROUTES.admin.projects}><Eye className="h-3.5 w-3.5" /> View Projects</Link>
               </Button>
               <Button variant="secondary" size="sm" asChild>
-                <Link to={ROUTES.invoices}><Eye className="h-3.5 w-3.5" /> View Invoices</Link>
+                <Link to={ROUTES.admin.invoices}><Eye className="h-3.5 w-3.5" /> View Invoices</Link>
               </Button>
             </div>
           </CardContent>
@@ -410,7 +410,7 @@ export function DashboardPage() {
             <CardContent className="py-4">
               <div className="mb-3 flex items-center justify-between">
                 <p className="text-sm font-medium text-ink">Notifications</p>
-                <Link to={ROUTES.notifications} className="text-xs font-medium text-accent hover:underline">
+                <Link to={ROUTES.admin.notifications} className="text-xs font-medium text-accent hover:underline">
                   View all
                 </Link>
               </div>

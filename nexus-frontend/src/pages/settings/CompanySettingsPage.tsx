@@ -307,7 +307,7 @@ export function CompanySettingsPage() {
         description="Manage your company profile, branding, and business configuration."
         actions={
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={() => navigate(ROUTES.settings)}>
+            <Button variant="ghost" size="sm" onClick={() => navigate(ROUTES.admin.settings)}>
               <ArrowLeft className="h-3.5 w-3.5" />
               Back
             </Button>

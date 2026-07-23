@@ -67,7 +67,7 @@ function ProjectOverview({ project }: { project: Project }) {
         </CardHeader>
         <CardContent className="space-y-3">
           <Link
-            to={ROUTES.clientDetail(project.clientId)}
+            to={ROUTES.admin.clientDetail(project.clientId)}
             className="flex items-center justify-between rounded border border-border bg-canvas px-3 py-2 text-sm hover:bg-surface"
           >
             <span>
@@ -77,7 +77,7 @@ function ProjectOverview({ project }: { project: Project }) {
             <ChevronRight className="h-4 w-4 text-ink-faint" />
           </Link>
           <Link
-            to={ROUTES.leadDetail(project.leadId)}
+            to={ROUTES.admin.leadDetail(project.leadId)}
             className="flex items-center justify-between rounded border border-border bg-canvas px-3 py-2 text-sm hover:bg-surface"
           >
             <span>
@@ -187,7 +187,7 @@ function ProjectQuotation({ project }: { project: Project }) {
                 <StatusBadge status={quotation.approvalStatus} />
                 <span className="text-sm font-medium text-ink">{formatCurrency(quotation.grandTotal)}</span>
                 <Button asChild variant="secondary" size="sm">
-                  <Link to={ROUTES.quotationDetail(quotation.id)}>
+                  <Link to={ROUTES.admin.quotationDetail(quotation.id)}>
                     <ExternalLink className="h-3.5 w-3.5" /> View Details
                   </Link>
                 </Button>
@@ -394,7 +394,7 @@ function ProjectInvoiceRow({ invoice }: { invoice: Invoice }) {
       </div>
       <div className="flex flex-wrap gap-2">
         <Button asChild variant="secondary" size="sm">
-          <Link to={ROUTES.invoiceDetail(invoice.id)}>
+          <Link to={ROUTES.admin.invoiceDetail(invoice.id)}>
             <ExternalLink className="h-3.5 w-3.5" /> View
           </Link>
         </Button>

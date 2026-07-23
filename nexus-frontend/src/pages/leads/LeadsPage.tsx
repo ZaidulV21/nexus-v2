@@ -134,7 +134,7 @@ export function LeadsPage() {
         isLoading={isLoading}
         isError={isError}
         onRetry={refetch}
-        onRowClick={(row) => navigate(ROUTES.leadDetail(row.id))}
+        onRowClick={(row) => navigate(ROUTES.admin.leadDetail(row.id))}
         emptyTitle={search ? 'No leads match your search' : showArchived ? 'No archived leads' : 'No leads yet'}
         emptyDescription={
           search ? 'Try a different search term.' :
@@ -159,7 +159,7 @@ export function LeadsPage() {
         onOpenChange={createDrawer.setIsOpen}
         onCreated={(leadId) => {
           createDrawer.close();
-          navigate(ROUTES.leadDetail(leadId));
+          navigate(ROUTES.admin.leadDetail(leadId));
         }}
       />
     </div>

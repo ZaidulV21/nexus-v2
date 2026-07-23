@@ -90,7 +90,7 @@ export function ClientsPage() {
         isLoading={isLoading}
         isError={isError}
         onRetry={refetch}
-        onRowClick={(row) => navigate(ROUTES.clientDetail(row.id))}
+        onRowClick={(row) => navigate(ROUTES.admin.clientDetail(row.id))}
         emptyTitle={search ? 'No clients match your search' : 'No clients yet'}
         emptyDescription={search ? 'Try a different search term.' : 'Clients will appear here once leads have been converted into accounts.'}
         pagination={

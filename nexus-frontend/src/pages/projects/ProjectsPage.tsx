@@ -183,7 +183,7 @@ export function ProjectsPage() {
         isLoading={isLoading}
         isError={isError}
         onRetry={refetch}
-        onRowClick={(row) => navigate(ROUTES.projectDetail(row.id))}
+        onRowClick={(row) => navigate(ROUTES.admin.projectDetail(row.id))}
         emptyTitle={search || statusFilter !== FILTER_ALL ? 'No projects match your filters' : 'No projects yet'}
         emptyDescription={
           search || statusFilter !== FILTER_ALL

@@ -8,13 +8,13 @@ import { useGlobalSearch } from '@/queries/useSearch';
 import { ROUTES } from '@/routes/routes';
 
 const NAV_COMMANDS = [
-  { label: 'Dashboard', icon: LayoutDashboard, path: ROUTES.dashboard },
-  { label: 'Services', icon: Layers, path: ROUTES.services },
-  { label: 'Leads', icon: FileText, path: ROUTES.leads },
-  { label: 'Clients', icon: Users, path: ROUTES.clients },
-  { label: 'Projects', icon: FolderKanban, path: ROUTES.projects },
-  { label: 'Quotations', icon: FileSpreadsheet, path: ROUTES.quotations },
-  { label: 'Invoices', icon: Receipt, path: ROUTES.invoices },
+  { label: 'Dashboard', icon: LayoutDashboard, path: ROUTES.admin.dashboard },
+  { label: 'Services', icon: Layers, path: ROUTES.admin.services },
+  { label: 'Leads', icon: FileText, path: ROUTES.admin.leads },
+  { label: 'Clients', icon: Users, path: ROUTES.admin.clients },
+  { label: 'Projects', icon: FolderKanban, path: ROUTES.admin.projects },
+  { label: 'Quotations', icon: FileSpreadsheet, path: ROUTES.admin.quotations },
+  { label: 'Invoices', icon: Receipt, path: ROUTES.admin.invoices },
 ];
 
 const MIN_QUERY_LENGTH = 2;
@@ -94,7 +94,7 @@ export function CommandPalette() {
                   {searchResults.leads.slice(0, 5).map((lead) => (
                     <Command.Item
                       key={lead.id}
-                      onSelect={() => handleSelect(ROUTES.leadDetail(lead.id))}
+                      onSelect={() => handleSelect(ROUTES.admin.leadDetail(lead.id))}
                       className="flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-ink aria-selected:bg-accent-subtle aria-selected:text-accent"
                     >
                       <Users className="h-4 w-4 shrink-0" />
@@ -110,7 +110,7 @@ export function CommandPalette() {
                   {searchResults.clients.slice(0, 5).map((client) => (
                     <Command.Item
                       key={client.id}
-                      onSelect={() => handleSelect(ROUTES.clientDetail(client.id))}
+                      onSelect={() => handleSelect(ROUTES.admin.clientDetail(client.id))}
                       className="flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-ink aria-selected:bg-accent-subtle aria-selected:text-accent"
                     >
                       <Users className="h-4 w-4 shrink-0" />
@@ -126,7 +126,7 @@ export function CommandPalette() {
                   {searchResults.projects.slice(0, 5).map((project) => (
                     <Command.Item
                       key={project.id}
-                      onSelect={() => handleSelect(ROUTES.projectDetail(project.id))}
+                      onSelect={() => handleSelect(ROUTES.admin.projectDetail(project.id))}
                       className="flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-ink aria-selected:bg-accent-subtle aria-selected:text-accent"
                     >
                       <FolderKanban className="h-4 w-4 shrink-0" />
@@ -141,7 +141,7 @@ export function CommandPalette() {
                   {searchResults.quotations.slice(0, 5).map((quotation) => (
                     <Command.Item
                       key={quotation.id}
-                      onSelect={() => handleSelect(ROUTES.quotationDetail(quotation.id))}
+                      onSelect={() => handleSelect(ROUTES.admin.quotationDetail(quotation.id))}
                       className="flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-ink aria-selected:bg-accent-subtle aria-selected:text-accent"
                     >
                       <FileSpreadsheet className="h-4 w-4 shrink-0" />
@@ -157,7 +157,7 @@ export function CommandPalette() {
                   {searchResults.invoices.slice(0, 5).map((invoice) => (
                     <Command.Item
                       key={invoice.id}
-                      onSelect={() => handleSelect(ROUTES.invoiceDetail(invoice.id))}
+                      onSelect={() => handleSelect(ROUTES.admin.invoiceDetail(invoice.id))}
                       className="flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-ink aria-selected:bg-accent-subtle aria-selected:text-accent"
                     >
                       <Receipt className="h-4 w-4 shrink-0" />
@@ -173,7 +173,7 @@ export function CommandPalette() {
                   {searchResults.services.slice(0, 5).map((service) => (
                     <Command.Item
                       key={service.id}
-                      onSelect={() => handleSelect(ROUTES.serviceDetail(service.id))}
+                      onSelect={() => handleSelect(ROUTES.admin.serviceDetail(service.id))}
                       className="flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-ink aria-selected:bg-accent-subtle aria-selected:text-accent"
                     >
                       <Wrench className="h-4 w-4 shrink-0" />
@@ -188,7 +188,7 @@ export function CommandPalette() {
                   {searchResults.documents.slice(0, 5).map((doc) => (
                     <Command.Item
                       key={doc.id}
-                      onSelect={() => handleSelect(ROUTES.documents)}
+                      onSelect={() => handleSelect(ROUTES.admin.documents)}
                       className="flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-ink aria-selected:bg-accent-subtle aria-selected:text-accent"
                     >
                       <FolderOpen className="h-4 w-4 shrink-0" />

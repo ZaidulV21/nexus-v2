@@ -23,28 +23,28 @@ import { CompanyLogo, CompanyName } from './CompanyLogo';
 const NAV_SECTIONS = [
   {
     label: 'Overview',
-    items: [{ label: 'Dashboard', icon: LayoutDashboard, to: ROUTES.dashboard }],
+    items: [{ label: 'Dashboard', icon: LayoutDashboard, to: ROUTES.admin.dashboard }],
   },
   {
     label: 'Pipeline',
     items: [
-      { label: 'Services', icon: Layers, to: ROUTES.services },
-      { label: 'Leads', icon: FileText, to: ROUTES.leads },
-      { label: 'Clients', icon: Users, to: ROUTES.clients },
-      { label: 'Quotations', icon: FileSpreadsheet, to: ROUTES.quotations },
-      { label: 'Projects', icon: FolderKanban, to: ROUTES.projects },
-      { label: 'Invoices', icon: Receipt, to: ROUTES.invoices },
+      { label: 'Services', icon: Layers, to: ROUTES.admin.services },
+      { label: 'Leads', icon: FileText, to: ROUTES.admin.leads },
+      { label: 'Clients', icon: Users, to: ROUTES.admin.clients },
+      { label: 'Quotations', icon: FileSpreadsheet, to: ROUTES.admin.quotations },
+      { label: 'Projects', icon: FolderKanban, to: ROUTES.admin.projects },
+      { label: 'Invoices', icon: Receipt, to: ROUTES.admin.invoices },
     ],
   },
   {
     label: 'Workspace',
     items: [
-      { label: 'Messages', icon: MessageSquare, to: ROUTES.messages },
-      { label: 'Documents', icon: FolderOpen, to: ROUTES.documents },
-      { label: 'Notifications', icon: Bell, to: ROUTES.notifications },
-      { label: 'Timeline', icon: History, to: ROUTES.timeline },
-      { label: 'Audit Logs', icon: ShieldCheck, to: ROUTES.auditLogs },
-      { label: 'Search', icon: Search, to: ROUTES.search },
+      { label: 'Messages', icon: MessageSquare, to: ROUTES.admin.messages },
+      { label: 'Documents', icon: FolderOpen, to: ROUTES.admin.documents },
+      { label: 'Notifications', icon: Bell, to: ROUTES.admin.notifications },
+      { label: 'Timeline', icon: History, to: ROUTES.admin.timeline },
+      { label: 'Audit Logs', icon: ShieldCheck, to: ROUTES.admin.auditLogs },
+      { label: 'Search', icon: Search, to: ROUTES.admin.search },
     ],
   },
 ];
@@ -68,7 +68,7 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                 <NavLink
                   key={item.to}
                   to={item.to}
-                  end={item.to === ROUTES.dashboard}
+                  end={item.to === ROUTES.admin.dashboard}
                   onClick={onNavigate}
                   className={({ isActive }) =>
                     cn(
@@ -90,7 +90,7 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
 
       <div className="border-t border-border p-3">
         <NavLink
-          to={ROUTES.settings}
+          to={ROUTES.admin.settings}
           className={({ isActive }) =>
             cn(
               'flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors',

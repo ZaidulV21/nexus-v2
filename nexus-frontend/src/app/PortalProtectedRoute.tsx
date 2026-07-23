@@ -3,10 +3,9 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from './AuthContext';
 import { ROUTES } from '@/routes/routes';
 
-/** Gates Client Portal routes behind CLIENT authentication - the mirror of
- *  ProtectedRoute (which gates the Admin app behind ADMIN authentication).
- *  An Admin actor landing on a portal URL is sent to login, matching the
- *  PRD's separation between the two surfaces. */
+/** Gates Client Portal routes behind CLIENT authentication.
+ *  Unauthenticated users are redirected to /login. The portal
+ *  area lives under /portal/*. */
 export function PortalProtectedRoute({ children }: { children: ReactNode }) {
   const { isAuthenticated, isInitializing, actor } = useAuth();
   const location = useLocation();

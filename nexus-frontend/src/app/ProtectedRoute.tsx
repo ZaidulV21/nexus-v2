@@ -3,9 +3,8 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from './AuthContext';
 import { ROUTES } from '@/routes/routes';
 
-/** Gates Admin routes behind authentication. Client actors (if they ever
- *  hit an Admin URL) are redirected to login too - the Admin app and the
- *  Client Portal are separate auth contexts per the PRD. */
+/** Gates Admin routes behind authentication. Unauthenticated users
+ *  are redirected to /login. The admin area lives under /admin/*. */
 export function ProtectedRoute({ children }: { children: ReactNode }) {
   const { isAuthenticated, isInitializing, actor } = useAuth();
   const location = useLocation();

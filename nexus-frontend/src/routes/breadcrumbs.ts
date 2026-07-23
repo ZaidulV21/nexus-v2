@@ -4,7 +4,9 @@ import { ROUTES } from './routes';
 // capitalized version of the segment for any route not listed here, so new
 // routes never render a blank crumb.
 const SEGMENT_LABELS: Record<string, string> = {
-  '': 'Dashboard',
+  admin: 'Admin',
+  portal: 'Client Portal',
+  dashboard: 'Dashboard',
   leads: 'Leads',
   clients: 'Clients',
   quotations: 'Quotations',
@@ -18,7 +20,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   search: 'Search',
   settings: 'Settings',
   'design-system': 'Design System',
-  portal: 'Client Portal',
+  notifications: 'Notifications',
 };
 
 function labelFor(segment: string): string {
@@ -30,7 +32,10 @@ function labelFor(segment: string): string {
 }
 
 export function getBreadcrumbs(pathname: string) {
-  if (pathname === ROUTES.dashboard) {
+  if (pathname === ROUTES.admin.dashboard) {
+    return [{ label: 'Dashboard' }];
+  }
+  if (pathname === ROUTES.portal.dashboard) {
     return [{ label: 'Dashboard' }];
   }
   const segments = pathname.split('/').filter(Boolean);

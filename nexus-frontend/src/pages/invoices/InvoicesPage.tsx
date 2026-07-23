@@ -167,7 +167,7 @@ export function InvoicesPage() {
         isLoading={isLoading}
         isError={isError}
         onRetry={refetch}
-        onRowClick={(row) => navigate(ROUTES.invoiceDetail(row.id))}
+        onRowClick={(row) => navigate(ROUTES.admin.invoiceDetail(row.id))}
         emptyTitle={search || statusFilter !== FILTER_ALL ? 'No invoices match your filters' : 'No invoices yet'}
         emptyDescription={
           search || statusFilter !== FILTER_ALL

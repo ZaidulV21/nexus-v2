@@ -1,6 +1,6 @@
 # Nexus Frontend — Business Service Management Platform
 
-**Status: All modules fully implemented and functional.**
+**Status: All modules fully implemented and functional. Phase 2 (Public Website) complete.**
 
 ## What's built
 
@@ -18,6 +18,18 @@ All business modules from the PRD are implemented and wired to the backend API:
 - **Notifications** (`/notifications`) — In-app notification center with unread badge, mark-as-read
 - **Company Settings** (`/settings/company`) — Full settings page with 5 sections, file uploads (Cloudinary), unsaved changes protection
 - **Client Portal** (`/portal/*`) — Separate lighter shell with quotations, invoices, projects, documents, notifications, dashboard
+
+### Phase 2: Public Marketing Website (`/home`, `/services/*`, etc.)
+- **Public Layout** — Sticky navbar with mega-menu, responsive mobile nav, premium footer
+- **Homepage** — 9-section long-form page (Hero, Process, Services, Stats, Projects, Industries, Testimonials, FAQs, CTA)
+- **Service Pages** — Service listing and detail pages for all 8 services
+- **Industry Pages** — Industry-specific solutions showcase
+- **How It Works** — Visual 6-step process timeline
+- **Projects** — Featured project portfolio
+- **About** — Company story, values, stats
+- **Contact** — Contact form with business details
+- **Get Quote Wizard** — 7-step customer journey: Service Selection → Project Details → File Upload → Review → Account Creation → OTP Verification (placeholder) → Success
+- **Resources** — Placeholder for future content
 
 ### Client Portal Pages
 - Portal Dashboard — overview of projects, quotations, invoices
@@ -41,7 +53,7 @@ Open `http://localhost:5173` — login with admin credentials (see backend seed 
 
 ```
 src/
-  app/              - providers.tsx (Toast/Tooltip/CommandPalette), AdminLayout, PortalLayout
+  app/              - providers.tsx (Toast/Tooltip/CommandPalette), AdminLayout, PortalLayout, AuthContext
   components/
     ui/             - 28+ reusable primitives (Button, DataTable, Charts, Modal, etc.)
     layout/         - Sidebar, TopNav, AppShell, PageHeader, NotificationPanel, CompanyLogo
@@ -54,6 +66,16 @@ src/
   queries/          - React Query hooks for every module
   services/         - API client functions for every module
   styles/           - globals.css (design tokens)
+  public-site/      - Phase 2: Public Marketing Website module
+    components/     - Navbar, Footer, SectionHeader, PageHero, ServiceCard, FAQAccordion, TestimonialCard
+    sections/       - HeroSection, ProcessSection, ServicesSection, StatsSection, ProjectsSection,
+                      IndustriesSection, TestimonialsSection, FAQSection, CTASection
+    pages/          - HomePage, ServicesPage, ServiceDetailPage, IndustriesPage, HowItWorksPage,
+                      ProjectsPage, AboutPage, ContactPage, ResourcesPage, GetQuotePage
+    layouts/        - PublicLayout, ServicesRoute, ProjectsRoute, ServiceDetailRoute (auth-aware wrappers)
+    hooks/          - useQuoteWizard, useScrollSpy, useMobileMenu
+    types/          - ServiceItem, IndustryItem, ProjectItem, TestimonialItem, FAQItem, QuoteWizardData
+    constants/      - SERVICES, INDUSTRIES, PROCESS_STEPS, STATS, TESTIMONIALS, FAQS, NAVIGATION
 ```
 
 ## Design decisions

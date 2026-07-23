@@ -366,7 +366,7 @@ export function DocumentsPage() {
           if (document.entityType === 'PROJECT') {
             return (
               <Link
-                to={ROUTES.projectDetail(document.entityId)}
+                to={ROUTES.admin.projectDetail(document.entityId)}
                 className="font-mono text-sm text-accent hover:underline"
                 onClick={(event) => event.stopPropagation()}
               >
@@ -376,7 +376,7 @@ export function DocumentsPage() {
           }
           return (
             <Link
-              to={ROUTES.leadDetail(document.entityId)}
+              to={ROUTES.admin.leadDetail(document.entityId)}
               className="font-mono text-sm text-accent hover:underline"
               onClick={(event) => event.stopPropagation()}
             >

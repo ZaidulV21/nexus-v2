@@ -111,7 +111,7 @@ function CompanyCard() {
                 <p className="text-xs text-ink-faint">No company details configured yet.</p>
               )}
             </div>
-            <Button variant="secondary" size="sm" onClick={() => navigate(ROUTES.companySettings)}>
+            <Button variant="secondary" size="sm" onClick={() => navigate(ROUTES.admin.companySettings)}>
               <Pencil className="h-3.5 w-3.5" />
               Edit
             </Button>
@@ -119,7 +119,7 @@ function CompanyCard() {
         ) : (
           <div className="space-y-3">
             <p className="text-sm text-ink-muted">Set up your company profile, branding, and business details.</p>
-            <Button variant="secondary" size="sm" onClick={() => navigate(ROUTES.companySettings)}>
+            <Button variant="secondary" size="sm" onClick={() => navigate(ROUTES.admin.companySettings)}>
               <Building2 className="h-3.5 w-3.5" />
               Set up Company Settings
             </Button>
@@ -233,7 +233,7 @@ export function SettingsPage() {
       <p className="mt-4 text-xs text-ink-faint">
         Company profile, branding, email, and invoice configuration are managed in{' '}
         <button
-          onClick={() => navigate(ROUTES.companySettings)}
+          onClick={() => navigate(ROUTES.admin.companySettings)}
           className="text-accent hover:underline"
         >
           Company Settings

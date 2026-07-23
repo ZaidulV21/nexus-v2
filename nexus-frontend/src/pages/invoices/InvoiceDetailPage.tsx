@@ -109,14 +109,14 @@ function InvoiceOverview({ invoice }: { invoice: Invoice }) {
           </CardHeader>
           <CardContent className="space-y-3">
             <Button asChild variant="secondary" size="sm" className="w-full justify-between">
-              <Link to={ROUTES.projectDetail(invoice.projectId)}>
+              <Link to={ROUTES.admin.projectDetail(invoice.projectId)}>
                 Project {getProjectNumber(invoice)}
                 <ExternalLink className="h-3.5 w-3.5" />
               </Link>
             </Button>
             {invoice.relatedQuotation && (
               <Button asChild variant="secondary" size="sm" className="w-full justify-between">
-                <Link to={ROUTES.quotationDetail(invoice.relatedQuotation.id)}>
+                <Link to={ROUTES.admin.quotationDetail(invoice.relatedQuotation.id)}>
                   Quotation {invoice.relatedQuotation.quotationNumber}
                   <ExternalLink className="h-3.5 w-3.5" />
                 </Link>

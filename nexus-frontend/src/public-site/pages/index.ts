@@ -1,0 +1,10 @@
+export { HomePage } from './HomePage';
+export { ServicesPage } from './ServicesPage';
+export { ServiceDetailPage } from './ServiceDetailPage';
+export { IndustriesPage } from './IndustriesPage';
+export { HowItWorksPage } from './HowItWorksPage';
+export { ProjectsPage } from './ProjectsPage';
+export { AboutPage } from './AboutPage';
+export { ContactPage } from './ContactPage';
+export { ResourcesPage } from './ResourcesPage';
+export { GetQuotePage } from './GetQuotePage';

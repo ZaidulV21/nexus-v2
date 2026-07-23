@@ -14,7 +14,7 @@ export function NotFoundPage() {
         <p className="mt-1 text-sm text-ink-muted">The page you&apos;re looking for doesn&apos;t exist or has moved.</p>
       </div>
       <Button asChild size="sm">
-        <Link to={ROUTES.dashboard}>Back to dashboard</Link>
+        <Link to={ROUTES.admin.dashboard}>Back to dashboard</Link>
       </Button>
     </div>
   );

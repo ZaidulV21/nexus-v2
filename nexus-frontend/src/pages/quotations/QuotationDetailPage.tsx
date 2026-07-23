@@ -150,7 +150,7 @@ export function QuotationDetailPage() {
                   <div className="rounded-lg border border-border bg-canvas p-4">
                     <p className="text-xs uppercase tracking-wide text-ink-faint">Lead</p>
                     {resolvedLead ? (
-                      <Link to={ROUTES.leadDetail(resolvedLead.id)} className="mt-1 block font-medium text-ink hover:underline">
+                      <Link to={ROUTES.admin.leadDetail(resolvedLead.id)} className="mt-1 block font-medium text-ink hover:underline">
                         {resolvedLead.leadNumber}
                       </Link>
                     ) : (
@@ -165,7 +165,7 @@ export function QuotationDetailPage() {
                   <div className="rounded-lg border border-border bg-canvas p-4">
                     <p className="text-xs uppercase tracking-wide text-ink-faint">Client</p>
                     {client ? (
-                      <Link to={ROUTES.clientDetail(client.id)} className="mt-1 block font-medium text-ink hover:underline">
+                      <Link to={ROUTES.admin.clientDetail(client.id)} className="mt-1 block font-medium text-ink hover:underline">
                         {client.clientNumber}
                       </Link>
                     ) : (

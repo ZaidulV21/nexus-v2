@@ -117,7 +117,7 @@ export function QuotationsPage() {
         isLoading={isLoading}
         isError={isError}
         onRetry={refetch}
-        onRowClick={(row) => navigate(ROUTES.quotationDetail(row.id))}
+        onRowClick={(row) => navigate(ROUTES.admin.quotationDetail(row.id))}
         emptyTitle={search ? 'No quotations match your search' : 'No quotations yet'}
         emptyDescription={search ? 'Try a different search term.' : 'New quotations created from approved leads will appear here.'}
         pagination={

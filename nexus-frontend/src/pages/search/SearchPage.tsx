@@ -228,7 +228,7 @@ export function SearchPage() {
               {data.leads.map((lead) => (
                 <ResultRow
                   key={lead.id}
-                  to={ROUTES.leadDetail(lead.id)}
+                  to={ROUTES.admin.leadDetail(lead.id)}
                   primary={`${lead.leadNumber} — ${lead.contactName}`}
                   secondary={[lead.companyName, lead.phone, lead.email].filter(Boolean).join(' · ')}
                   query={debouncedQuery}
@@ -242,7 +242,7 @@ export function SearchPage() {
               {data.clients.map((client) => (
                 <ResultRow
                   key={client.id}
-                  to={ROUTES.clientDetail(client.id)}
+                  to={ROUTES.admin.clientDetail(client.id)}
                   primary={`${client.clientNumber} — ${client.companyName || client.contactName}`}
                   secondary={[client.contactName, client.phone, client.email].filter(Boolean).join(' · ')}
                   query={debouncedQuery}
@@ -256,7 +256,7 @@ export function SearchPage() {
               {data.projects.map((project) => (
                 <ResultRow
                   key={project.id}
-                  to={ROUTES.projectDetail(project.id)}
+                  to={ROUTES.admin.projectDetail(project.id)}
                   primary={project.projectNumber}
                   secondary={project.client ? `${project.client.contactName}${project.client.companyName ? ` · ${project.client.companyName}` : ''}` : undefined}
                   query={debouncedQuery}
@@ -270,7 +270,7 @@ export function SearchPage() {
               {data.quotations.map((quotation) => (
                 <ResultRow
                   key={quotation.id}
-                  to={ROUTES.quotationDetail(quotation.id)}
+                  to={ROUTES.admin.quotationDetail(quotation.id)}
                   primary={quotation.quotationNumber}
                   secondary={quotation.client ? `${quotation.client.contactName}${quotation.client.companyName ? ` · ${quotation.client.companyName}` : ''}` : undefined}
                   badge={quotation.status}
@@ -285,7 +285,7 @@ export function SearchPage() {
               {data.invoices.map((invoice) => (
                 <ResultRow
                   key={invoice.id}
-                  to={ROUTES.invoiceDetail(invoice.id)}
+                  to={ROUTES.admin.invoiceDetail(invoice.id)}
                   primary={invoice.invoiceNumber}
                   secondary={[invoice.label, invoice.client?.contactName, invoice.project?.projectNumber].filter(Boolean).join(' · ')}
                   badge={invoice.status}
@@ -300,7 +300,7 @@ export function SearchPage() {
               {data.services.map((service) => (
                 <ResultRow
                   key={service.id}
-                  to={ROUTES.serviceDetail(service.id)}
+                  to={ROUTES.admin.serviceDetail(service.id)}
                   primary={service.name}
                   secondary={[service.category?.name, service.description].filter(Boolean).join(' · ')}
                   query={debouncedQuery}
@@ -314,7 +314,7 @@ export function SearchPage() {
               {data.documents.map((document) => (
                 <ResultRow
                   key={document.id}
-                  to={ROUTES.documents}
+                  to={ROUTES.admin.documents}
                   primary={document.fileName}
                   secondary={[
                     document.documentType.replace(/_/g, ' ').toLowerCase(),

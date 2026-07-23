@@ -858,3 +858,77 @@ Enhanced the Invoice & Payment module with professional payment management featu
 1. `IMPLEMENTATION.md` — Phase 1 section added
 2. `IMPLEMENTATION-PROGRESS.md` — Phase 1 section added
 3. `WORKFLOW.md` — Invoice lifecycle updated
+
+---
+
+## Phase 2: Public Marketing Website
+
+**Date:** 2026-07-23
+**Status:** ✅ COMPLETE
+
+### Overview
+
+Added a premium public marketing website as a new module (`src/public-site/`) within the existing `nexus-frontend`. The public website is the customer-facing entry point that drives lead generation through the Get Quote wizard.
+
+### Architecture
+
+- **Self-contained module**: `src/public-site/` with its own components, pages, sections, hooks, types, constants, and layouts
+- **Auth-aware routing**: Shared paths (`/services`, `/projects`) use wrapper components that check authentication state and render the appropriate page (admin or public)
+- **Shared design system**: Uses existing Nexus Indigo accent, Tailwind tokens, and component patterns
+- **Framer Motion animations**: Smooth scroll-triggered animations and page transitions
+
+### Pages Built
+
+| Route | Page |
+|-------|------|
+| `/home` | Premium 9-section homepage |
+| `/services` | Service listing (8 services) |
+| `/services/:slug` | Service detail page |
+| `/industries` | Industry solutions (8 industries) |
+| `/how-it-works` | 6-step process timeline |
+| `/projects` | Featured project portfolio |
+| `/about` | Company story and values |
+| `/contact` | Contact form |
+| `/resources` | Placeholder for future content |
+| `/get-quote` | 7-step quote request wizard |
+
+### Customer Journey
+
+The Get Quote wizard implements the full customer journey:
+1. Service Selection (multi-select)
+2. Project Details (description, location, budget, timeline)
+3. File Upload (images/videos)
+4. Review Summary
+5. Account Creation
+6. OTP Verification (placeholder)
+7. Success → Lead created in CRM
+
+### Integration Points
+
+- Service pages will consume existing `/api/services` endpoint
+- Quote wizard will call existing Lead API for lead creation
+- Account creation will use existing auth module
+- No duplicate logic — purely a frontend for the existing CRM
+
+### Files Created
+
+**Module**: `src/public-site/` (30+ files)
+- 7 reusable components (Navbar, Footer, SectionHeader, PageHero, ServiceCard, FAQAccordion, TestimonialCard)
+- 9 homepage sections (Hero, Process, Services, Stats, Projects, Industries, Testimonials, FAQs, CTA)
+- 10 pages (HomePage, ServicesPage, ServiceDetailPage, IndustriesPage, HowItWorksPage, ProjectsPage, AboutPage, ContactPage, ResourcesPage, GetQuotePage)
+- 4 layout/route wrappers (PublicLayout, ServicesRoute, ProjectsRoute, ServiceDetailRoute)
+- 3 custom hooks (useQuoteWizard, useScrollSpy, useMobileMenu)
+- Types, constants, and barrel exports
+
+**Modified**:
+- `src/App.tsx` — Added public site routes with auth-aware wrappers
+- `src/routes/routes.ts` — Added public site route constants
+- `src/styles/globals.css` — Added line-clamp utilities
+
+### What Was NOT Modified
+
+- Admin Panel pages and routing
+- Client Portal pages and routing
+- Backend API, database schema, or business logic
+- Existing authentication system
+- CRM, Status Engine, Quotation, Invoice, Email, Timeline, Audit Logs modules

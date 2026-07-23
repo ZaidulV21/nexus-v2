@@ -91,7 +91,7 @@ export function TopNav({
             <DropdownMenuItem>
               <User className="h-3.5 w-3.5" /> Profile
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => navigate(ROUTES.settings)}>
+            <DropdownMenuItem onClick={() => navigate(ROUTES.admin.settings)}>
               <Settings className="h-3.5 w-3.5" /> Settings
             </DropdownMenuItem>
             <DropdownMenuSeparator />

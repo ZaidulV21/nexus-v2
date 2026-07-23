@@ -263,3 +263,99 @@ If issues arise:
 
 **STATUS:** ✅ IMPLEMENTATION COMPLETE  
 **NEXT:** No further action required
+
+---
+
+# Phase 2: Public Marketing Website
+
+**Date:** 2026-07-23
+**Status:** ✅ PHASE 2 COMPLETE
+
+---
+
+## Overview
+
+Phase 2 adds a premium public marketing website as a new module within the existing `nexus-frontend`. The public website serves as the customer-facing entry point, driving lead generation through the Get Quote wizard which integrates with the existing CRM backend.
+
+## Architecture
+
+The public website is built as `src/public-site/` — a self-contained module within the existing React application. It shares the same design system, component library, and routing infrastructure as the Admin Panel and Client Portal.
+
+### Route Handling
+
+Routes shared between admin and public (`/services`, `/projects`, `/services/:slug`) use **auth-aware wrapper components** that check the user's authentication state:
+- **Authenticated ADMIN** → Renders the admin page inside `AppShell`
+- **Unauthenticated** → Renders the public page inside `PublicLayout`
+
+### Customer Journey (Get Quote Wizard)
+
+```
+Get Quote (/get-quote)
+  ↓
+Select Services (multi-select from 8 services)
+  ↓
+Dynamic Requirement Wizard (project details, budget, timeline)
+  ↓
+Upload Images/Videos
+  ↓
+Review Summary
+  ↓
+Create Account (name, email, phone, company)
+  ↓
+OTP Verification (placeholder UI)
+  ↓
+Lead Created → Existing CRM workflow starts
+```
+
+### Integration Points
+
+- **Service Catalog**: Public service pages will consume the existing `/api/services` endpoint
+- **Lead Creation**: The Get Quote wizard will call the existing Lead API to create leads
+- **Authentication**: Account creation will use the existing auth module
+- **No duplicate logic**: The public website is purely a frontend for the existing CRM
+
+## Folder Structure
+
+```
+src/public-site/
+  components/     - Navbar, Footer, SectionHeader, PageHero, ServiceCard, FAQAccordion, TestimonialCard
+  sections/       - HeroSection, ProcessSection, ServicesSection, StatsSection, ProjectsSection,
+                    IndustriesSection, TestimonialsSection, FAQSection, CTASection
+  pages/          - HomePage, ServicesPage, ServiceDetailPage, IndustriesPage, HowItWorksPage,
+                    ProjectsPage, AboutPage, ContactPage, ResourcesPage, GetQuotePage
+  layouts/        - PublicLayout, ServicesRoute, ProjectsRoute, ServiceDetailRoute
+  hooks/          - useQuoteWizard, useScrollSpy, useMobileMenu
+  types/          - ServiceItem, IndustryItem, ProjectItem, TestimonialItem, FAQItem, QuoteWizardData
+  constants/      - SERVICES, INDUSTRIES, PROCESS_STEPS, STATS, TESTIMONIALS, FAQS, NAVIGATION
+```
+
+## Pages Built
+
+| Route | Page | Description |
+|-------|------|-------------|
+| `/home` | HomePage | 9-section premium long-form homepage |
+| `/services` | ServicesPage | All 8 service cards with detail links |
+| `/services/:slug` | ServiceDetailPage | Individual service detail with features, CTA |
+| `/industries` | IndustriesPage | 8 industry verticals with service mappings |
+| `/how-it-works` | HowItWorksPage | 6-step visual process timeline |
+| `/projects` | ProjectsPage | Featured project portfolio |
+| `/about` | AboutPage | Company story, values, stats |
+| `/contact` | ContactPage | Contact form with business details |
+| `/resources` | ResourcesPage | Placeholder for future content |
+| `/get-quote` | GetQuotePage | 7-step quote request wizard |
+
+## Design Decisions
+
+- **Premium enterprise aesthetic**: Inspired by Notion, Linear, Stripe, ServiceNow
+- **Nexus Indigo accent** (`#4553FF`): Consistent with existing design system
+- **Framer Motion**: Smooth page transitions and scroll-triggered animations
+- **Mobile-first responsive**: All pages fully responsive with mobile navigation
+- **No dark mode**: Public website uses light theme only (matches enterprise aesthetic)
+
+## What Was NOT Modified
+
+- Admin Panel pages and routing
+- Client Portal pages and routing
+- Backend API, database schema, or business logic
+- Existing authentication system
+- CRM, Status Engine, Quotation, Invoice, Email, Timeline, Audit Logs modules

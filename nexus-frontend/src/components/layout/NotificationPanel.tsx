@@ -79,7 +79,7 @@ export function NotificationPanel({
 
   function handleViewAll() {
     onClose();
-    navigate(ROUTES.notifications);
+    navigate(ROUTES.admin.notifications);
   }
 
   return (
