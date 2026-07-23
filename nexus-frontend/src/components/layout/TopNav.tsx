@@ -15,6 +15,7 @@ import { useAuth } from '@/app/AuthContext';
 import { ROUTES } from '@/routes/routes';
 import { NotificationPanel } from './NotificationPanel';
 import { useUnreadCount } from '@/queries/useNotifications';
+import { ThemeToggle } from '@/components/theme/ThemeToggle';
 
 export function TopNav({
   breadcrumbs,
@@ -61,6 +62,8 @@ export function TopNav({
             &#8984;K
           </kbd>
         </button>
+
+        <ThemeToggle />
 
         <div className="relative">
           <button

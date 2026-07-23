@@ -15,6 +15,7 @@ All business modules from the PRD are implemented and wired to the backend API:
 - **Dashboard** (`/admin/dashboard`) — 10 KPI cards, 4 charts, recent activity, upcoming items, quick actions
 - **Leads** (`/admin/leads`) — CRUD, Active/Archived toggle, archive/restore with reason, Lead Services panel (read-only after conversion)
 - **Clients** (`/admin/clients`) — List, detail, Lead → Client conversion
+- **Services** (`/admin/services`) — CRUD with image upload, thumbnail list, image replace/remove on detail
 - **Quotations** (`/admin/quotations`) — Create (client-only), revise, approve, send, PDF preview/download/regenerate
 - **Projects** (`/admin/projects`) — List, detail, aggregate status tracking
 - **Invoices** (`/admin/invoices`) — Create, send, cancel, payment recording, PDF preview/download/regenerate

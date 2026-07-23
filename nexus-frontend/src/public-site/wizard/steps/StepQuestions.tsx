@@ -39,7 +39,7 @@ export function StepQuestions({ selectedServices, answers, onAnswer }: StepQuest
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.35, delay: sIndex * 0.08 }}
-              className="rounded-2xl border border-border bg-white p-5 sm:p-6"
+              className="rounded-2xl border border-border bg-surface p-5 sm:p-6"
             >
               <h3 className="text-base font-semibold text-ink">{service.name}</h3>
 

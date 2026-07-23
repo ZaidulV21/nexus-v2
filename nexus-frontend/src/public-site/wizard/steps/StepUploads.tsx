@@ -56,7 +56,7 @@ export function StepUploads({ selectedServices, files, onAddFiles, onRemoveFile 
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.35, delay: sIndex * 0.08 }}
-              className="rounded-2xl border border-border bg-white p-5 sm:p-6"
+              className="rounded-2xl border border-border bg-surface p-5 sm:p-6"
             >
               <h3 className="text-sm font-semibold text-ink">{service.name}</h3>
 
@@ -94,7 +94,7 @@ export function StepUploads({ selectedServices, files, onAddFiles, onRemoveFile 
                         <button
                           type="button"
                           onClick={() => onRemoveFile(file.id)}
-                          className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-ink/60 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                          className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-dark/60 text-white opacity-0 group-hover:opacity-100 transition-opacity"
                         >
                           <X className="h-3 w-3" />
                         </button>

@@ -21,7 +21,7 @@ export function WizardNavigation({
   isSubmitting,
 }: WizardNavigationProps) {
   return (
-    <div className="flex items-center justify-between gap-4 border-t border-border bg-white px-6 sm:px-8 py-4">
+    <div className="flex items-center justify-between gap-4 border-t border-border bg-surface px-6 sm:px-8 py-4">
       <button
         type="button"
         onClick={onBack}

@@ -5,7 +5,7 @@ import { FadeIn } from '../components/motion';
 
 export function TestimonialsSection() {
   return (
-    <section className="py-20 sm:py-28 bg-white">
+    <section className="py-20 sm:py-28 bg-surface">
       <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
         <SectionHeader
           tag="Testimonials"

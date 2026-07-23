@@ -48,6 +48,8 @@ Nexus/
 | Global Search | Cross-module search (7 entity types), Cmd+K palette |
 | Dashboard | Admin KPIs, charts, revenue tracking, upcoming items |
 | PDF Generation | Branded quotation/invoice PDFs, fire-and-forget, cloud delivery |
+| Service Images | Upload/manage service images, public website displays with fallback to icons |
+| Dark Mode | Full dark/light/system theme with toggle, persisted across sessions |
 
 ## Setup
 
@@ -128,6 +130,15 @@ The Get Quote wizard (`/get-quote`) is an 8-step flow that:
 - 1-hour expiry, single-use tokens
 - Email contains reset link — never the password itself
 
+### Dark Mode
+
+- CSS custom properties with Tailwind `darkMode: 'class'`
+- 3-mode toggle: Light / Dark / System (follows OS preference)
+- Theme persisted in `localStorage` with FOUC-prevention script
+- Toggle available in Admin CRM, Client Portal, and Public Website
+- All ~40 public site components migrated from `bg-white` to semantic `bg-surface`
+- Smooth 200ms transitions, charts adapt automatically
+
 ## API Overview
 
 ### Public (no auth)
@@ -151,6 +162,7 @@ The Get Quote wizard (`/get-quote`) is an 8-step flow that:
 | `/api/invoices/*` | Invoice CRUD, payment recording |
 | `/api/notifications/*` | In-app notification center |
 | `/api/company/settings` | Company settings CRUD |
+| `/api/services/*` | Service CRUD, image upload/remove |
 | `/api/pdf/:type/:id` | PDF generation/download |
 | `/api/search` | Global cross-module search |
 

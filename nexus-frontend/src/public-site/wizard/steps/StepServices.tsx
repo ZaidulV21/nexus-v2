@@ -45,7 +45,7 @@ export function StepServices({ selectedServices, onToggle }: StepServicesProps) 
                   'relative flex items-start gap-4 rounded-2xl border-2 p-5 text-left transition-all duration-200',
                   isSelected
                     ? 'border-accent bg-accent-subtle/50 shadow-sm shadow-accent/10'
-                    : 'border-border bg-white hover:border-border-strong hover:shadow-sm'
+                    : 'border-border bg-surface hover:border-border-strong hover:shadow-sm'
                 )}
               >
                 {/* Checkbox indicator */}

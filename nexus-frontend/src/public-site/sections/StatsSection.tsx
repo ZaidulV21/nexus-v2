@@ -35,10 +35,10 @@ function AnimatedCounter({ value, suffix }: { value: string; suffix?: string }) 
 
 export function StatsSection() {
   return (
-    <section className="relative overflow-hidden bg-ink py-20 sm:py-28">
+    <section className="relative overflow-hidden bg-dark py-20 sm:py-28">
       {/* Subtle background pattern */}
       <div className="absolute inset-0">
-        <div className="absolute inset-0 bg-gradient-to-br from-ink via-ink to-[#1a1a2e]" />
+        <div className="absolute inset-0 bg-gradient-to-br from-dark via-dark to-[#1a1a2e]" />
         <div className="absolute top-0 left-1/3 h-[400px] w-[400px] rounded-full bg-accent/5 blur-[100px]" />
         <div className="absolute bottom-0 right-1/4 h-[300px] w-[300px] rounded-full bg-accent/3 blur-[80px]" />
       </div>

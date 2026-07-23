@@ -23,7 +23,7 @@ export function ProjectsPage() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ duration: 0.4, delay: index * 0.1 }}
-                className="group overflow-hidden rounded-2xl border border-border bg-white shadow-xs transition-all duration-300 hover:shadow-lg hover:shadow-accent/5 hover:border-accent/25"
+                className="group overflow-hidden rounded-2xl border border-border bg-surface shadow-xs transition-all duration-300 hover:shadow-lg hover:shadow-accent/5 hover:border-accent/25"
               >
                 <div className="relative aspect-[16/10] overflow-hidden">
                   <img

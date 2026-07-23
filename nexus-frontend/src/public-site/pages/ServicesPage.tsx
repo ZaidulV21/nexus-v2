@@ -60,7 +60,7 @@ export function ServicesPage() {
             </p>
             <Link
               to="/get-quote"
-              className="mt-8 inline-flex items-center gap-2 rounded-xl bg-white px-7 py-3.5 text-sm font-semibold text-accent transition-all hover:bg-white/90"
+              className="mt-8 inline-flex items-center gap-2 rounded-xl bg-surface px-7 py-3.5 text-sm font-semibold text-accent transition-all hover:bg-surface/90"
             >
               Get a Combined Quote
               <ArrowRight className="h-4 w-4" />

@@ -645,7 +645,27 @@ Fixed the missing service/category information throughout the quotation system. 
 
 ## Summary
 
-Added image upload support to the existing Services module. Admins can upload images when creating/editing services, and the public website displays them instead of generic icons.
+Added image upload support to the existing Services module. Admins can upload images when creating/editing services, and the public website displays them instead of generic icons. The admin service page gains a full image management workflow: upload on create, replace/remove on detail, and thumbnail display in the list.
+
+## Admin Service Page — Image Upload Workflow
+
+### Service List (`ServicesPage.tsx`)
+- Each row shows an image thumbnail (or first-letter fallback) next to the service name
+- Thumbnail is `h-10 w-10 rounded-lg object-cover` — visually compact, no layout change
+
+### Service Detail (`ServiceDetailPage.tsx`)
+- Overview tab shows the full service image as a wide banner (`h-48`)
+- Hover overlay provides Upload/Replace and Remove buttons (admin-only, non-archived only)
+- No-image state shows a dashed upload zone ("Upload service image")
+- Archived services show the image read-only (no action buttons)
+
+### Service Create/Edit Drawer (`ServiceFormDrawer.tsx`)
+- New "Service image" field with file picker and preview
+- Empty state: dashed upload zone ("Click to upload an image")
+- Selected state: image preview with X remove button
+- Upload is deferred to after service save (two-step: save service → upload image)
+- Edit mode shows current image preview, can be replaced or removed
+- 5MB max file size, accepts JPEG/PNG/WebP/SVG
 
 ## Changes Made
 
@@ -788,3 +808,121 @@ Replaced the fake client-side OTP placeholder with real backend-driven email ver
 | Rate limiting on OTP resend | ✅ |
 | Expired OTP rejected | ✅ |
 | Max attempts enforced | ✅ |
+
+---
+
+## Phase 6 — Dark Mode ✅
+
+**Date:** 2026-07-24  
+**Status:** COMPLETE
+
+### What Was Built
+
+#### Theme Infrastructure
+- `src/hooks/useTheme.ts` — NEW: `useTheme()` hook with getSystemTheme, getTheme, setTheme, resolvedTheme, localStorage persistence, matchMedia listener
+- `src/components/theme/ThemeProvider.tsx` — NEW: ThemeContext provider wrapping the app
+- `src/components/theme/ThemeToggle.tsx` — NEW: 3-button segmented control (Light/Dark/System)
+- `src/app/providers.tsx` — MODIFIED: Wraps app with ThemeProvider
+- `index.html` — MODIFIED: Inline `<script>` reads localStorage and applies `.dark` class before first paint (FOUC prevention)
+
+#### CSS Variables (already defined in globals.css)
+- `:root` block: Light theme tokens (canvas, surface, ink, accent, semantic colors)
+- `.dark` block: Dark theme overrides for all tokens
+- `--color-dark`: Fixed dark color (always dark, for footer/hero sections that shouldn't flip)
+
+#### Tailwind Config
+- `tailwind.config.ts` — `darkMode: 'class'` already set, added `dark` color token
+
+#### Theme Toggle Placement
+- `src/components/layout/TopNav.tsx` — Admin CRM header
+- `src/app/PortalLayout.tsx` — Client Portal header
+- `src/public-site/components/Navbar.tsx` — Public website (desktop + mobile)
+
+#### Dark Mode Color Fixes (~40 files)
+- **Public sections** (10): `bg-white` → `bg-surface` on alternating section backgrounds
+- **Public cards** (~30): All card/container components updated
+- **Public pages** (7): Card backgrounds updated
+- **Wizard steps** (8): Input and card backgrounds updated
+- **Navbar**: `bg-white/90` → `bg-surface/90`, dropdown/mobile menu backgrounds
+- **Footer**: `bg-ink` → `bg-dark` (always dark)
+- **Hero/Stats/CTA**: `bg-ink` → `bg-dark` (always dark)
+- **Body transition**: Added `transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease`
+
+#### Charts
+- Already use CSS variables for grid/tick colors — adapt automatically
+
+### Verification
+
+| Check | Result |
+|-------|--------|
+| Backend Tests (213/213) | ✅ |
+| Frontend TypeScript | ✅ 0 errors |
+| Production Build | ✅ Clean |
+| Theme persists across refresh | ✅ |
+| System preference detection | ✅ |
+| No FOUC | ✅ |
+| Smooth transitions | ✅ |
+| Admin CRM dark mode | ✅ |
+| Client Portal dark mode | ✅ |
+| Public website dark mode | ✅ |
+| Charts adapt | ✅ |
+| Images not inverted | ✅ |
+| Toggle in all 3 areas | ✅ |
+
+---
+
+## Phase 7 — ClientLogosSection Marquee Refinement ✅
+
+**Date:** 2026-07-24  
+**Status:** COMPLETE
+
+### File Modified
+- `src/public-site/sections/ClientLogosSection.tsx` — Full refactor
+
+### Changes
+- Edge fades: hardcoded `#ffffff` → theme-aware `rgb(var(--color-surface))`
+- Badge background: `#f8f9fb` → `rgb(var(--color-surface-raised))`
+- Badge border: `rgba(0,0,0,0.04)` → `rgb(var(--color-border) / 0.5)`
+- Logo name color: `#6b7280` → `rgb(var(--color-ink-muted))`
+- Responsive gaps: 3 breakpoints (2rem / 3rem / 4rem)
+- Responsive badge size: 2rem mobile → 2.25rem desktop
+- Responsive font: 0.8125rem mobile → 0.875rem desktop
+- `prefers-reduced-motion: reduce` pauses marquee
+
+### Verification
+
+| Check | Result |
+|-------|--------|
+| TypeScript | ✅ 0 errors |
+| Production Build | ✅ Clean |
+| Light mode fades | ✅ |
+| Dark mode fades | ✅ |
+| Hover pauses marquee | ✅ |
+| Responsive | ✅ |
+| Reduced motion | ✅ |
+
+---
+
+## Phase 8 — HeroSection Dark Mode Overlay Fix ✅
+
+**Date:** 2026-07-24  
+**Status:** COMPLETE
+
+### File Modified
+- `src/public-site/sections/HeroSection.tsx` — 3 lines changed
+
+### Changes
+- Section background: `bg-ink` → `bg-dark` (always dark)
+- Readability scrims: `from-ink via-ink/85 to-ink/40` → `from-dark via-dark/85 to-dark/40`
+- Bottom scrim: `from-ink via-transparent to-ink/30` → `from-dark via-transparent to-dark/30`
+- Dashboard card: `bg-ink/40` → `bg-dark/40`
+
+### Verification
+
+| Check | Result |
+|-------|--------|
+| TypeScript | ✅ 0 errors |
+| Production Build | ✅ Clean |
+| Light mode readable | ✅ |
+| Dark mode readable | ✅ |
+| No other changes | ✅ |

@@ -9,6 +9,7 @@ import { useUnreadCount } from '@/queries/useNotifications';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/app/AuthContext';
+import { ThemeToggle } from '@/components/theme/ThemeToggle';
 
 const PORTAL_NAV = [
   { label: 'Dashboard', icon: LayoutDashboard, to: ROUTES.portal.dashboard },
@@ -48,6 +49,7 @@ export function PortalLayout() {
           </span>
         </div>
         <div className="flex items-center gap-2">
+          <ThemeToggle />
           <div className="relative">
             <button
               onClick={notifications.toggle}

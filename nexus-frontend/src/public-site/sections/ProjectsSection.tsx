@@ -9,7 +9,7 @@ const FALLBACK_IMAGE =
 
 export function ProjectsSection() {
   return (
-    <section className="py-20 sm:py-28 bg-white">
+    <section className="py-20 sm:py-28 bg-surface">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <SectionHeader
           tag="Our Work"
@@ -26,7 +26,7 @@ export function ProjectsSection() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ duration: 0.4, delay: index * 0.1 }}
-              className="group relative overflow-hidden rounded-2xl border border-border bg-white shadow-xs transition-all duration-300 hover:shadow-lg hover:shadow-accent/5 hover:border-accent/25"
+              className="group relative overflow-hidden rounded-2xl border border-border bg-surface shadow-xs transition-all duration-300 hover:shadow-lg hover:shadow-accent/5 hover:border-accent/25"
             >
               <div className="relative aspect-[4/3] overflow-hidden">
                 <img
@@ -63,7 +63,7 @@ export function ProjectsSection() {
         <div className="mt-12 text-center">
           <Link
             to="/projects"
-            className="inline-flex items-center gap-2 rounded-xl border border-border bg-white px-6 py-3 text-sm font-semibold text-ink transition-all hover:border-accent/30 hover:shadow-md"
+            className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-6 py-3 text-sm font-semibold text-ink transition-all hover:border-accent/30 hover:shadow-md"
           >
             View All Projects
             <ArrowRight className="h-4 w-4" />

@@ -24,7 +24,7 @@ export function ServicesSection() {
   const medium = services.slice(6, 8);
 
   return (
-    <section className="py-20 sm:py-28 bg-white">
+    <section className="py-20 sm:py-28 bg-surface">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <SectionHeader
           tag="Our Services"
@@ -97,7 +97,7 @@ export function ServicesSection() {
                   <FadeIn key={service.id} delay={0.1 + index * 0.08}>
                     <Link
                       to={`/services/${service.slug}`}
-                      className="group block h-full rounded-2xl border border-border bg-white overflow-hidden transition-all duration-300 hover:border-accent/25 hover:shadow-md hover:-translate-y-0.5"
+                      className="group block h-full rounded-2xl border border-border bg-surface overflow-hidden transition-all duration-300 hover:border-accent/25 hover:shadow-md hover:-translate-y-0.5"
                     >
                       {service.image ? (
                         <div className="relative h-32 overflow-hidden">

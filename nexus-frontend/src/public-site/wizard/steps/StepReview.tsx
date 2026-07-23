@@ -27,7 +27,7 @@ export function StepReview({ state, goTo }: StepReviewProps) {
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          className="rounded-2xl border border-border bg-white p-5"
+          className="rounded-2xl border border-border bg-surface p-5"
         >
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-ink">Selected Services</h3>
@@ -56,7 +56,7 @@ export function StepReview({ state, goTo }: StepReviewProps) {
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: sIndex * 0.05 }}
-              className="rounded-2xl border border-border bg-white p-5"
+              className="rounded-2xl border border-border bg-surface p-5"
             >
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-ink">{service.name}</h3>
@@ -95,7 +95,7 @@ export function StepReview({ state, goTo }: StepReviewProps) {
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            className="rounded-2xl border border-border bg-white p-5"
+            className="rounded-2xl border border-border bg-surface p-5"
           >
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold text-ink">Uploaded Files ({state.files.length})</h3>
@@ -121,7 +121,7 @@ export function StepReview({ state, goTo }: StepReviewProps) {
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          className="rounded-2xl border border-border bg-white p-5"
+          className="rounded-2xl border border-border bg-surface p-5"
         >
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-ink">Contact Information</h3>

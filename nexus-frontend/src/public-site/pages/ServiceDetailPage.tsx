@@ -96,7 +96,7 @@ export function ServiceDetailPage() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5, delay: 0.2 }}
-                className="mt-12 rounded-2xl border border-border bg-white p-8"
+                className="mt-12 rounded-2xl border border-border bg-surface p-8"
               >
                 <h3 className="text-lg font-semibold text-ink">Our Approach</h3>
                 <p className="mt-3 text-sm text-ink-muted leading-relaxed">
@@ -122,7 +122,7 @@ export function ServiceDetailPage() {
 
             <div className="lg:col-span-1">
               <div className="sticky top-24 space-y-6">
-                <div className="rounded-2xl border border-border bg-white p-6">
+                <div className="rounded-2xl border border-border bg-surface p-6">
                   <h3 className="text-base font-semibold text-ink">Quick Actions</h3>
                   <div className="mt-4 space-y-3">
                     <Link
@@ -143,7 +143,7 @@ export function ServiceDetailPage() {
                 </div>
 
                 {relatedServices.length > 0 && (
-                  <div className="rounded-2xl border border-border bg-white p-6">
+                  <div className="rounded-2xl border border-border bg-surface p-6">
                     <h3 className="text-base font-semibold text-ink">Related Services</h3>
                     <div className="mt-4 space-y-2">
                       {relatedServices.map((s) => (

@@ -57,7 +57,7 @@ export function ProcessSection() {
                   className={`relative flex items-center gap-6 lg:gap-0 ${isLeft ? 'lg:flex-row' : 'lg:flex-row-reverse'}`}
                 >
                   <div className={`flex-1 ${isLeft ? 'lg:text-right lg:pr-12' : 'lg:text-left lg:pl-12'}`}>
-                    <div className={`inline-block rounded-2xl border border-border bg-white p-6 shadow-xs transition-all hover:shadow-md ${isLeft ? 'lg:ml-auto' : ''}`}>
+                    <div className={`inline-block rounded-2xl border border-border bg-surface p-6 shadow-xs transition-all hover:shadow-md ${isLeft ? 'lg:ml-auto' : ''}`}>
                       <div className={`flex items-center gap-3 ${isLeft ? 'lg:flex-row-reverse' : ''}`}>
                         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent text-white">
                           <Icon className="h-5 w-5" />
@@ -73,7 +73,7 @@ export function ProcessSection() {
                     </div>
                   </div>
 
-                  <div className="relative z-10 flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-2 border-accent bg-white text-sm font-bold text-accent shadow-sm lg:absolute lg:left-1/2 lg:-translate-x-1/2">
+                  <div className="relative z-10 flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-2 border-accent bg-surface text-sm font-bold text-accent shadow-sm lg:absolute lg:left-1/2 lg:-translate-x-1/2">
                     {step.step}
                   </div>
 

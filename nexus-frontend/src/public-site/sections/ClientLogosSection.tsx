@@ -16,7 +16,7 @@ export function ClientLogosSection() {
   const [paused, setPaused] = useState(false);
 
   return (
-    <section className="py-14 sm:py-16 bg-white border-b border-border/50 overflow-hidden">
+    <section className="py-14 sm:py-16 bg-surface border-b border-border/50 overflow-hidden">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <FadeIn>
           <p className="text-center text-sm font-medium text-ink-faint uppercase tracking-widest mb-10">
@@ -31,7 +31,7 @@ export function ClientLogosSection() {
           onMouseEnter={() => setPaused(true)}
           onMouseLeave={() => setPaused(false)}
         >
-          {/* Edge fades */}
+          {/* Theme-aware edge fades */}
           <div className="marquee-fade marquee-fade-left" />
           <div className="marquee-fade marquee-fade-right" />
 
@@ -76,21 +76,24 @@ export function ClientLogosSection() {
         }
         .marquee-fade-left {
           left: 0;
-          background: linear-gradient(to right, #ffffff, transparent);
+          background: linear-gradient(to right, rgb(var(--color-surface)), transparent);
         }
         .marquee-fade-right {
           right: 0;
-          background: linear-gradient(to left, #ffffff, transparent);
+          background: linear-gradient(to left, rgb(var(--color-surface)), transparent);
         }
 
         .marquee-track {
           display: flex;
           align-items: center;
           width: max-content;
-          gap: 2.5rem;
+          gap: 2rem;
           animation: marquee-ltr 28s linear infinite;
         }
         @media (min-width: 640px) {
+          .marquee-track { gap: 3rem; }
+        }
+        @media (min-width: 1024px) {
           .marquee-track { gap: 4rem; }
         }
 
@@ -99,41 +102,60 @@ export function ClientLogosSection() {
           to { transform: translateX(0%); }
         }
 
+        @media (prefers-reduced-motion: reduce) {
+          .marquee-track {
+            animation-play-state: paused !important;
+          }
+        }
+
         .marquee-item {
           display: flex;
           flex-shrink: 0;
           align-items: center;
-          gap: 0.625rem;
+          gap: 0.5rem;
           user-select: none;
           padding: 0.5rem 0.25rem;
+        }
+        @media (min-width: 640px) {
+          .marquee-item { gap: 0.625rem; }
         }
 
         .marquee-badge {
           display: flex;
-          height: 2.25rem;
-          width: 2.25rem;
+          height: 2rem;
+          width: 2rem;
           flex-shrink: 0;
           align-items: center;
           justify-content: center;
           border-radius: 0.5rem;
-          background: #f8f9fb;
-          font-size: 0.75rem;
+          background: rgb(var(--color-surface-raised));
+          font-size: 0.7rem;
           font-weight: 700;
-          box-shadow: 0 0 0 1px rgba(0,0,0,0.04), 0 0 14px 2px var(--glow);
+          box-shadow: 0 0 0 1px rgb(var(--color-border) / 0.5), 0 0 14px 2px var(--glow);
           opacity: 0.9;
           transition: transform 0.25s ease, box-shadow 0.25s ease;
+        }
+        @media (min-width: 640px) {
+          .marquee-badge {
+            height: 2.25rem;
+            width: 2.25rem;
+            font-size: 0.75rem;
+          }
         }
 
         .marquee-item:hover .marquee-badge {
           transform: translateY(-2px) scale(1.06);
-          box-shadow: 0 0 0 1px rgba(0,0,0,0.04), 0 0 22px 4px var(--glow);
+          box-shadow: 0 0 0 1px rgb(var(--color-border) / 0.5), 0 0 22px 4px var(--glow);
         }
 
         .marquee-name {
-          font-size: 0.875rem;
+          font-size: 0.8125rem;
           font-weight: 500;
-          color: #6b7280;
+          color: rgb(var(--color-ink-muted));
           white-space: nowrap;
+        }
+        @media (min-width: 640px) {
+          .marquee-name { font-size: 0.875rem; }
         }
       `}</style>
     </section>

@@ -170,7 +170,7 @@ export function StepOtp({ email, isVerified, onVerify }: StepOtpProps) {
                   onKeyDown={(e) => handleKeyDown(i, e)}
                   onPaste={handlePaste}
                   disabled={isLoading}
-                  className="h-12 w-12 rounded-xl border border-border bg-white text-center text-lg font-semibold text-ink focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:opacity-50"
+                  className="h-12 w-12 rounded-xl border border-border bg-surface text-center text-lg font-semibold text-ink focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:opacity-50"
                 />
               ))}
             </div>

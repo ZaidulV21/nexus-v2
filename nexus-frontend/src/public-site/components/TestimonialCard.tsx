@@ -14,7 +14,7 @@ export function TestimonialCard({ testimonial, index = 0 }: TestimonialCardProps
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
       transition={{ duration: 0.4, delay: index * 0.1 }}
-      className="flex h-full flex-col rounded-2xl border border-border bg-white p-6 shadow-xs"
+      className="flex h-full flex-col rounded-2xl border border-border bg-surface p-6 shadow-xs"
     >
       <div className="flex gap-1">
         {Array.from({ length: testimonial.rating }).map((_, i) => (

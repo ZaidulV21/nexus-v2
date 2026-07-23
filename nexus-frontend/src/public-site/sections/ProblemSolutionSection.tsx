@@ -92,7 +92,7 @@ export function ProblemSolutionSection() {
               <FadeIn key={i} delay={i * 0.08}>
                 <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_1fr] items-stretch gap-4">
                   {/* Problem card */}
-                  <div className="group relative rounded-2xl border border-danger/15 bg-white p-5 sm:p-6 transition-all hover:border-danger/30 hover:shadow-sm">
+                  <div className="group relative rounded-2xl border border-danger/15 bg-surface p-5 sm:p-6 transition-all hover:border-danger/30 hover:shadow-sm">
                     <div className="flex items-start gap-4">
                       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-danger-subtle text-danger">
                         <ProblemIcon className="h-5 w-5" />
@@ -137,7 +137,7 @@ export function ProblemSolutionSection() {
         <FadeIn className="mt-12 text-center">
           <Link
             to="/how-it-works"
-            className="inline-flex items-center gap-2 rounded-xl border border-border bg-white px-6 py-3 text-sm font-semibold text-ink transition-all hover:border-accent/30 hover:shadow-md"
+            className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-6 py-3 text-sm font-semibold text-ink transition-all hover:border-accent/30 hover:shadow-md"
           >
             See how it works <ArrowRight className="h-4 w-4" />
           </Link>

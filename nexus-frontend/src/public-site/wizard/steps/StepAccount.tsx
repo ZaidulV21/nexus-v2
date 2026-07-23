@@ -64,7 +64,7 @@ export function StepAccount({ contact, account, onUpdate }: StepAccountProps) {
                   onChange={(e) => onUpdate({ password: e.target.value })}
                   placeholder="Min. 8 characters"
                   className={`w-full rounded-xl border px-4 py-2.5 pr-10 text-sm text-ink focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 ${
-                    passwordError ? 'border-red-300 bg-red-50' : 'border-border bg-white'
+                    passwordError ? 'border-red-300 bg-red-50' : 'border-border bg-surface'
                   }`}
                 />
                 <button
@@ -89,7 +89,7 @@ export function StepAccount({ contact, account, onUpdate }: StepAccountProps) {
                   onChange={(e) => onUpdate({ confirmPassword: e.target.value })}
                   placeholder="Re-enter your password"
                   className={`w-full rounded-xl border px-4 py-2.5 pr-10 text-sm text-ink focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 ${
-                    confirmError ? 'border-red-300 bg-red-50' : 'border-border bg-white'
+                    confirmError ? 'border-red-300 bg-red-50' : 'border-border bg-surface'
                   }`}
                 />
                 <button

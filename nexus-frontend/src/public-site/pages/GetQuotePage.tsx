@@ -96,7 +96,7 @@ export function GetQuotePage() {
     return (
       <div className="min-h-screen bg-canvas pt-24 pb-16">
         <div className="mx-auto max-w-2xl px-4 sm:px-6">
-          <div className="rounded-2xl border border-border bg-white shadow-xs">
+          <div className="rounded-2xl border border-border bg-surface shadow-xs">
             <div className="p-8 sm:p-12 text-center">
               <motion.div
                 initial={{ scale: 0.5, opacity: 0 }}
@@ -151,7 +151,7 @@ export function GetQuotePage() {
           completedSteps={completedSteps}
         />
 
-        <div className="rounded-2xl border border-border bg-white shadow-xs mt-6">
+        <div className="rounded-2xl border border-border bg-surface shadow-xs mt-6">
           <AnimatePresence mode="wait">
             <motion.div
               key={state.currentStep}

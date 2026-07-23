@@ -7,7 +7,7 @@ export function CTASection() {
   const company = usePublicCompany();
 
   return (
-    <section className="py-20 sm:py-28 bg-ink">
+    <section className="py-20 sm:py-28 bg-dark">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <motion.div
           initial={{ opacity: 0, y: 24 }}
@@ -31,7 +31,7 @@ export function CTASection() {
             <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
               <Link
                 to="/get-quote"
-                className="inline-flex items-center gap-2 rounded-xl bg-white px-7 py-3.5 text-sm font-semibold text-accent transition-all hover:bg-white/90 shadow-lg"
+                className="inline-flex items-center gap-2 rounded-xl bg-surface px-7 py-3.5 text-sm font-semibold text-accent transition-all hover:bg-surface/90 shadow-lg"
               >
                 Get Free Quote
                 <ArrowRight className="h-4 w-4" />

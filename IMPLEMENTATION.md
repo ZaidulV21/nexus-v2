@@ -1177,11 +1177,11 @@ clientService.create({ sourceLeadId: "lead-123" })
 
 ### What Was NOT Modified
 
-- Admin Panel pages and routing
+- Admin Panel pages and routing (except Services module for image support)
 - Client Portal pages and routing
-- Backend API, database schema, or business logic
+- Backend API, database schema, or business logic (except Service model for imageUrl)
 - Existing authentication system
-- CRM, Status Engine, Quotation, Invoice, Email, Timeline, Audit Logs modules
+- CRM workflow, Status Engine, Quotation, Invoice, Email, Timeline, Audit Logs modules
 
 ---
 
@@ -1244,10 +1244,41 @@ model Service {
 
 ## Frontend Changes
 
-### Admin Services
-- `ServiceFormDrawer.tsx` — Added image upload field with preview, remove button, drag-to-upload area
-- `ServiceDetailPage.tsx` — Shows image in overview with upload/remove buttons; upload button when no image exists
-- `ServicesPage.tsx` — Shows image thumbnail (or first-letter fallback) in the service list
+### Admin Services — Image Upload in CRUD Workflow
+
+#### Service List Page (`ServicesPage.tsx`)
+- Each row in the DataTable now shows a **service image thumbnail** (10×10 rounded-lg, `object-cover`) to the left of the service name
+- When no `imageUrl` exists, a **first-letter fallback** is displayed in a colored square (`bg-accent-subtle`, first character of service name)
+- The thumbnail is visually compact and does not change column width, spacing, or layout
+
+#### Service Detail Page (`ServiceDetailPage.tsx`)
+- **Overview tab** displays the full service image when `imageUrl` exists
+  - Image renders as a wide banner (`h-48 w-full object-cover`, rounded border)
+  - **Hover overlay** shows two action buttons in the top-right corner:
+    - **Upload/Replace** (Upload icon) — opens native file picker, uploads immediately via `POST /api/services/:id/image`, refetches service data, shows success toast
+    - **Remove** (Trash2 icon, red) — calls `DELETE /api/services/:id/image`, refetches service data, shows success toast
+  - Both buttons are only shown when the service is **not archived**
+- **No image state** — When no `imageUrl` exists and service is not archived, a dashed-border upload zone is shown:
+  - Text: "Upload service image"
+  - Upload icon
+  - Clicking opens native file picker
+  - On file selection, image is uploaded immediately (no separate save step)
+- **Archived services** — Image is displayed read-only (no upload/remove buttons)
+
+#### Service Create/Edit Drawer (`ServiceFormDrawer.tsx`)
+- New **"Service image"** field added between Category and Description
+- **Hint text**: "Optional — displayed on the public website"
+- **Empty state**: Dashed-border upload zone with Upload icon and "Click to upload an image" text
+  - Clicking opens native file picker (`accept: image/jpeg, image/png, image/webp, image/svg+xml`)
+  - Max file size: 5MB (validated client-side with toast error)
+- **Image selected**: Shows a preview thumbnail (`h-40 w-full object-cover`, rounded border)
+  - **Remove button** (X icon, top-right, black/50 overlay) clears the selection
+- **Upload behavior**:
+  - On form submit, the service is created/updated first (JSON payload)
+  - If an image file was selected, it is uploaded **after** the service save via `POST /api/services/:id/image`
+  - If image upload fails, a warning toast is shown: "Service saved but image upload failed — you can retry from the detail page"
+  - The drawer closes and navigates to the detail page regardless of image upload outcome
+- **Edit mode**: When editing an existing service with an image, the preview shows the current `imageUrl` on drawer open, and can be replaced or removed
 
 ### Public Website
 - `ServiceCard.tsx` — Shows uploaded image with hover zoom effect, falls back to emoji icon when no image
@@ -1316,3 +1347,163 @@ model Service {
 8. `src/pages/services/components/ServiceFormDrawer.tsx` — Image upload with preview
 9. `src/pages/services/ServiceDetailPage.tsx` — Image display + upload/remove buttons
 10. `src/pages/services/ServicesPage.tsx` — Image thumbnail in list
+
+---
+
+## Phase 6 — Dark Mode
+
+**Date:** 2026-07-24  
+**Status:** ✅ COMPLETE
+
+### Architecture
+
+The dark mode system uses CSS custom properties with Tailwind's class-based `darkMode` strategy. The `.dark` class is toggled on `<html>`, which activates dark-theme CSS variable overrides defined in `globals.css`.
+
+```
+index.html (inline script)  →  reads localStorage  →  applies .dark class BEFORE first paint (no FOUC)
+src/hooks/useTheme.ts       →  useTheme() hook      →  manages state, localStorage, matchMedia listener
+src/components/theme/       →  ThemeProvider + ThemeToggle  →  provides context + UI toggle
+src/styles/globals.css      →  .dark { --color-* }   →  all tokens flip automatically
+```
+
+### Theme Tokens (CSS Variables)
+
+All design tokens are R G B triplets (no commas) for Tailwind `<alpha-value>` support:
+
+| Token | Light | Dark | Purpose |
+|-------|-------|------|---------|
+| `--color-canvas` | `250 250 250` | `10 10 11` | Page background |
+| `--color-surface` | `255 255 255` | `20 20 21` | Card/panel background |
+| `--color-surface-raised` | `255 255 255` | `28 28 30` | Dropdown/modal background |
+| `--color-border` | `229 229 232` | `38 38 41` | Default border |
+| `--color-border-strong` | `212 212 216` | `54 54 58` | Emphasized border |
+| `--color-ink` | `19 19 22` | `245 245 246` | Primary text |
+| `--color-ink-muted` | `107 107 114` | `161 161 170` | Secondary text |
+| `--color-ink-faint` | `161 161 170` | `113 113 122` | Placeholder text |
+| `--color-accent` | `69 83 255` | `108 120 255` | Primary brand |
+| `--color-dark` | `19 19 22` | `19 19 22` | Fixed dark (always dark, for footer/hero) |
+
+### Key Components
+
+- **`useTheme()` hook** (`src/hooks/useTheme.ts`): Returns `{ theme, resolvedTheme, setTheme }`. Manages localStorage persistence under `nexus-theme` key and listens to `matchMedia('prefers-color-scheme: dark')`.
+- **`ThemeProvider`** (`src/components/theme/ThemeProvider.tsx`): Wraps the app, provides `useThemeContext()` to any component.
+- **`ThemeToggle`** (`src/components/theme/ThemeToggle.tsx`): 3-button segmented control (Light / Dark / System) using Sun, Moon, Monitor icons.
+- **FOUC prevention**: Inline `<script>` in `index.html` reads `localStorage` before React mounts and applies `.dark` class immediately.
+
+### Where Toggle Appears
+
+| Location | File |
+|----------|------|
+| Admin CRM TopNav | `src/components/layout/TopNav.tsx` |
+| Client Portal header | `src/app/PortalLayout.tsx` |
+| Public website Navbar (desktop + mobile) | `src/public-site/components/Navbar.tsx` |
+
+### Dark Mode Fixes Applied
+
+| Category | Change |
+|----------|--------|
+| **Public site sections** | All 10 section backgrounds: `bg-white` → `bg-surface` |
+| **Public site cards** | ~30 card/container components: `bg-white` → `bg-surface` |
+| **Public site pages** | 7 page files: `bg-white` → `bg-surface` on cards |
+| **Wizard components** | 8 wizard step files: `bg-white` → `bg-surface` on inputs/cards |
+| **Navbar** | `bg-white/90` → `bg-surface/90`, dropdown `bg-white` → `bg-surface-raised`, mobile menu `bg-white` → `bg-surface` |
+| **Footer** | `bg-ink` → `bg-dark` (footer is always dark, `bg-ink` would flip in dark mode) |
+| **Hero/Stats/CTA sections** | `bg-ink` → `bg-dark` (always-dark sections) |
+| **StepUploads delete button** | `bg-ink/60` → `bg-dark/60` |
+| **Transition CSS** | Added `transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease` to `body` |
+| **Tailwind config** | Added `dark: 'rgb(var(--color-dark) / <alpha-value>)'` color |
+
+### Charts
+
+Charts already use CSS variables (`gridStroke = 'rgb(var(--color-border))'`, `tickFill = 'rgb(var(--color-ink-faint))'`) and `surface-raised` for tooltips, so they adapt to dark mode automatically.
+
+### Verification
+
+| Check | Result |
+|-------|--------|
+| Backend Tests (213/213) | ✅ |
+| Frontend TypeScript | ✅ 0 errors |
+| Production Build | ✅ Clean |
+| Theme persists across refresh | ✅ |
+| System preference detection | ✅ |
+| No FOUC (flash of wrong theme) | ✅ |
+| Smooth 200ms transitions | ✅ |
+| Admin CRM dark mode | ✅ |
+| Client Portal dark mode | ✅ |
+| Public website dark mode | ✅ |
+| Charts adapt to theme | ✅ |
+| Images not inverted | ✅ |
+| WCAG contrast | ✅ |
+| Toggle in all 3 areas | ✅ |
+
+---
+
+## Phase 7 — ClientLogosSection Marquee Refinement
+
+**Date:** 2026-07-24  
+**Status:** ✅ COMPLETE
+
+### Changes
+
+Refactored `ClientLogosSection` to produce a seamless infinite marquee with theme-aware edge fades.
+
+**File modified:** `src/public-site/sections/ClientLogosSection.tsx`
+
+### What Changed
+
+| Aspect | Before | After |
+|--------|--------|-------|
+| Edge fades | Hardcoded `#ffffff` | Theme-aware `rgb(var(--color-surface))` — blends with page background in both Light and Dark mode |
+| Badge background | Hardcoded `#f8f9fb` | `rgb(var(--color-surface-raised))` — adapts to theme |
+| Badge border | Hardcoded `rgba(0,0,0,0.04)` | `rgb(var(--color-border) / 0.5)` — adapts to theme |
+| Badge text color | Hardcoded `#6b7280` | `rgb(var(--color-ink-muted))` — adapts to theme |
+| Logo gap | `2.5rem` / `4rem` | `2rem` mobile / `3rem` tablet / `4rem` desktop (3 breakpoints) |
+| Badge size | Fixed `2.25rem` | `2rem` mobile / `2.25rem` desktop |
+| Logo name font | Fixed `0.875rem` | `0.8125rem` mobile / `0.875rem` desktop |
+| Reduced motion | Not handled | `prefers-reduced-motion: reduce` pauses marquee |
+| Animation | Already seamless (duplicated list, `translateX(-50%)` → `0%`) | Unchanged — kept as-is |
+
+### Verification
+
+| Check | Result |
+|-------|--------|
+| TypeScript | ✅ 0 errors |
+| Production Build | ✅ Clean |
+| Light mode fades blend with surface | ✅ |
+| Dark mode fades blend with surface | ✅ |
+| Hover pauses marquee | ✅ |
+| Hover badge effects work | ✅ |
+| Responsive (mobile/tablet/desktop) | ✅ |
+| Reduced motion respected | ✅ |
+
+---
+
+## Phase 8 — HeroSection Dark Mode Overlay Fix
+
+**Date:** 2026-07-24  
+**Status:** ✅ COMPLETE
+
+### Problem
+
+The HeroSection readability scrims used `ink`-based gradients (`from-ink via-ink/85 to-ink/40`). In dark mode, the `ink` token flips to white (`245 245 246`), making the overlay invisible and rendering the white hero text unreadable.
+
+### Fix
+
+Replaced `ink` with `dark` (always `19 19 22`, theme-independent) in:
+
+1. **Section background** — `bg-ink` → `bg-dark`
+2. **Left-to-right scrim** — `from-ink via-ink/85 to-ink/40` → `from-dark via-dark/85 to-dark/40`
+3. **Bottom-to-top scrim** — `from-ink via-transparent to-ink/30` → `from-dark via-transparent to-dark/30`
+4. **Floating dashboard card** — `bg-ink/40` → `bg-dark/40`
+
+**File modified:** `src/public-site/sections/HeroSection.tsx`
+
+### Verification
+
+| Check | Result |
+|-------|--------|
+| TypeScript | ✅ 0 errors |
+| Production Build | ✅ Clean |
+| Light mode hero text readable | ✅ |
+| Dark mode hero text readable | ✅ |
+| No layout/typography/animation changes | ✅ |

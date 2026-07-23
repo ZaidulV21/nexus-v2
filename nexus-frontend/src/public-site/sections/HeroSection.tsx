@@ -23,9 +23,9 @@ const SLIDES: Slide[] = [
   {
     label: 'Overview',
     badge: 'Trusted by 500+ businesses across India',
-    headline: 'One Partner For All Your',
-    headlineAccent: 'Business Infrastructure',
-    headlineSuffix: 'Needs',
+    headline: 'One Partner ',
+    headlineAccent: ' For All Your',
+    headlineSuffix: 'Infrastructure Needs',
     subtext: 'Nexus coordinates trusted vendors for Interior, Solar, Electrical, CCTV, Signage and IT projects through one managed platform. From concept to handover, we handle everything.',
     ctaLabel: 'Get Free Quote',
     ctaHref: '/get-quote',
@@ -125,7 +125,7 @@ export function HeroSection() {
 
   return (
     <section
-      className="relative overflow-hidden bg-ink"
+      className="relative overflow-hidden bg-dark"
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
       onTouchStart={handleTouchStart}
@@ -166,9 +166,9 @@ export function HeroSection() {
           </motion.div>
         </AnimatePresence>
 
-        {/* Readability scrims */}
-        <div className="absolute inset-0 bg-gradient-to-r from-ink via-ink/85 to-ink/40 lg:via-ink/75 lg:to-ink/25" />
-        <div className="absolute inset-0 bg-gradient-to-t from-ink via-transparent to-ink/30" />
+        {/* Readability scrims — always dark, not theme-dependent */}
+        <div className="absolute inset-0 bg-gradient-to-r from-dark via-dark/85 to-dark/40 lg:via-dark/75 lg:to-dark/25" />
+        <div className="absolute inset-0 bg-gradient-to-t from-dark via-transparent to-dark/30" />
         <div className="absolute inset-0" style={{
           backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(255,255,255,0.025) 1px, transparent 0)',
           backgroundSize: '48px 48px',
@@ -241,7 +241,7 @@ export function HeroSection() {
             transition={{ duration: 0.7, delay: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
             className="relative hidden lg:block lg:justify-self-end lg:w-[420px]"
           >
-            <div className="relative rounded-2xl border border-white/10 bg-ink/40 p-1 backdrop-blur-xl shadow-2xl shadow-black/40">
+            <div className="relative rounded-2xl border border-white/10 bg-dark/40 p-1 backdrop-blur-xl shadow-2xl shadow-black/40">
               <div className="rounded-xl bg-gradient-to-br from-white/[0.08] to-white/[0.02] p-8">
                 {/* Dashboard header */}
                 <div className="flex items-center justify-between mb-6">

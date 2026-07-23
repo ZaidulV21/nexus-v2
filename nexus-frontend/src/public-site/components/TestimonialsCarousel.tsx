@@ -31,7 +31,7 @@ export function TestimonialsCarousel({ testimonials, autoPlay = false, autoPlayI
 
   return (
     <div className="relative">
-      <div className="relative overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
+      <div className="relative overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
         <div className="px-8 pt-10 pb-10 sm:px-12 sm:pt-14 sm:pb-14 lg:px-20 lg:pt-16 lg:pb-16">
           <Quote className="h-8 w-8 text-accent/20 sm:h-10 sm:w-10" />
 
@@ -71,7 +71,7 @@ export function TestimonialsCarousel({ testimonials, autoPlay = false, autoPlayI
             onClick={goPrev}
             disabled={activeIndex === 0}
             className={cn(
-              'flex h-10 w-10 items-center justify-center rounded-full border border-border bg-white transition-all',
+              'flex h-10 w-10 items-center justify-center rounded-full border border-border bg-surface transition-all',
               activeIndex === 0
                 ? 'cursor-not-allowed opacity-40'
                 : 'hover:border-accent/30 hover:shadow-sm'
@@ -83,7 +83,7 @@ export function TestimonialsCarousel({ testimonials, autoPlay = false, autoPlayI
             onClick={goNext}
             disabled={activeIndex === testimonials.length - 1}
             className={cn(
-              'flex h-10 w-10 items-center justify-center rounded-full border border-border bg-white transition-all',
+              'flex h-10 w-10 items-center justify-center rounded-full border border-border bg-surface transition-all',
               activeIndex === testimonials.length - 1
                 ? 'cursor-not-allowed opacity-40'
                 : 'hover:border-accent/30 hover:shadow-sm'

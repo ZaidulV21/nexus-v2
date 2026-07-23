@@ -35,7 +35,7 @@ export function ServiceCard({ name, slug, description, icon, image, index = 0, v
       <Link
         to={`/services/${slug}`}
         className={cn(
-          'group block h-full rounded-2xl border border-border bg-white overflow-hidden transition-all duration-300',
+          'group block h-full rounded-2xl border border-border bg-surface overflow-hidden transition-all duration-300',
           'hover:border-accent/30 hover:shadow-lg hover:shadow-accent/5 hover:-translate-y-1',
           variant === 'featured' && 'sm:p-0'
         )}

@@ -6,6 +6,7 @@ import { usePublicServiceList } from '@/queries/usePublicServices';
 import { usePublicCompany } from '../hooks';
 import { useMobileMenu } from '../hooks/useMobileMenu';
 import { AnimatePresence, motion } from 'framer-motion';
+import { ThemeToggle } from '@/components/theme/ThemeToggle';
 
 const PAGE_LINKS = [
   { label: 'Home', href: '/' },
@@ -40,7 +41,7 @@ export function Navbar() {
       className={cn(
         'fixed top-0 left-0 right-0 z-50 transition-all duration-300',
         scrolled
-          ? 'bg-white/90 shadow-sm backdrop-blur-xl border-b border-border/50'
+          ? 'bg-surface/90 shadow-sm backdrop-blur-xl border-b border-border/50'
           : 'bg-transparent'
       )}
     >
@@ -88,7 +89,7 @@ export function Navbar() {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: 8 }}
                     transition={{ duration: 0.15 }}
-                    className="absolute left-0 top-full z-50 mt-1 w-64 rounded-xl border border-border bg-white p-2 shadow-lg"
+                    className="absolute left-0 top-full z-50 mt-1 w-64 rounded-xl border border-border bg-surface-raised p-2 shadow-lg"
                   >
                     <Link
                       to="/services"
@@ -128,6 +129,7 @@ export function Navbar() {
           </nav>
 
           <div className="hidden lg:flex items-center gap-3">
+            <ThemeToggle />
             <Link
               to="/login"
               className="rounded-lg px-3 py-2 text-sm font-medium text-ink-muted transition-colors hover:text-ink"
@@ -159,7 +161,7 @@ export function Navbar() {
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.2 }}
-            className="lg:hidden overflow-hidden border-t border-border bg-white"
+            className="lg:hidden overflow-hidden border-t border-border bg-surface"
           >
             <div className="space-y-1 px-4 py-4">
               {/* Services mobile dropdown */}
@@ -218,6 +220,9 @@ export function Navbar() {
               ))}
 
               <div className="border-t border-border pt-3 mt-3 flex flex-col gap-2">
+                <div className="flex justify-center pb-1">
+                  <ThemeToggle />
+                </div>
                 <Link to="/login" className="rounded-lg px-3 py-2.5 text-sm font-medium text-ink-muted hover:bg-ink/5 text-center">
                   Login
                 </Link>

@@ -59,7 +59,7 @@ export function AboutPage() {
                 { value: '98%', label: 'Client Satisfaction' },
                 { value: '10+', label: 'Years Experience' },
               ].map((stat) => (
-                <div key={stat.label} className="rounded-2xl border border-border bg-white p-6 text-center">
+                <div key={stat.label} className="rounded-2xl border border-border bg-surface p-6 text-center">
                   <div className="text-2xl font-bold text-accent">{stat.value}</div>
                   <div className="mt-1 text-sm text-ink-muted">{stat.label}</div>
                 </div>
@@ -69,7 +69,7 @@ export function AboutPage() {
         </div>
       </section>
 
-      <section className="py-16 sm:py-20 bg-white">
+      <section className="py-16 sm:py-20 bg-surface">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <h2 className="text-3xl font-bold text-ink text-center sm:text-4xl">Our Values</h2>
           <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">

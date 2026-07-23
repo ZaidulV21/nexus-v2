@@ -71,7 +71,7 @@ export function QuestionRenderer({ question, value, onChange }: QuestionRenderer
                   'rounded-xl border-2 px-5 py-2.5 text-sm font-medium transition-all',
                   isSelected
                     ? 'border-accent bg-accent-subtle text-accent'
-                    : 'border-border bg-white text-ink-muted hover:border-border-strong'
+                    : 'border-border bg-surface text-ink-muted hover:border-border-strong'
                 )}
               >
                 {opt.label}
@@ -101,7 +101,7 @@ export function QuestionRenderer({ question, value, onChange }: QuestionRenderer
                   'rounded-xl border-2 px-5 py-2.5 text-sm font-medium transition-all',
                   isSelected
                     ? 'border-accent bg-accent-subtle text-accent'
-                    : 'border-border bg-white text-ink-muted hover:border-border-strong'
+                    : 'border-border bg-surface text-ink-muted hover:border-border-strong'
                 )}
               >
                 {opt.label}

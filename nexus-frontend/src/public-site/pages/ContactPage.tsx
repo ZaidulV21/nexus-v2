@@ -34,7 +34,7 @@ export function ContactPage() {
 
               <div className="space-y-4">
                 {contactItems.map((item) => (
-                  <div key={item.label} className="flex items-start gap-3 rounded-xl border border-border bg-white p-4">
+                  <div key={item.label} className="flex items-start gap-3 rounded-xl border border-border bg-surface p-4">
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent-subtle text-accent">
                       <item.icon className="h-5 w-5" />
                     </div>
@@ -55,7 +55,7 @@ export function ContactPage() {
               className="lg:col-span-3"
             >
               {submitted ? (
-                <div className="rounded-2xl border border-border bg-white p-10 text-center">
+                <div className="rounded-2xl border border-border bg-surface p-10 text-center">
                   <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-success-subtle">
                     <Send className="h-8 w-8 text-success" />
                   </div>
@@ -73,7 +73,7 @@ export function ContactPage() {
               ) : (
                 <form
                   onSubmit={(e) => { e.preventDefault(); setSubmitted(true); }}
-                  className="rounded-2xl border border-border bg-white p-6 sm:p-8 space-y-5"
+                  className="rounded-2xl border border-border bg-surface p-6 sm:p-8 space-y-5"
                 >
                   <h3 className="text-lg font-semibold text-ink">Send us a Message</h3>
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

@@ -36,6 +36,7 @@ export default {
           DEFAULT: 'rgb(var(--color-info) / <alpha-value>)',
           subtle: 'rgb(var(--color-info-subtle) / <alpha-value>)',
         },
+        dark: 'rgb(var(--color-dark) / <alpha-value>)',
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
