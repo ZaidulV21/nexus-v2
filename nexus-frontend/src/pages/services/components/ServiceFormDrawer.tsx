@@ -1,7 +1,8 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { Upload, X } from 'lucide-react';
 import { Drawer, DrawerContent } from '@/components/ui/Drawer';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -10,6 +11,7 @@ import { FormField } from '@/components/ui/FormField';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/Select';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useCategoryTree, useCreateService, useUpdateService } from '@/queries/useServices';
+import { serviceCatalogService } from '@/services/serviceCatalogService';
 import { useToast } from '@/hooks/useToast';
 import { ApiError } from '@/lib/api';
 import type { Category, Service } from '@/types';
@@ -69,6 +71,10 @@ export function ServiceFormDrawer({
   const updateService = useUpdateService(service?.id ?? '');
   const { toast } = useToast();
 
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(service?.imageUrl ?? null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const categoryOptions = useMemo(() => flattenCategories(categories ?? []), [categories]);
 
   const {
@@ -83,7 +89,11 @@ export function ServiceFormDrawer({
   });
 
   useEffect(() => {
-    if (open) reset(toFormValues(service));
+    if (open) {
+      reset(toFormValues(service));
+      setImageFile(null);
+      setImagePreview(service?.imageUrl ?? null);
+    }
   }, [open, service, reset]);
 
   async function onSubmit(values: ServiceFormValues) {
@@ -104,6 +114,20 @@ export function ServiceFormDrawer({
 
     try {
       const saved = isEdit ? await updateService.mutateAsync(payload) : await createService.mutateAsync(payload);
+
+      // Upload image if one was selected
+      if (imageFile) {
+        try {
+          await serviceCatalogService.uploadImage(saved.id, imageFile);
+        } catch {
+          toast({
+            title: 'Service saved but image upload failed',
+            description: 'You can retry uploading the image from the service detail page.',
+            variant: 'warning',
+          });
+        }
+      }
+
       toast({
         title: isEdit ? 'Service updated' : 'Service created',
         description: `"${saved.name}" ${isEdit ? 'saved' : 'added to the catalog'}.`,
@@ -159,6 +183,52 @@ export function ServiceFormDrawer({
                   </Select>
                 )}
               />
+            )}
+          </FormField>
+
+          <FormField label="Service image" htmlFor="svc-image" hint="Optional — displayed on the public website">
+            <input
+              ref={fileInputRef}
+              type="file"
+              id="svc-image"
+              accept="image/jpeg,image/png,image/webp,image/svg+xml"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  if (file.size > 5 * 1024 * 1024) {
+                    toast({ title: 'File too large', description: 'Maximum size is 5MB.', variant: 'danger' });
+                    return;
+                  }
+                  setImageFile(file);
+                  setImagePreview(URL.createObjectURL(file));
+                }
+              }}
+            />
+            {imagePreview ? (
+              <div className="relative overflow-hidden rounded-xl border border-border">
+                <img src={imagePreview} alt="Service preview" className="h-40 w-full object-cover" />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setImageFile(null);
+                    setImagePreview(null);
+                    if (fileInputRef.current) fileInputRef.current.value = '';
+                  }}
+                  className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/50 text-white transition-colors hover:bg-black/70"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border p-6 text-sm text-ink-muted transition-colors hover:border-accent/40 hover:text-accent"
+              >
+                <Upload className="h-4 w-4" />
+                Click to upload an image
+              </button>
             )}
           </FormField>
 

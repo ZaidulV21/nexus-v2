@@ -638,6 +638,52 @@ Fixed the missing service/category information throughout the quotation system. 
 
 ---
 
+# Phase 5 — Service Image Support
+
+**Date**: 2026-07-23  
+**Status**: ✅ PHASE 5 COMPLETE
+
+## Summary
+
+Added image upload support to the existing Services module. Admins can upload images when creating/editing services, and the public website displays them instead of generic icons.
+
+## Changes Made
+
+### Backend
+1. `prisma/schema.prisma` — Added `imageUrl` to Service model
+2. `prisma/migrations/20260723100000_add_service_image_url/migration.sql` — NEW
+3. `src/modules/catalog/catalog.types.ts` — Added `imageUrl` to CreateServiceInput
+4. `src/modules/catalog/service.validation.ts` — Added `imageUrl` to Zod schema
+5. `src/modules/catalog/service.service.ts` — Added `updateImage()` with timeline + audit
+6. `src/modules/catalog/service.controller.ts` — Added `uploadImage` + `removeImage` handlers
+7. `src/modules/catalog/service.routes.ts` — Added `POST /:id/image` + `DELETE /:id/image` routes
+8. `src/modules/catalog/tests/service.service.test.ts` — Added `updateImage` mock
+
+### Frontend
+1. `src/types/index.ts` — Added `imageUrl` to Service type
+2. `src/services/serviceCatalogService.ts` — Added `uploadImage()` + `removeImage()`
+3. `src/queries/usePublicServices.ts` — Maps `imageUrl` to `image` field
+4. `src/public-site/components/ServiceCard.tsx` — Shows image with fallback to icon
+5. `src/public-site/sections/ServicesSection.tsx` — All card tiers show images
+6. `src/public-site/pages/ServicesPage.tsx` — Passes `image` prop
+7. `src/public-site/pages/ServiceDetailPage.tsx` — Shows hero image
+8. `src/pages/services/components/ServiceFormDrawer.tsx` — Image upload with preview
+9. `src/pages/services/ServiceDetailPage.tsx` — Image display + upload/remove buttons
+10. `src/pages/services/ServicesPage.tsx` — Image thumbnail in list
+
+## Verification
+- Backend Tests: 213/213 passing ✅
+- Backend TypeScript: Clean ✅
+- Frontend TypeScript: Clean ✅
+- Frontend Build: Clean ✅
+- Image upload works ✅
+- Image removal works ✅
+- Public website shows images ✅
+- Fallback to icon when no image ✅
+- Backward compatible ✅
+
+---
+
 # Phase 4 — Email Verification, Account Creation & Password Reset
 
 **Date**: 2026-07-23  

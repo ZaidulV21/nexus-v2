@@ -51,6 +51,12 @@ export const serviceCatalogService = {
   getById: (id: string) => api.get<Service>(`/services/${id}`),
   create: (input: CreateServiceInput) => api.post<Service>('/services', input),
   update: (id: string, input: UpdateServiceInput) => api.patch<Service>(`/services/${id}`, input),
+  uploadImage: (id: string, file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.upload<{ fileUrl: string; service: Service }>(`/services/${id}/image`, formData);
+  },
+  removeImage: (id: string) => api.delete<{ service: Service }>(`/services/${id}/image`),
   archive: (id: string) => api.patch<Service>(`/services/${id}/archive`),
   restore: (id: string) => api.patch<Service>(`/services/${id}/restore`),
   getCategoryTree: () => api.get<Category[]>('/categories'),

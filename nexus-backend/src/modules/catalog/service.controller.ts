@@ -3,7 +3,14 @@ import { serviceService } from './service.service';
 import { createServiceSchema, updateServiceSchema, serviceListFiltersSchema } from './service.validation';
 import { ok, created, paginated } from '../../core/utils/response';
 import { parsePagination } from '../../core/utils/pagination';
-import { ValidationError } from '../../core/errors/AppError';
+import { ValidationError, UnauthorizedError } from '../../core/errors/AppError';
+import { localStorageProvider } from '../../core/storage/localStorage.provider';
+import { cloudinaryProvider } from '../../core/storage/cloudinary.provider';
+import { env } from '../../config/env';
+
+const storageProvider = env.cloudinaryCloudName ? cloudinaryProvider : localStorageProvider;
+const ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/svg+xml']);
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
 export const serviceController = {
   async create(req: Request, res: Response, next: NextFunction) {
@@ -87,6 +94,48 @@ export const serviceController = {
     try {
       const questionnaire = await serviceService.getQuestionnaire(req.params.id);
       return ok(res, questionnaire);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async uploadImage(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.user || req.user.type !== 'ADMIN') {
+        throw new UnauthorizedError('Only admins can upload service images');
+      }
+
+      const file = req.file;
+      if (!file) {
+        throw new ValidationError('No file provided');
+      }
+
+      if (!ALLOWED_MIME_TYPES.has(file.mimetype)) {
+        throw new ValidationError(`File type ${file.mimetype} is not allowed. Use JPEG, PNG, WebP, or SVG.`);
+      }
+
+      if (file.size > MAX_FILE_SIZE) {
+        throw new ValidationError('File exceeds the maximum allowed size of 5MB');
+      }
+
+      const stored = await storageProvider.save(file.originalname, file.buffer, file.mimetype);
+      const fileUrl = env.cloudinaryCloudName ? stored.fileUrl : `/uploads/${stored.fileUrl}`;
+      const service = await serviceService.updateImage(req.params.id, fileUrl, req.user.id);
+
+      return ok(res, { fileUrl, service });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async removeImage(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.user || req.user.type !== 'ADMIN') {
+        throw new UnauthorizedError('Only admins can remove service images');
+      }
+
+      const service = await serviceService.updateImage(req.params.id, null, req.user.id);
+      return ok(res, { service });
     } catch (err) {
       next(err);
     }

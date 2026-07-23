@@ -162,6 +162,7 @@ model Service {
   name              String
   description       String?
   icon              String?
+  imageUrl          String?
   basePrice         Decimal?               @db.Decimal(12, 2)
   requiresSiteVisit SiteVisitRequirement   @default(OPTIONAL)
   isActive          Boolean                @default(true)

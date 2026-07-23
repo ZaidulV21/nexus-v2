@@ -154,6 +154,7 @@ export const INDUSTRIES: IndustryItem[] = [
     id: '1',
     name: 'Retail',
     slug: 'retail',
+    image: 'https://img.magnific.com/free-photo/african-american-man-looks-clothes-online-touch-screen-monitor-fashion-boutique-mall-self-service-board-male-customer-looking-trendy-clothes-items-retail-kiosk-display_482257-63314.jpg?semt=ais_hybrid&w=740&q=80',
     description: 'End-to-end infrastructure solutions for retail stores, showrooms, and chain outlets. From interior fit-outs to security systems.',
     icon: 'Store',
     services: ['Interior Design', 'CCTV Installation', 'Signage Solutions', 'Electrical Works'],
@@ -161,6 +162,7 @@ export const INDUSTRIES: IndustryItem[] = [
   {
     id: '2',
     name: 'Healthcare',
+    image: 'https://www.consultancy.eu/illustrations/news/detail/2024-11-25-010004496-Nine_technologies_revolutionizing_the_global_healthcare_industry.jpg?size=900/445',
     slug: 'healthcare',
     description: 'Specialized infrastructure for hospitals, clinics, and diagnostic centers with compliance-first approach.',
     icon: 'Heart',
@@ -169,6 +171,7 @@ export const INDUSTRIES: IndustryItem[] = [
   {
     id: '3',
     name: 'Education',
+    image: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT65QPFs10doj4GsJRJzi3hjgeqFlALMie-VLOspboHZw8_EmlBpjFMpcUQ&s=10',
     slug: 'education',
     description: 'Smart campus infrastructure for schools, colleges, and training centers.',
     icon: 'GraduationCap',
@@ -177,6 +180,7 @@ export const INDUSTRIES: IndustryItem[] = [
   {
     id: '4',
     name: 'Hospitality',
+    image: 'https://t3.ftcdn.net/jpg/20/29/40/22/360_F_2029402224_YufukHWzp1kvEQZhb5zaLoseiFy1GQRm.jpg',
     slug: 'hospitality',
     description: 'Premium infrastructure for hotels, resorts, and restaurants that enhances guest experience.',
     icon: 'Hotel',
@@ -185,6 +189,7 @@ export const INDUSTRIES: IndustryItem[] = [
   {
     id: '5',
     name: 'Manufacturing',
+    image: 'https://media.istockphoto.com/id/2158997931/photo/robotics-people-and-engineer-tablet-with-industrial-collaboration-and-planning-in-warehouse.jpg?s=612x612&w=0&k=20&c=elDfuU9Ws4HqOGGaU9f6NjaYUlJXrIS51Ry0twwzHBw=',
     slug: 'manufacturing',
     description: 'Industrial-grade infrastructure solutions for factories, warehouses, and production facilities.',
     icon: 'Factory',
@@ -193,6 +198,7 @@ export const INDUSTRIES: IndustryItem[] = [
   {
     id: '6',
     name: 'Corporate Offices',
+    image: 'https://thumbs.dreamstime.com/b/computer-classroom-18757791.jpg',
     slug: 'corporate-offices',
     description: 'Modern office infrastructure that fosters productivity and reflects corporate culture.',
     icon: 'Building2',
@@ -201,6 +207,7 @@ export const INDUSTRIES: IndustryItem[] = [
   {
     id: '7',
     name: 'Warehouses',
+    image: 'https://plus.unsplash.com/premium_photo-1681426730828-bfee2d13861d?fm=jpg&q=60&w=3000&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MXx8d2FyZWhvdXNlfGVufDB8fDB8fHww',
     slug: 'warehouses',
     description: 'Secure and efficient warehouse infrastructure with smart monitoring solutions.',
     icon: 'Warehouse',
@@ -209,6 +216,7 @@ export const INDUSTRIES: IndustryItem[] = [
   {
     id: '8',
     name: 'Restaurants',
+    image: 'https://media.assettype.com/robbreportindia%2Fimport%2Farticle%2FRR-Inline---2026-01-28T121757.473.webp?w=480&auto=format%2Ccompress&fit=max',
     slug: 'restaurants',
     description: 'Complete fit-out and infrastructure solutions for restaurants, cafes, and cloud kitchens.',
     icon: 'UtensilsCrossed',

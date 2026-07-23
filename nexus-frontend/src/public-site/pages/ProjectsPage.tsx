@@ -2,6 +2,9 @@ import { motion } from 'framer-motion';
 import { FEATURED_PROJECTS } from '../constants';
 import { PageHero } from '../components/PageHero';
 
+const FALLBACK_IMAGE =
+  'https://images.unsplash.com/photo-1541888946425-d81bb19240f5?auto=format&fit=crop&w=800&q=80';
+
 export function ProjectsPage() {
   return (
     <div>
@@ -20,23 +23,23 @@ export function ProjectsPage() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ duration: 0.4, delay: index * 0.1 }}
-                className="group overflow-hidden rounded-2xl border border-border bg-white shadow-xs"
+                className="group overflow-hidden rounded-2xl border border-border bg-white shadow-xs transition-all duration-300 hover:shadow-lg hover:shadow-accent/5 hover:border-accent/25"
               >
-                <div className="aspect-[16/10] bg-gradient-to-br from-accent-subtle to-accent/10 flex items-center justify-center">
-                  <div className="text-5xl opacity-30">
-                    {project.category === 'Interior Design' ? '\uD83C\uDFE2' :
-                     project.category === 'Solar Installation' ? '\u2600\uFE0F' :
-                     project.category === 'CCTV Installation' ? '\uD83D\uDCF7' : '\uD83C\uDFD7\uFE0F'}
-                  </div>
+                <div className="relative aspect-[16/10] overflow-hidden">
+                  <img
+                    src={project.image || FALLBACK_IMAGE}
+                    alt={project.title}
+                    loading="lazy"
+                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-black/0 to-black/0" />
+                  <span className="absolute left-3 top-3 rounded-full bg-white/90 backdrop-blur px-2.5 py-0.5 text-xs font-medium text-accent shadow-sm">
+                    {project.category}
+                  </span>
                 </div>
                 <div className="p-6">
-                  <div className="flex items-center gap-2">
-                    <span className="rounded-full bg-accent-subtle px-2.5 py-0.5 text-xs font-medium text-accent">
-                      {project.category}
-                    </span>
-                    <span className="text-xs text-ink-faint">{project.industry}</span>
-                  </div>
-                  <h3 className="mt-3 text-lg font-semibold text-ink group-hover:text-accent transition-colors">
+                  <span className="text-xs text-ink-faint">{project.industry}</span>
+                  <h3 className="mt-1 text-lg font-semibold text-ink group-hover:text-accent transition-colors">
                     {project.title}
                   </h3>
                   <p className="mt-2 text-sm text-ink-muted leading-relaxed">

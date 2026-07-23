@@ -8,6 +8,7 @@ export interface CreateServiceInput {
   name: string;
   description?: string;
   icon?: string;
+  imageUrl?: string;
   basePrice?: number;
   estimatedDuration?: string;
   requiresSiteVisit: 'YES' | 'NO' | 'OPTIONAL';

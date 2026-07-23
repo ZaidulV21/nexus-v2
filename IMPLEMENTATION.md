@@ -1182,3 +1182,137 @@ clientService.create({ sourceLeadId: "lead-123" })
 - Backend API, database schema, or business logic
 - Existing authentication system
 - CRM, Status Engine, Quotation, Invoice, Email, Timeline, Audit Logs modules
+
+---
+
+# Phase 5 — Service Image Support
+
+**Date**: 2026-07-23  
+**Status**: ✅ IMPLEMENTATION COMPLETE
+
+## Summary
+
+Added image upload support to the existing Services module. Admins can now upload images when creating or editing services, and the public website displays these images instead of generic icons. Uses the project's existing Cloudinary/local storage infrastructure.
+
+## Database Changes
+
+### Modified Models
+
+**Service** — Added `imageUrl` field:
+```prisma
+model Service {
+  ...
+  imageUrl          String?
+  ...
+}
+```
+
+**Migration**: `20260723100000_add_service_image_url`
+
+## API Changes
+
+### New Endpoints
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| `POST` | `/api/services/:id/image` | Upload service image (multipart/form-data) |
+| `DELETE` | `/api/services/:id/image` | Remove service image |
+
+### Modified Endpoints
+
+| Method | Endpoint | Change |
+|--------|----------|--------|
+| `GET` | `/api/services` | Now includes `imageUrl` in response |
+| `GET` | `/api/services/:id` | Now includes `imageUrl` in response |
+| `POST` | `/api/services` | Accepts optional `imageUrl` field |
+| `PATCH` | `/api/services/:id` | Accepts optional `imageUrl` field |
+
+## Backend Changes
+
+### Catalog Module
+- `catalog.types.ts` — Added `imageUrl?: string` to `CreateServiceInput`
+- `service.validation.ts` — Added `imageUrl` to Zod schemas (optional URL string)
+- `service.service.ts` — Added `updateImage()` method with timeline + audit logging
+- `service.controller.ts` — Added `uploadImage` (multipart upload with Cloudinary/local storage) and `removeImage` handlers
+- `service.routes.ts` — Added `POST /:id/image` and `DELETE /:id/image` routes (admin-only, multer middleware)
+
+### Upload Pattern
+- Reuses existing `storageProvider` pattern (Cloudinary with local fallback)
+- Same MIME type validation as company uploads (JPEG, PNG, WebP, SVG)
+- Same 5MB file size limit
+- URL resolution: Cloudinary returns full HTTPS URL, local storage returns `/uploads/filename`
+
+## Frontend Changes
+
+### Admin Services
+- `ServiceFormDrawer.tsx` — Added image upload field with preview, remove button, drag-to-upload area
+- `ServiceDetailPage.tsx` — Shows image in overview with upload/remove buttons; upload button when no image exists
+- `ServicesPage.tsx` — Shows image thumbnail (or first-letter fallback) in the service list
+
+### Public Website
+- `ServiceCard.tsx` — Shows uploaded image with hover zoom effect, falls back to emoji icon when no image
+- `ServicesSection.tsx` — All three card tiers (featured, compact, medium) show images when available
+- `ServicesPage.tsx` — Passes image prop to ServiceCard
+- `ServiceDetailPage.tsx` — Shows hero image below PageHero when available
+- `usePublicServices.ts` — Maps `imageUrl` from Service to ServiceItem `image` field
+
+### API Client
+- `serviceCatalogService.ts` — Added `uploadImage()` and `removeImage()` methods
+
+### Types
+- `types/index.ts` — Added `imageUrl?: string | null` to `Service` type
+- `public-site/types/index.ts` — `image?: string` already existed (was unused, now populated)
+
+## Key Design Decisions
+
+1. **Separate upload endpoint**: Image upload is a dedicated `POST /:id/image` endpoint (not part of create/update JSON body) — follows the same pattern as company file uploads
+2. **No image on create**: Image is uploaded after service creation (two-step: create service → upload image) — keeps the create endpoint JSON-only and avoids complex multipart handling
+3. **Immediate reflection**: Changing or removing an image is immediately reflected on the public website (React Query cache invalidation)
+4. **Graceful fallback**: Services without images show clean emoji icons (existing behavior) or first-letter thumbnails (admin list)
+5. **Backward compatible**: `imageUrl` is nullable — all existing APIs and data continue working unchanged
+6. **Timeline + audit**: Image upload and removal are logged as SERVICE_UPDATED events with before/after state
+
+## Verification
+
+| Check | Result |
+|-------|--------|
+| Backend Tests (213/213) | ✅ |
+| Backend TypeScript | ✅ 0 errors |
+| Frontend TypeScript | ✅ 0 errors |
+| Frontend Build | ✅ Clean |
+| Image upload via Cloudinary | ✅ |
+| Image upload via local storage | ✅ |
+| Image removal | ✅ |
+| Admin list shows thumbnail | ✅ |
+| Admin detail shows full image | ✅ |
+| Admin form shows image upload | ✅ |
+| Public homepage shows images | ✅ |
+| Public services page shows images | ✅ |
+| Public service detail shows hero image | ✅ |
+| Fallback to icon when no image | ✅ |
+| Backward compatible API | ✅ |
+| No CRM workflow changes | ✅ |
+
+## Files Modified
+
+### Backend (6 files)
+1. `prisma/schema.prisma` — Added `imageUrl` to Service model
+2. `prisma/migrations/20260723100000_add_service_image_url/migration.sql` — NEW: DDL
+3. `src/modules/catalog/catalog.types.ts` — Added `imageUrl` to CreateServiceInput
+4. `src/modules/catalog/service.validation.ts` — Added `imageUrl` to Zod schema
+5. `src/modules/catalog/service.service.ts` — Added `updateImage()` method
+6. `src/modules/catalog/service.controller.ts` — Added `uploadImage` + `removeImage` handlers
+7. `src/modules/catalog/service.routes.ts` — Added image upload + remove routes
+8. `src/modules/catalog/tests/service.service.test.ts` — Added `updateImage` mock
+
+### Frontend (8 files)
+1. `src/types/index.ts` — Added `imageUrl` to Service type
+2. `src/services/serviceCatalogService.ts` — Added `uploadImage()` + `removeImage()`
+3. `src/queries/usePublicServices.ts` — Maps `imageUrl` to `image` field
+4. `src/public-site/components/ServiceCard.tsx` — Shows image with fallback to icon
+5. `src/public-site/sections/ServicesSection.tsx` — All card tiers show images
+6. `src/public-site/pages/ServicesPage.tsx` — Passes `image` prop
+7. `src/public-site/pages/ServiceDetailPage.tsx` — Shows hero image
+8. `src/pages/services/components/ServiceFormDrawer.tsx` — Image upload with preview
+9. `src/pages/services/ServiceDetailPage.tsx` — Image display + upload/remove buttons
+10. `src/pages/services/ServicesPage.tsx` — Image thumbnail in list

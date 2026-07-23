@@ -34,6 +34,7 @@ export interface Service {
   name: string;
   description?: string | null;
   icon?: string | null;
+  imageUrl?: string | null;
   basePrice?: string | null;
   estimatedDuration?: string | null;
   requiresSiteVisit: SiteVisitRequirement;

@@ -6,6 +6,7 @@ export const createServiceSchema = z.object({
   name: z.string().min(1).max(120),
   description: z.string().optional(),
   icon: z.string().optional(),
+  imageUrl: z.string().url().optional().or(z.literal('')),
   basePrice: z.number().nonnegative().optional(),
   estimatedDuration: z.string().max(120).optional(),
   requiresSiteVisit: z.enum(['YES', 'NO', 'OPTIONAL']).default('OPTIONAL'),

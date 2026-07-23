@@ -1,5 +1,6 @@
 import { useParams } from 'react-router-dom';
-import { Archive, ArchiveRestore, Pencil, Power } from 'lucide-react';
+import { Archive, ArchiveRestore, Pencil, Power, Upload, Trash2 } from 'lucide-react';
+import { useRef } from 'react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent } from '@/components/ui/Card';
@@ -12,6 +13,7 @@ import { EntityAuditLog } from '@/components/common/EntityAuditLog';
 import { useDisclosure } from '@/hooks/useDisclosure';
 import { useToast } from '@/hooks/useToast';
 import { useService, useUpdateService, useArchiveService, useRestoreService } from '@/queries/useServices';
+import { serviceCatalogService } from '@/services/serviceCatalogService';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { ApiError } from '@/lib/api';
 import { ServiceFormDrawer } from './components/ServiceFormDrawer';
@@ -41,6 +43,41 @@ export function ServiceDetailPage() {
   const archiveMutation = useArchiveService(id ?? '');
   const restoreMutation = useRestoreService(id ?? '');
   const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  async function handleImageUpload(file: File) {
+    if (!id) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: 'File too large', description: 'Maximum size is 5MB.', variant: 'danger' });
+      return;
+    }
+    try {
+      await serviceCatalogService.uploadImage(id, file);
+      await refetch();
+      toast({ title: 'Image uploaded', description: 'Service image has been updated.', variant: 'success' });
+    } catch (err) {
+      toast({
+        title: 'Upload failed',
+        description: err instanceof ApiError ? err.message : 'Something went wrong.',
+        variant: 'danger',
+      });
+    }
+  }
+
+  async function handleImageRemove() {
+    if (!id) return;
+    try {
+      await serviceCatalogService.removeImage(id);
+      await refetch();
+      toast({ title: 'Image removed', description: 'Service image has been removed.', variant: 'success' });
+    } catch (err) {
+      toast({
+        title: 'Could not remove image',
+        description: err instanceof ApiError ? err.message : 'Something went wrong.',
+        variant: 'danger',
+      });
+    }
+  }
 
   if (isLoading) {
     return (
@@ -159,6 +196,51 @@ export function ServiceDetailPage() {
 
             <TabsContent value="overview" className="pt-5">
               <div className="grid gap-4 sm:grid-cols-2">
+                {service.imageUrl && (
+                  <div className="col-span-full">
+                    <p className="text-xs font-medium uppercase tracking-wide text-ink-faint mb-2">Service Image</p>
+                    <div className="relative inline-block overflow-hidden rounded-xl border border-border">
+                      <img src={service.imageUrl} alt={service.name} className="h-48 w-full object-cover" />
+                      {!isArchived && (
+                        <div className="absolute right-2 top-2 flex gap-1">
+                          <button
+                            onClick={() => fileInputRef.current?.click()}
+                            className="flex h-7 w-7 items-center justify-center rounded-full bg-black/50 text-white transition-colors hover:bg-black/70"
+                          >
+                            <Upload className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={handleImageRemove}
+                            className="flex h-7 w-7 items-center justify-center rounded-full bg-red-500/80 text-white transition-colors hover:bg-red-600"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+                {!service.imageUrl && !isArchived && (
+                  <div className="col-span-full">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/svg+xml"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleImageUpload(file);
+                      }}
+                    />
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      className="flex items-center gap-2 rounded-xl border-2 border-dashed border-border p-4 text-sm text-ink-muted transition-colors hover:border-accent/40 hover:text-accent"
+                    >
+                      <Upload className="h-4 w-4" />
+                      Upload service image
+                    </button>
+                  </div>
+                )}
                 <Field label="Service name" value={service.name} />
                 <Field label="Category" value={service.category?.name} />
                 <Field

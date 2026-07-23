@@ -75,11 +75,24 @@ export function ServicesPage() {
         accessorKey: 'name',
         header: 'Service',
         cell: (info) => (
-          <div>
-            <p className="text-sm font-medium text-ink">{info.getValue()}</p>
-            {info.row.original.description && (
-              <p className="max-w-xs truncate text-xs text-ink-faint">{info.row.original.description}</p>
+          <div className="flex items-center gap-3">
+            {info.row.original.imageUrl ? (
+              <img
+                src={info.row.original.imageUrl}
+                alt={info.row.original.name}
+                className="h-10 w-10 shrink-0 rounded-lg object-cover"
+              />
+            ) : (
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent-subtle text-sm text-accent">
+                {info.row.original.name.charAt(0)}
+              </div>
             )}
+            <div>
+              <p className="text-sm font-medium text-ink">{info.getValue()}</p>
+              {info.row.original.description && (
+                <p className="max-w-xs truncate text-xs text-ink-faint">{info.row.original.description}</p>
+              )}
+            </div>
           </div>
         ),
       },

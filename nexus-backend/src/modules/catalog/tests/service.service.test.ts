@@ -10,6 +10,7 @@ jest.mock('../service.repository', () => ({
     usageCounts: jest.fn(),
     list: jest.fn(),
     getActiveQuestionnaire: jest.fn(),
+    updateImage: jest.fn(),
   },
 }));
 jest.mock('../category.repository', () => ({

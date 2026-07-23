@@ -1,12 +1,11 @@
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowRight, Store, Heart, GraduationCap, Hotel, Factory, Building2, Warehouse, UtensilsCrossed } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { INDUSTRIES } from '../constants';
 import { SectionHeader } from '../components/SectionHeader';
 
-const iconMap: Record<string, React.ElementType> = {
-  Store, Heart, GraduationCap, Hotel, Factory, Building2, Warehouse, UtensilsCrossed,
-};
+const FALLBACK_IMAGE =
+  'https://images.unsplash.com/photo-1497366811353-6870744d04b2?auto=format&fit=crop&w=600&q=80';
 
 export function IndustriesSection() {
   return (
@@ -20,32 +19,38 @@ export function IndustriesSection() {
         />
 
         <div className="mt-14 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 lg:gap-5">
-          {INDUSTRIES.map((industry, index) => {
-            const Icon = iconMap[industry.icon] || Store;
-            return (
-              <motion.div
-                key={industry.id}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.3, delay: index * 0.06 }}
+          {INDUSTRIES.map((industry, index) => (
+            <motion.div
+              key={industry.id}
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.3, delay: index * 0.06 }}
+            >
+              <Link
+                to={`/industries#${industry.slug}`}
+                className="group relative flex aspect-[4/5] flex-col justify-end overflow-hidden rounded-2xl border border-border shadow-xs transition-all duration-300 hover:border-accent/30 hover:shadow-lg hover:shadow-accent/10 hover:-translate-y-1"
               >
-                <Link
-                  to={`/industries#${industry.slug}`}
-                  className="group flex flex-col items-center rounded-2xl border border-border bg-white p-6 text-center transition-all hover:border-accent/30 hover:shadow-md hover:-translate-y-1"
-                >
-                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-subtle text-accent transition-colors group-hover:bg-accent group-hover:text-white">
-                    <Icon className="h-6 w-6" />
-                  </div>
-                  <h3 className="mt-4 text-sm font-semibold text-ink">{industry.name}</h3>
-                  <p className="mt-1.5 text-xs text-ink-muted leading-relaxed line-clamp-2">{industry.description}</p>
-                  <span className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-accent opacity-0 transition-all group-hover:opacity-100">
+                <img
+                  src={industry.image || FALLBACK_IMAGE}
+                  alt={industry.name}
+                  loading="lazy"
+                  className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-black/5 transition-colors duration-300 group-hover:from-accent/90 group-hover:via-black/50" />
+
+                <div className="relative p-4 sm:p-5">
+                  <h3 className="text-sm font-semibold text-white sm:text-base">{industry.name}</h3>
+                  <p className="mt-1 text-xs text-white/75 leading-relaxed line-clamp-2">
+                    {industry.description}
+                  </p>
+                  <span className="mt-2.5 inline-flex items-center gap-1 text-xs font-medium text-white opacity-0 transition-all duration-300 group-hover:opacity-100">
                     Explore <ArrowRight className="h-3 w-3" />
                   </span>
-                </Link>
-              </motion.div>
-            );
-          })}
+                </div>
+              </Link>
+            </motion.div>
+          ))}
         </div>
       </div>
     </section>

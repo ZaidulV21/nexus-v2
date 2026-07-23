@@ -8,6 +8,12 @@ const iconMap: Record<string, React.ElementType> = {
   Palette, Sun, Zap, Camera, Monitor, Globe, ShoppingCart, ShieldCheck,
 };
 
+function ServiceImage({ src, alt, className }: { src: string; alt: string; className?: string }) {
+  return (
+    <img src={src} alt={alt} className={className} />
+  );
+}
+
 export function ServicesSection() {
   const { data: services = [], isLoading } = usePublicServices();
 
@@ -37,13 +43,33 @@ export function ServicesSection() {
                   <FadeIn key={service.id} delay={index * 0.1}>
                     <Link
                       to={`/services/${service.slug}`}
-                      className="group block h-full rounded-2xl border border-border bg-canvas p-7 sm:p-8 transition-all duration-300 hover:border-accent/25 hover:shadow-lg hover:shadow-accent/5"
+                      className="group block h-full rounded-2xl border border-border bg-canvas overflow-hidden transition-all duration-300 hover:border-accent/25 hover:shadow-lg hover:shadow-accent/5"
                     >
-                      <div className="flex items-start gap-5">
-                        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-accent text-white transition-transform group-hover:scale-105">
-                          <Icon className="h-6 w-6" />
+                      {service.image ? (
+                        <div className="relative h-48 overflow-hidden">
+                          <ServiceImage src={service.image} alt={service.name} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
                         </div>
-                        <div className="min-w-0">
+                      ) : (
+                        <div className="flex items-start gap-5 p-7 sm:p-8">
+                          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-accent text-white transition-transform group-hover:scale-105">
+                            <Icon className="h-6 w-6" />
+                          </div>
+                          <div className="min-w-0">
+                            <h3 className="text-xl font-bold text-ink transition-colors group-hover:text-accent">
+                              {service.name}
+                            </h3>
+                            <p className="mt-2 text-sm text-ink-muted leading-relaxed">
+                              {service.shortDescription}
+                            </p>
+                            <div className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-accent opacity-0 transition-all group-hover:opacity-100 group-hover:gap-2.5">
+                              Learn more <ArrowRight className="h-3.5 w-3.5" />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      {service.image && (
+                        <div className="p-7">
                           <h3 className="text-xl font-bold text-ink transition-colors group-hover:text-accent">
                             {service.name}
                           </h3>
@@ -54,7 +80,7 @@ export function ServicesSection() {
                             Learn more <ArrowRight className="h-3.5 w-3.5" />
                           </div>
                         </div>
-                      </div>
+                      )}
                     </Link>
                   </FadeIn>
                 );
@@ -71,17 +97,25 @@ export function ServicesSection() {
                   <FadeIn key={service.id} delay={0.1 + index * 0.08}>
                     <Link
                       to={`/services/${service.slug}`}
-                      className="group block h-full rounded-2xl border border-border bg-white p-5 transition-all duration-300 hover:border-accent/25 hover:shadow-md hover:-translate-y-0.5"
+                      className="group block h-full rounded-2xl border border-border bg-white overflow-hidden transition-all duration-300 hover:border-accent/25 hover:shadow-md hover:-translate-y-0.5"
                     >
-                      <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent-subtle text-accent transition-colors group-hover:bg-accent group-hover:text-white">
-                        <Icon className="h-5 w-5" />
+                      {service.image ? (
+                        <div className="relative h-32 overflow-hidden">
+                          <ServiceImage src={service.image} alt={service.name} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                        </div>
+                      ) : (
+                        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent-subtle text-accent transition-colors group-hover:bg-accent group-hover:text-white m-5 mb-0">
+                          <Icon className="h-5 w-5" />
+                        </div>
+                      )}
+                      <div className="p-5">
+                        <h3 className="text-base font-semibold text-ink transition-colors group-hover:text-accent">
+                          {service.name}
+                        </h3>
+                        <p className="mt-2 text-sm text-ink-muted leading-relaxed line-clamp-2">
+                          {service.shortDescription}
+                        </p>
                       </div>
-                      <h3 className="mt-4 text-base font-semibold text-ink transition-colors group-hover:text-accent">
-                        {service.name}
-                      </h3>
-                      <p className="mt-2 text-sm text-ink-muted leading-relaxed line-clamp-2">
-                        {service.shortDescription}
-                      </p>
                     </Link>
                   </FadeIn>
                 );
@@ -98,13 +132,33 @@ export function ServicesSection() {
                   <FadeIn key={service.id} delay={0.2 + index * 0.1}>
                     <Link
                       to={`/services/${service.slug}`}
-                      className="group block h-full rounded-2xl border border-border bg-canvas p-7 transition-all duration-300 hover:border-accent/25 hover:shadow-lg hover:shadow-accent/5"
+                      className="group block h-full rounded-2xl border border-border bg-canvas overflow-hidden transition-all duration-300 hover:border-accent/25 hover:shadow-lg hover:shadow-accent/5"
                     >
-                      <div className="flex items-start gap-5">
-                        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-accent text-white transition-transform group-hover:scale-105">
-                          <Icon className="h-6 w-6" />
+                      {service.image ? (
+                        <div className="relative h-44 overflow-hidden">
+                          <ServiceImage src={service.image} alt={service.name} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
                         </div>
-                        <div className="min-w-0">
+                      ) : (
+                        <div className="flex items-start gap-5 p-7">
+                          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-accent text-white transition-transform group-hover:scale-105">
+                            <Icon className="h-6 w-6" />
+                          </div>
+                          <div className="min-w-0">
+                            <h3 className="text-xl font-bold text-ink transition-colors group-hover:text-accent">
+                              {service.name}
+                            </h3>
+                            <p className="mt-2 text-sm text-ink-muted leading-relaxed">
+                              {service.shortDescription}
+                            </p>
+                            <div className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-accent opacity-0 transition-all group-hover:opacity-100 group-hover:gap-2.5">
+                              Learn more <ArrowRight className="h-3.5 w-3.5" />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      {service.image && (
+                        <div className="p-7">
                           <h3 className="text-xl font-bold text-ink transition-colors group-hover:text-accent">
                             {service.name}
                           </h3>
@@ -115,7 +169,7 @@ export function ServicesSection() {
                             Learn more <ArrowRight className="h-3.5 w-3.5" />
                           </div>
                         </div>
-                      </div>
+                      )}
                     </Link>
                   </FadeIn>
                 );

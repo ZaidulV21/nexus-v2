@@ -25,6 +25,7 @@ function toServiceItem(service: Service): ServiceItem {
     description,
     shortDescription,
     icon: service.icon ?? 'Palette',
+    image: service.imageUrl ?? undefined,
     features: [],
     category: service.category?.name ?? '',
   };

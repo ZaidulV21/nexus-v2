@@ -39,6 +39,7 @@ export function ServicesPage() {
                   slug={service.slug}
                   description={service.shortDescription}
                   icon={service.icon}
+                  image={service.image}
                   index={index}
                   variant="featured"
                 />

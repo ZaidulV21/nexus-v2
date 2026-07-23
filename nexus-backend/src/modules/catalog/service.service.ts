@@ -178,4 +178,32 @@ export const serviceService = {
     if (!questionnaire) throw new NotFoundError('No active questionnaire for this service');
     return questionnaire;
   },
+
+  async updateImage(id: string, imageUrl: string | null, actorUserId?: string) {
+    const existing = await serviceRepository.findById(id);
+    if (!existing) throw new NotFoundError('Service not found');
+
+    const updated = await serviceRepository.update(id, { imageUrl: imageUrl ?? undefined } as any);
+
+    await timelineService.recordEvent({
+      entityType: 'SERVICE',
+      entityId: id,
+      eventType: 'SERVICE_UPDATED',
+      description: imageUrl
+        ? `Service "${existing.name}" image was updated`
+        : `Service "${existing.name}" image was removed`,
+      actorUserId,
+    });
+
+    await auditService.recordAudit({
+      entityType: 'SERVICE',
+      entityId: id,
+      action: 'UPDATE',
+      beforeState: { imageUrl: (existing as any).imageUrl },
+      afterState: { imageUrl },
+      actorUserId,
+    });
+
+    return updated;
+  },
 };

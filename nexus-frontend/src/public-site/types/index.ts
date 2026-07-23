@@ -12,6 +12,7 @@ export interface ServiceItem {
 
 export interface IndustryItem {
   id: string;
+  image: string;
   name: string;
   slug: string;
   description: string;
