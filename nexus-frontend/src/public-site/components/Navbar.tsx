@@ -2,15 +2,25 @@ import { useState, useEffect } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import { Menu, X, ChevronDown, ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { NAVIGATION } from '../constants';
+import { usePublicServiceList } from '@/queries/usePublicServices';
 import { useMobileMenu } from '../hooks';
 import { AnimatePresence, motion } from 'framer-motion';
+
+const PAGE_LINKS = [
+  { label: 'Home', href: '/' },
+  { label: 'Industries', href: '/industries' },
+  { label: 'How It Works', href: '/how-it-works' },
+  { label: 'Projects', href: '/projects' },
+  { label: 'About', href: '/about' },
+  { label: 'Contact', href: '/contact' },
+];
 
 export function Navbar() {
   const { isOpen, open, close } = useMobileMenu();
   const [scrolled, setScrolled] = useState(false);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const location = useLocation();
+  const { data: services } = usePublicServiceList();
 
   useEffect(() => {
     const handler = () => setScrolled(window.scrollY > 10);
@@ -44,62 +54,67 @@ export function Navbar() {
           </Link>
 
           <nav className="hidden lg:flex items-center gap-1">
-            {NAVIGATION.map((item) =>
-              item.children ? (
-                <div
-                  key={item.label}
-                  className="relative"
-                  onMouseEnter={() => setOpenDropdown(item.label)}
-                  onMouseLeave={() => setOpenDropdown(null)}
-                >
-                  <button
-                    className={cn(
-                      'flex items-center gap-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-                      location.pathname.startsWith(item.href)
-                        ? 'text-accent'
-                        : 'text-ink-muted hover:text-ink hover:bg-ink/5'
-                    )}
+            {/* Services dropdown — dynamic from API */}
+            <div
+              className="relative"
+              onMouseEnter={() => setOpenDropdown('Services')}
+              onMouseLeave={() => setOpenDropdown(null)}
+            >
+              <button
+                className={cn(
+                  'flex items-center gap-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                  location.pathname.startsWith('/services')
+                    ? 'text-accent'
+                    : 'text-ink-muted hover:text-ink hover:bg-ink/5'
+                )}
+              >
+                Services
+                <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', openDropdown === 'Services' && 'rotate-180')} />
+              </button>
+              <AnimatePresence>
+                {openDropdown === 'Services' && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 8 }}
+                    transition={{ duration: 0.15 }}
+                    className="absolute left-0 top-full z-50 mt-1 w-64 rounded-xl border border-border bg-white p-2 shadow-lg"
                   >
-                    {item.label}
-                    <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', openDropdown === item.label && 'rotate-180')} />
-                  </button>
-                  <AnimatePresence>
-                    {openDropdown === item.label && (
-                      <motion.div
-                        initial={{ opacity: 0, y: 8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: 8 }}
-                        transition={{ duration: 0.15 }}
-                        className="absolute left-0 top-full z-50 mt-1 w-64 rounded-xl border border-border bg-white p-2 shadow-lg"
+                    <Link
+                      to="/services"
+                      className="block rounded-lg px-3 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-accent-subtle hover:text-accent"
+                    >
+                      All Services
+                    </Link>
+                    {services.map((service) => (
+                      <Link
+                        key={service.id}
+                        to={`/services/${service.slug}`}
+                        className="block rounded-lg px-3 py-2.5 text-sm text-ink-muted transition-colors hover:bg-accent-subtle hover:text-accent"
                       >
-                        {item.children.map((child) => (
-                          <Link
-                            key={child.href}
-                            to={child.href}
-                            className="block rounded-lg px-3 py-2.5 text-sm text-ink-muted transition-colors hover:bg-accent-subtle hover:text-accent"
-                          >
-                            {child.label}
-                          </Link>
-                        ))}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
-              ) : (
-                <NavLink
-                  key={item.href}
-                  to={item.href}
-                  className={({ isActive }) =>
-                    cn(
-                      'rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-                      isActive ? 'text-accent' : 'text-ink-muted hover:text-ink hover:bg-ink/5'
-                    )
-                  }
-                >
-                  {item.label}
-                </NavLink>
-              )
-            )}
+                        {service.name}
+                      </Link>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Page links */}
+            {PAGE_LINKS.filter((p) => p.href !== '/').map((item) => (
+              <NavLink
+                key={item.href}
+                to={item.href}
+                className={({ isActive }) =>
+                  cn(
+                    'rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                    isActive ? 'text-accent' : 'text-ink-muted hover:text-ink hover:bg-ink/5'
+                  )
+                }
+              >
+                {item.label}
+              </NavLink>
+            ))}
           </nav>
 
           <div className="hidden lg:flex items-center gap-3">
@@ -137,54 +152,61 @@ export function Navbar() {
             className="lg:hidden overflow-hidden border-t border-border bg-white"
           >
             <div className="space-y-1 px-4 py-4">
-              {NAVIGATION.map((item) =>
-                item.children ? (
-                  <div key={item.label}>
-                    <button
-                      onClick={() => setOpenDropdown(openDropdown === item.label ? null : item.label)}
-                      className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-sm font-medium text-ink-muted hover:bg-ink/5"
+              {/* Services mobile dropdown */}
+              <div>
+                <button
+                  onClick={() => setOpenDropdown(openDropdown === 'Services' ? null : 'Services')}
+                  className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-sm font-medium text-ink-muted hover:bg-ink/5"
+                >
+                  Services
+                  <ChevronDown className={cn('h-4 w-4 transition-transform', openDropdown === 'Services' && 'rotate-180')} />
+                </button>
+                <AnimatePresence>
+                  {openDropdown === 'Services' && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="overflow-hidden"
                     >
-                      {item.label}
-                      <ChevronDown className={cn('h-4 w-4 transition-transform', openDropdown === item.label && 'rotate-180')} />
-                    </button>
-                    <AnimatePresence>
-                      {openDropdown === item.label && (
-                        <motion.div
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: 'auto' }}
-                          exit={{ opacity: 0, height: 0 }}
-                          className="overflow-hidden"
+                      <div className="pl-4 pb-2">
+                        <Link
+                          to="/services"
+                          className="block rounded-lg px-3 py-2 text-sm font-medium text-ink hover:bg-accent-subtle hover:text-accent"
                         >
-                          <div className="pl-4 pb-2">
-                            {item.children.map((child) => (
-                              <Link
-                                key={child.href}
-                                to={child.href}
-                                className="block rounded-lg px-3 py-2 text-sm text-ink-muted hover:bg-accent-subtle hover:text-accent"
-                              >
-                                {child.label}
-                              </Link>
-                            ))}
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                ) : (
-                  <NavLink
-                    key={item.href}
-                    to={item.href}
-                    className={({ isActive }) =>
-                      cn(
-                        'block rounded-lg px-3 py-2.5 text-sm font-medium',
-                        isActive ? 'text-accent bg-accent-subtle' : 'text-ink-muted hover:bg-ink/5'
-                      )
-                    }
-                  >
-                    {item.label}
-                  </NavLink>
-                )
-              )}
+                          All Services
+                        </Link>
+                        {services.map((service) => (
+                          <Link
+                            key={service.id}
+                            to={`/services/${service.slug}`}
+                            className="block rounded-lg px-3 py-2 text-sm text-ink-muted hover:bg-accent-subtle hover:text-accent"
+                          >
+                            {service.name}
+                          </Link>
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
+              {/* Page links */}
+              {PAGE_LINKS.filter((p) => p.href !== '/').map((item) => (
+                <NavLink
+                  key={item.href}
+                  to={item.href}
+                  className={({ isActive }) =>
+                    cn(
+                      'block rounded-lg px-3 py-2.5 text-sm font-medium',
+                      isActive ? 'text-accent bg-accent-subtle' : 'text-ink-muted hover:bg-ink/5'
+                    )
+                  }
+                >
+                  {item.label}
+                </NavLink>
+              ))}
+
               <div className="border-t border-border pt-3 mt-3 flex flex-col gap-2">
                 <Link to="/login" className="rounded-lg px-3 py-2.5 text-sm font-medium text-ink-muted hover:bg-ink/5 text-center">
                   Login

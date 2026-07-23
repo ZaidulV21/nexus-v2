@@ -1,123 +1,305 @@
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { ArrowRight, Play } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { ArrowRight, ChevronLeft, ChevronRight, Play, Shield, Clock, Award } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+interface Slide {
+  badge: string;
+  headline: string;
+  headlineAccent?: string;
+  headlineSuffix?: string;
+  subtext: string;
+  ctaLabel: string;
+  ctaHref: string;
+  secondaryCtaLabel: string;
+  secondaryCtaHref: string;
+}
+
+const SLIDES: Slide[] = [
+  {
+    badge: 'Trusted by 500+ businesses across India',
+    headline: 'One Partner For All Your',
+    headlineAccent: 'Business Infrastructure',
+    headlineSuffix: 'Needs',
+    subtext: 'Nexus coordinates trusted vendors for Interior, Solar, Electrical, CCTV, Signage and IT projects through one managed platform. From concept to handover, we handle everything.',
+    ctaLabel: 'Get Free Quote',
+    ctaHref: '/get-quote',
+    secondaryCtaLabel: 'See How It Works',
+    secondaryCtaHref: '/how-it-works',
+  },
+  {
+    badge: 'End-to-end project management',
+    headline: 'From Concept to Completion',
+    headlineAccent: 'Managed by Experts',
+    subtext: 'Our 6-step process ensures quality at every stage — site visit, vendor matching, project oversight, and final handover. You stay informed through our Client Portal.',
+    ctaLabel: 'Book Consultation',
+    ctaHref: '/contact',
+    secondaryCtaLabel: 'View Our Process',
+    secondaryCtaHref: '/how-it-works',
+  },
+  {
+    badge: '8+ infrastructure services',
+    headline: 'Interior • Solar • Electrical',
+    headlineAccent: 'IT • Signage • CCTV',
+    subtext: 'One platform for all your infrastructure needs. Multi-service coordination under a single project, single point of contact, single invoice.',
+    ctaLabel: 'Explore Services',
+    ctaHref: '/services',
+    secondaryCtaLabel: 'Get a Combined Quote',
+    secondaryCtaHref: '/get-quote',
+  },
+];
+
+const TRUST_BADGES = [
+  { icon: Shield, label: 'Verified Vendors' },
+  { icon: Clock, label: '24hr Response' },
+  { icon: Award, label: '98% Satisfaction' },
+];
+
+const AUTO_ROTATE_INTERVAL = 7000;
 
 export function HeroSection() {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
+  const touchStartX = useRef(0);
+  const touchEndX = useRef(0);
+
+  const goTo = useCallback((index: number) => {
+    setActiveIndex(((index % SLIDES.length) + SLIDES.length) % SLIDES.length);
+  }, []);
+
+  const goPrev = useCallback(() => goTo(activeIndex - 1), [activeIndex, goTo]);
+  const goNext = useCallback(() => goTo(activeIndex + 1), [activeIndex, goTo]);
+
+  // Auto-rotate
+  useEffect(() => {
+    if (isPaused) return;
+    const timer = setInterval(goNext, AUTO_ROTATE_INTERVAL);
+    return () => clearInterval(timer);
+  }, [isPaused, goNext]);
+
+  // Touch handlers for mobile swipe
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  }, []);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    touchEndX.current = e.touches[0].clientX;
+  }, []);
+
+  const handleTouchEnd = useCallback(() => {
+    const diff = touchStartX.current - touchEndX.current;
+    if (Math.abs(diff) > 50) {
+      if (diff > 0) goNext();
+      else goPrev();
+    }
+  }, [goNext, goPrev]);
+
+  const slide = SLIDES[activeIndex];
+
   return (
-    <section className="relative overflow-hidden bg-gradient-to-br from-ink via-ink to-[#1a1a2e]">
+    <section
+      className="relative overflow-hidden bg-ink"
+      onMouseEnter={() => setIsPaused(true)}
+      onMouseLeave={() => setIsPaused(false)}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
+      {/* Background gradient effects */}
       <div className="absolute inset-0">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 h-[600px] w-[900px] rounded-full bg-accent/10 blur-[120px]" />
-        <div className="absolute bottom-0 right-0 h-[400px] w-[400px] rounded-full bg-accent/5 blur-[100px]" />
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 h-[700px] w-[1000px] rounded-full bg-accent/8 blur-[150px]" />
+        <div className="absolute bottom-0 right-0 h-[400px] w-[500px] rounded-full bg-accent/4 blur-[120px]" />
         <div className="absolute inset-0" style={{
-          backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(255,255,255,0.03) 1px, transparent 0)',
-          backgroundSize: '40px 40px',
+          backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(255,255,255,0.025) 1px, transparent 0)',
+          backgroundSize: '48px 48px',
         }} />
       </div>
 
-      <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-24 sm:py-32 lg:py-40">
-        <div className="grid gap-12 lg:grid-cols-2 lg:gap-16 items-center">
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-          >
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-xs font-medium text-white/70 backdrop-blur-sm">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-              Trusted by 500+ businesses across India
-            </div>
-
-            <h1 className="mt-8 text-4xl font-bold tracking-tight text-white sm:text-5xl lg:text-6xl xl:text-7xl leading-[1.1]">
-              One Partner For All Your{' '}
-              <span className="bg-gradient-to-r from-accent to-blue-400 bg-clip-text text-transparent">
-                Business Infrastructure
-              </span>{' '}
-              Needs
-            </h1>
-
-            <p className="mt-6 max-w-xl text-lg text-white/60 leading-relaxed">
-              Nexus coordinates trusted vendors for Interior, Solar, Electrical, CCTV, Signage and IT projects through one managed platform. From concept to handover, we handle everything.
-            </p>
-
-            <div className="mt-10 flex flex-col sm:flex-row gap-4">
-              <Link
-                to="/get-quote"
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-accent px-7 py-3.5 text-sm font-semibold text-white transition-all hover:bg-accent-hover shadow-lg shadow-accent/25"
+      <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-20 sm:py-28 lg:py-36">
+        <div className="grid gap-14 lg:grid-cols-2 lg:gap-20 items-center">
+          {/* Left: Text content with AnimatePresence for slide transitions */}
+          <div className="relative min-h-[360px] sm:min-h-[420px]">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={activeIndex}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.5, ease: [0.25, 0.1, 0.25, 1] }}
+                className="absolute inset-0"
               >
-                Get Free Quote
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-              <Link
-                to="/how-it-works"
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/5 px-7 py-3.5 text-sm font-semibold text-white backdrop-blur-sm transition-all hover:bg-white/10"
-              >
-                <Play className="h-4 w-4" />
-                Book Consultation
-              </Link>
-            </div>
-
-            <div className="mt-12 flex items-center gap-8 text-sm text-white/40">
-              <div className="flex items-center gap-2">
-                <div className="flex -space-x-2">
-                  {[1, 2, 3, 4].map((i) => (
-                    <div key={i} className="h-8 w-8 rounded-full border-2 border-ink bg-accent/20 flex items-center justify-center text-xs text-white/80 font-medium">
-                      {['RK', 'PS', 'AP', 'SR'][i - 1]}
-                    </div>
-                  ))}
+                {/* Badge */}
+                <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-xs font-medium text-white/60 backdrop-blur-sm">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  {slide.badge}
                 </div>
-                <span>500+ Projects</span>
-              </div>
-              <div className="hidden sm:block h-4 w-px bg-white/15" />
-              <div className="hidden sm:flex items-center gap-1.5">
-                {[1, 2, 3, 4, 5].map((i) => (
-                  <svg key={i} className="h-3.5 w-3.5 fill-amber-400" viewBox="0 0 20 20">
-                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                  </svg>
-                ))}
-                <span className="ml-1">4.9/5 Rating</span>
-              </div>
-            </div>
-          </motion.div>
 
+                {/* Headline */}
+                <h1 className="mt-8 text-4xl font-bold tracking-tight text-white sm:text-5xl lg:text-6xl xl:text-[4.25rem] leading-[1.08]">
+                  {slide.headline}{' '}
+                  {slide.headlineAccent && (
+                    <>
+                      <br className="hidden sm:block" />
+                      <span className="bg-gradient-to-r from-accent via-blue-400 to-accent bg-clip-text text-transparent bg-[length:200%_auto] animate-[shimmer_3s_linear_infinite]">
+                        {slide.headlineAccent}
+                      </span>{' '}
+                    </>
+                  )}
+                  {slide.headlineSuffix}
+                </h1>
+
+                {/* Subtext */}
+                <p className="mt-6 max-w-xl text-lg text-white/50 leading-relaxed">
+                  {slide.subtext}
+                </p>
+
+                {/* CTAs */}
+                <div className="mt-10 flex flex-col sm:flex-row gap-4">
+                  <Link
+                    to={slide.ctaHref}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-accent px-8 py-4 text-sm font-semibold text-white transition-all hover:bg-accent-hover shadow-lg shadow-accent/25 hover:shadow-xl hover:shadow-accent/30"
+                  >
+                    {slide.ctaLabel}
+                    <ArrowRight className="h-4 w-4" />
+                  </Link>
+                  <Link
+                    to={slide.secondaryCtaHref}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/12 bg-white/5 px-8 py-4 text-sm font-semibold text-white/80 backdrop-blur-sm transition-all hover:bg-white/8 hover:text-white"
+                  >
+                    <Play className="h-4 w-4" />
+                    {slide.secondaryCtaLabel}
+                  </Link>
+                </div>
+              </motion.div>
+            </AnimatePresence>
+          </div>
+
+          {/* Right side — project dashboard visualization (static, same across slides) */}
           <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.6, delay: 0.2 }}
+            initial={{ opacity: 0, scale: 0.96, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            transition={{ duration: 0.7, delay: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
             className="relative hidden lg:block"
           >
-            <div className="relative rounded-2xl border border-white/10 bg-white/5 p-1 backdrop-blur-sm">
-              <div className="rounded-xl bg-gradient-to-br from-white/10 to-white/5 p-8">
-                <div className="space-y-4">
+            <div className="relative rounded-2xl border border-white/8 bg-white/[0.03] p-1 backdrop-blur-sm">
+              <div className="rounded-xl bg-gradient-to-br from-white/[0.06] to-white/[0.02] p-8">
+                {/* Dashboard header */}
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <p className="text-sm font-medium text-white/80">Active Projects</p>
+                    <p className="text-xs text-white/40">Real-time overview</p>
+                  </div>
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent/20">
+                    <div className="h-2 w-2 rounded-full bg-accent animate-pulse" />
+                  </div>
+                </div>
+
+                <div className="space-y-3">
                   {[
-                    { label: 'Interior Design', status: 'In Progress', progress: 75, color: 'bg-accent' },
-                    { label: 'Solar Installation', status: 'Site Visit', progress: 30, color: 'bg-emerald-400' },
-                    { label: 'CCTV Setup', status: 'Quotation', progress: 50, color: 'bg-amber-400' },
-                    { label: 'Electrical Works', status: 'Completed', progress: 100, color: 'bg-emerald-400' },
+                    { label: 'Interior Design', client: 'TechVista Solutions', status: 'In Progress', progress: 75, color: 'bg-accent', statusColor: 'bg-accent/15 text-accent' },
+                    { label: 'Solar Installation', client: 'GreenEnergy Corp', status: 'Site Visit', progress: 30, color: 'bg-emerald-400', statusColor: 'bg-emerald-400/15 text-emerald-400' },
+                    { label: 'CCTV Setup', client: 'Patel Retail Group', status: 'Quotation', progress: 50, color: 'bg-amber-400', statusColor: 'bg-amber-400/15 text-amber-400' },
+                    { label: 'Electrical Works', client: 'MedCare Hospitals', status: 'Completed', progress: 100, color: 'bg-emerald-400', statusColor: 'bg-emerald-400/15 text-emerald-400' },
                   ].map((item, i) => (
                     <motion.div
                       key={i}
-                      initial={{ opacity: 0, x: 20 }}
+                      initial={{ opacity: 0, x: 24 }}
                       animate={{ opacity: 1, x: 0 }}
-                      transition={{ duration: 0.4, delay: 0.4 + i * 0.1 }}
-                      className="rounded-lg border border-white/10 bg-white/5 p-4"
+                      transition={{ duration: 0.45, delay: 0.5 + i * 0.1 }}
+                      className="rounded-lg border border-white/8 bg-white/[0.04] p-4"
                     >
                       <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium text-white">{item.label}</span>
-                        <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-xs text-white/70">{item.status}</span>
+                        <div>
+                          <span className="text-sm font-medium text-white/90">{item.label}</span>
+                          <span className="ml-2 text-xs text-white/35">{item.client}</span>
+                        </div>
+                        <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium ${item.statusColor}`}>
+                          {item.status}
+                        </span>
                       </div>
-                      <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-white/10">
+                      <div className="mt-3 h-1 overflow-hidden rounded-full bg-white/8">
                         <motion.div
                           initial={{ width: 0 }}
                           animate={{ width: `${item.progress}%` }}
-                          transition={{ duration: 1, delay: 0.6 + i * 0.1 }}
+                          transition={{ duration: 1.2, delay: 0.7 + i * 0.12, ease: [0.25, 0.1, 0.25, 1] }}
                           className={`h-full rounded-full ${item.color}`}
                         />
                       </div>
                     </motion.div>
                   ))}
                 </div>
+
+                {/* Stats row */}
+                <div className="mt-6 grid grid-cols-3 gap-3">
+                  {[
+                    { value: '12', label: 'Active' },
+                    { value: '98%', label: 'On Time' },
+                    { value: '4.9', label: 'Rating' },
+                  ].map((stat, i) => (
+                    <motion.div
+                      key={i}
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.4, delay: 1 + i * 0.1 }}
+                      className="rounded-lg border border-white/8 bg-white/[0.03] p-3 text-center"
+                    >
+                      <p className="text-lg font-bold text-white/90">{stat.value}</p>
+                      <p className="text-[11px] text-white/40">{stat.label}</p>
+                    </motion.div>
+                  ))}
+                </div>
               </div>
             </div>
+
+            {/* Floating accent glow */}
+            <div className="absolute -bottom-10 -right-10 h-40 w-40 rounded-full bg-accent/10 blur-[60px]" />
           </motion.div>
+        </div>
+
+        {/* Navigation controls — arrows + dots */}
+        <div className="mt-12 flex items-center justify-between lg:mt-16">
+          {/* Arrows */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={goPrev}
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/60 backdrop-blur-sm transition-all hover:border-white/20 hover:bg-white/8 hover:text-white"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <button
+              onClick={goNext}
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/60 backdrop-blur-sm transition-all hover:border-white/20 hover:bg-white/8 hover:text-white"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+
+          {/* Dots */}
+          <div className="flex items-center gap-2">
+            {SLIDES.map((_, i) => (
+              <button
+                key={i}
+                onClick={() => goTo(i)}
+                className={cn(
+                  'h-2 rounded-full transition-all duration-300',
+                  i === activeIndex
+                    ? 'w-8 bg-accent'
+                    : 'w-2 bg-white/20 hover:bg-white/30'
+                )}
+              />
+            ))}
+          </div>
+
+          {/* Trust badges — desktop only */}
+          <div className="hidden sm:flex items-center gap-6">
+            {TRUST_BADGES.map((badge) => (
+              <div key={badge.label} className="flex items-center gap-2 text-sm text-white/40">
+                <badge.icon className="h-4 w-4 text-accent/60" />
+                <span>{badge.label}</span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </section>

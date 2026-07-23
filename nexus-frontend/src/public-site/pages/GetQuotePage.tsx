@@ -8,7 +8,8 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useQuoteWizard } from '../hooks';
-import { SERVICES, BUDGET_RANGES, TIMELINE_OPTIONS, PROPERTY_TYPES } from '../constants';
+import { usePublicServices } from '@/queries/usePublicServices';
+import { BUDGET_RANGES, TIMELINE_OPTIONS, PROPERTY_TYPES } from '../constants';
 
 const STEP_LABELS = [
   { key: 'services', label: 'Services', icon: ClipboardList },
@@ -125,39 +126,48 @@ function StepActions({ wizard, nextLabel = 'Continue' }: { wizard: ReturnType<ty
 
 function ServiceStep({ wizard }: { wizard: ReturnType<typeof useQuoteWizard> }) {
   const { data, toggleService } = wizard;
+  const { data: services = [], isLoading } = usePublicServices();
 
   return (
     <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="p-6">
       <h2 className="text-lg font-semibold text-ink">Select Services</h2>
       <p className="mt-1 text-sm text-ink-muted">Choose one or more services you need for your project.</p>
-      <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {SERVICES.map((service) => {
-          const selected = data.selectedServices.includes(service.id);
-          return (
-            <button
-              key={service.id}
-              onClick={() => toggleService(service.id)}
-              className={cn(
-                'flex items-start gap-3 rounded-xl border-2 p-4 text-left transition-all',
-                selected
-                  ? 'border-accent bg-accent-subtle/50'
-                  : 'border-border hover:border-border-strong bg-canvas/50'
-              )}
-            >
-              <div className={cn(
-                'flex h-5 w-5 shrink-0 items-center justify-center rounded-md border-2 mt-0.5 transition-colors',
-                selected ? 'border-accent bg-accent text-white' : 'border-border-strong'
-              )}>
-                {selected && <Check className="h-3 w-3" />}
-              </div>
-              <div>
-                <p className="text-sm font-medium text-ink">{service.name}</p>
-                <p className="mt-0.5 text-xs text-ink-muted line-clamp-2">{service.shortDescription}</p>
-              </div>
-            </button>
-          );
-        })}
-      </div>
+      {isLoading ? (
+        <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="h-20 animate-pulse rounded-xl bg-canvas" />
+          ))}
+        </div>
+      ) : (
+        <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {services.map((service) => {
+            const selected = data.selectedServices.includes(service.id);
+            return (
+              <button
+                key={service.id}
+                onClick={() => toggleService(service.id)}
+                className={cn(
+                  'flex items-start gap-3 rounded-xl border-2 p-4 text-left transition-all',
+                  selected
+                    ? 'border-accent bg-accent-subtle/50'
+                    : 'border-border hover:border-border-strong bg-canvas/50'
+                )}
+              >
+                <div className={cn(
+                  'flex h-5 w-5 shrink-0 items-center justify-center rounded-md border-2 mt-0.5 transition-colors',
+                  selected ? 'border-accent bg-accent text-white' : 'border-border-strong'
+                )}>
+                  {selected && <Check className="h-3 w-3" />}
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-ink">{service.name}</p>
+                  <p className="mt-0.5 text-xs text-ink-muted line-clamp-2">{service.shortDescription}</p>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
       <StepActions wizard={wizard} />
     </motion.div>
   );
@@ -320,7 +330,8 @@ function UploadStep({ wizard }: { wizard: ReturnType<typeof useQuoteWizard> }) {
 
 function ReviewStep({ wizard }: { wizard: ReturnType<typeof useQuoteWizard> }) {
   const { data } = wizard;
-  const selectedServiceNames = SERVICES.filter((s) => data.selectedServices.includes(s.id)).map((s) => s.name);
+  const { data: services = [] } = usePublicServices();
+  const selectedServiceNames = services.filter((s) => data.selectedServices.includes(s.id)).map((s) => s.name);
 
   return (
     <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="p-6">

@@ -1,41 +1,44 @@
 # Nexus Frontend — Business Service Management Platform
 
-**Status: All modules fully implemented and functional. Phase 2 (Public Website) complete.**
+**Status: All modules fully implemented. Public website redesigned with premium UX and live backend services.**
 
 ## What's built
 
 All business modules from the PRD are implemented and wired to the backend API:
 
-- **Admin Dashboard** (`/`) — 10 KPI cards, 4 charts, recent activity, upcoming items, quick actions
-- **Leads** (`/leads`) — CRUD, Active/Archived toggle, archive/restore with reason, Lead Services panel (read-only after conversion)
-- **Clients** (`/clients`) — List, detail, Lead → Client conversion
-- **Quotations** (`/quotations`) — Create (client-only), revise, approve, send, PDF preview/download/regenerate, lead display via `Client.sourceLead`
-- **Projects** (`/projects`) — List, detail, aggregate status tracking
-- **Invoices** (`/invoices`) — Create, send, cancel, payment recording with transaction references, PDF preview/download/regenerate, payment summary cards
-- **Messages** (`/messages`) — Conversation threads
-- **Documents** (`/documents`) — Upload, list, download
-- **Search** (`/search`, Cmd+K) — Global search across 7 modules with type filtering and text highlighting
-- **Notifications** (`/notifications`) — In-app notification center with unread badge, mark-as-read
-- **Company Settings** (`/settings/company`) — Full settings page with 5 sections, file uploads (Cloudinary), unsaved changes protection
-- **Client Portal** (`/portal/*`) — Separate lighter shell with quotations, invoices, projects, documents, notifications, dashboard
+### Route Groups
+- **Public Website** (`/`) — No auth required, always renders `PublicLayout`. Identical for guests, admins, and clients.
+- **Admin CRM** (`/admin/*`) — Requires `ADMIN` role. Renders `AdminLayout` with sidebar navigation.
+- **Client Portal** (`/portal/*`) — Requires `CLIENT` role. Renders `PortalLayout` with client-specific navigation.
 
-### Phase 2: Public Marketing Website (`/home`, `/services/*`, etc.)
-- **Public Layout** — Sticky navbar with mega-menu, responsive mobile nav, premium footer
-- **Homepage** — 9-section long-form page (Hero, Process, Services, Stats, Projects, Industries, Testimonials, FAQs, CTA)
-- **Service Pages** — Service listing and detail pages for all 8 services
-- **Industry Pages** — Industry-specific solutions showcase
-- **How It Works** — Visual 6-step process timeline
-- **Projects** — Featured project portfolio
-- **About** — Company story, values, stats
-- **Contact** — Contact form with business details
-- **Get Quote Wizard** — 7-step customer journey: Service Selection → Project Details → File Upload → Review → Account Creation → OTP Verification (placeholder) → Success
-- **Resources** — Placeholder for future content
+### Admin CRM (`/admin/*`)
+- **Dashboard** (`/admin/dashboard`) — 10 KPI cards, 4 charts, recent activity, upcoming items, quick actions
+- **Leads** (`/admin/leads`) — CRUD, Active/Archived toggle, archive/restore with reason, Lead Services panel (read-only after conversion)
+- **Clients** (`/admin/clients`) — List, detail, Lead → Client conversion
+- **Quotations** (`/admin/quotations`) — Create (client-only), revise, approve, send, PDF preview/download/regenerate
+- **Projects** (`/admin/projects`) — List, detail, aggregate status tracking
+- **Invoices** (`/admin/invoices`) — Create, send, cancel, payment recording, PDF preview/download/regenerate
+- **Search** (`/admin/search`, Cmd+K) — Global search across 7 modules with type filtering
+- **Notifications** (`/admin/notifications`) — In-app notification center with unread badge
+- **Settings** (`/admin/settings/company`) — Full settings page with 5 sections, file uploads
+- **Documents** (`/admin/documents`) — Upload, list, download
 
-### Client Portal Pages
-- Portal Dashboard — overview of projects, quotations, invoices
-- Portal Quotation Detail — PDF as single source of truth, Accept/Reject/Revision workflow, originating lead display
-- Portal Invoice Detail — PDF view, payment summary cards, payment history
-- Portal Projects, Documents, Notifications
+### Client Portal (`/portal/*`)
+- **Dashboard** (`/portal/dashboard`) — Overview of projects, quotations, invoices
+- **Quotation Detail** — PDF as source of truth, Accept/Reject/Revision workflow
+- **Invoice Detail** — PDF view, payment summary cards, payment history
+- **Projects**, **Documents**, **Notifications**
+
+### Public Website (`/`)
+- **Homepage** (`/`) — 11-section long-form page: Hero (premium slider) → ClientLogos → ProblemSolution → Services → Process → Stats → Projects → Industries → Testimonials (carousel) → FAQs → CTA
+- **Hero Slider** — 3 slides with manual arrows + dots, auto-rotate every 7s, pause on hover, touch swipe support, fade+slide transitions
+- **Services** (`/services`, `/services/:slug`) — Live data from backend API, not hardcoded constants
+- **Industries** (`/industries`) — Industry-specific solutions showcase
+- **How It Works** (`/how-it-works`) — Visual 6-step process timeline
+- **Projects** (`/projects`) — Featured project portfolio
+- **About** (`/about`) — Company story, values, stats
+- **Contact** (`/contact`) — Contact form with business details
+- **Get Quote** (`/get-quote`) — 7-step customer journey with live service selection from API
 
 ## How to run
 
@@ -45,50 +48,77 @@ cp .env.example .env
 npm run dev
 ```
 
-Open `http://localhost:5173` — login with admin credentials (see backend seed output). The sidebar provides access to all modules.
-
-⚠️ Same caveat as the backend: this was built in a network-isolated sandbox, so I could not run `npm install` or `vite build` here to confirm a clean compile. I did the closest available substitute — verified all 138 internal `@/` imports resolve to real files, and checked named imports against actual exports. Run `npm install && npm run build` locally as your real first checkpoint; send me any error and I'll fix it precisely.
+Open `http://localhost:5173` — homepage renders as a public marketing site. Login redirects:
+- Admin → `/admin/dashboard`
+- Client → `/portal/dashboard`
 
 ## Folder architecture
 
 ```
 src/
-  app/              - providers.tsx (Toast/Tooltip/CommandPalette), AdminLayout, PortalLayout, AuthContext
+  app/              - providers.tsx, AdminLayout, PortalLayout, AuthContext, ProtectedRoute, PortalProtectedRoute
   components/
     ui/             - 28+ reusable primitives (Button, DataTable, Charts, Modal, etc.)
     layout/         - Sidebar, TopNav, AppShell, PageHeader, NotificationPanel, CompanyLogo
-    common/          - ModuleScaffold (placeholder for unbuilt routes — none remain)
   hooks/            - useToast, useDisclosure, useDebounce, useMediaQuery, useLocalStorage
-  lib/              - cn() classname helper, currency/date formatters
+  lib/              - cn(), slugify(), currency/date formatters
   types/            - domain types mirrored from the backend Prisma schema
-  routes/           - ROUTES constants, breadcrumb generator
-  pages/            - one folder per module, all fully implemented
-  queries/          - React Query hooks for every module
+  routes/           - ROUTES constants (public/admin/portal), breadcrumb generator
+  pages/            - admin/ and portal/ subfolders, all fully implemented
+  queries/          - React Query hooks for every module + usePublicServices for public website
   services/         - API client functions for every module
   styles/           - globals.css (design tokens)
-  public-site/      - Phase 2: Public Marketing Website module
-    components/     - Navbar, Footer, SectionHeader, PageHero, ServiceCard, FAQAccordion, TestimonialCard
-    sections/       - HeroSection, ProcessSection, ServicesSection, StatsSection, ProjectsSection,
+  public-site/      - Public Marketing Website
+    components/     - Navbar (dynamic services from API), Footer, SectionHeader, PageHero, ServiceCard,
+                      FAQAccordion, TestimonialCard, TestimonialsCarousel, motion (FadeIn/StaggerGroup/ScaleIn)
+    sections/       - HeroSection (premium slider), ClientLogosSection, ProblemSolutionSection,
+                      ServicesSection (live data), ProcessSection, StatsSection, ProjectsSection,
                       IndustriesSection, TestimonialsSection, FAQSection, CTASection
-    pages/          - HomePage, ServicesPage, ServiceDetailPage, IndustriesPage, HowItWorksPage,
-                      ProjectsPage, AboutPage, ContactPage, ResourcesPage, GetQuotePage
-    layouts/        - PublicLayout, ServicesRoute, ProjectsRoute, ServiceDetailRoute (auth-aware wrappers)
+    pages/          - HomePage, ServicesPage (live data), ServiceDetailPage (live data),
+                      IndustriesPage, HowItWorksPage, ProjectsPage, AboutPage, ContactPage,
+                      ResourcesPage (disabled), GetQuotePage (live data)
+    layouts/        - PublicLayout
     hooks/          - useQuoteWizard, useScrollSpy, useMobileMenu
     types/          - ServiceItem, IndustryItem, ProjectItem, TestimonialItem, FAQItem, QuoteWizardData
-    constants/      - SERVICES, INDUSTRIES, PROCESS_STEPS, STATS, TESTIMONIALS, FAQS, NAVIGATION
+    constants/      - INDUSTRIES, PROCESS_STEPS, STATS, TESTIMONIALS, FAQS, NAVIGATION
 ```
+
+## Architecture: Public Website Service Integration
+
+The public website fetches services from the same backend API used by the Admin CRM:
+
+- **`usePublicServices()`** — Fetches all active services, maps backend `Service` → public `ServiceItem` with auto-generated slugs
+- **`usePublicServiceBySlug(slug)`** — Resolves a single service by URL slug from the active services list
+- **`usePublicServiceList()`** — Returns just the array (for Navbar dropdown, etc.)
+
+### How Live Synchronization Works
+
+1. Admin creates/edits/archives/restores/deletes a service via the Admin CRM
+2. All admin mutations call `queryClient.invalidateQueries({ queryKey: queryKeys.services.all })`
+3. This invalidates `services.publicList` (child of `services.all`)
+4. Public website pages using `usePublicServices()` automatically refetch
+5. Changes appear immediately — no manual refresh needed
+
+### Slug Generation
+
+The backend `Service` type doesn't have a `slug` field. Slugs are generated on the frontend via `slugify()` (from `@/lib/utils`) when mapping backend data to `ServiceItem`. Example: "Interior Design" → "interior-design".
 
 ## Design decisions
 
-- **Accent color** "Nexus Indigo" (`#4553FF`) — chosen to read as technical/trustworthy without matching either the generic "warm AI orange" or "acid-green-on-black" defaults.
-- **Typography pairing** (Inter + JetBrains Mono for numeric/ID data) follows Linear/Vercel/Stripe/GitHub conventions.
-- **Signature motif**: a thin node-and-thread connector line (see `NexusLogo.tsx`) grounded in what the product actually does — multiple service enquiries converging into one Lead/Project.
+- **Accent color** "Nexus Indigo" (`#4553FF`) — technical/trustworthy without generic AI defaults.
+- **Typography pairing** (Inter + JetBrains Mono for numeric data) follows Linear/Vercel/Stripe conventions.
+- **Signature motif**: thin node-and-thread connector line grounded in what the product does.
+- **Hero slider**: Premium full-width slider with manual navigation (arrows + dots), auto-rotate every 7s, pause on hover, touch swipe, AnimatePresence fade+slide transitions.
+- **Homepage layout**: Asymmetric card grids (2-col featured → 4-col compact → 2-col featured). Manual carousels with arrows + dots (no auto-play).
+- **Scroll animations**: Viewport-triggered staggered fade-ins via Framer Motion.
+- **No hardcoded services**: All service data flows from backend API through React Query. Admin CRUD automatically syncs to the public website.
 
 ## Tech Stack
 
-- React 18 + TypeScript + Vite
-- Tailwind CSS with custom design tokens
-- React Router v6 for routing
-- TanStack React Query for data fetching/caching
+- React 19 + TypeScript + Vite 5
+- TailwindCSS v4 with custom design tokens
+- React Router v7 for routing
+- TanStack React Query for data fetching/caching + automatic cache invalidation
 - React Hook Form + Zod for form validation
 - Recharts for dashboard charts
+- Framer Motion for hero slider, scroll animations, and carousel transitions

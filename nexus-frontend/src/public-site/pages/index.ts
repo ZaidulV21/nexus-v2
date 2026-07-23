@@ -6,5 +6,5 @@ export { HowItWorksPage } from './HowItWorksPage';
 export { ProjectsPage } from './ProjectsPage';
 export { AboutPage } from './AboutPage';
 export { ContactPage } from './ContactPage';
-export { ResourcesPage } from './ResourcesPage';
+// export { ResourcesPage } from './ResourcesPage'; // disabled, can be restored later
 export { GetQuotePage } from './GetQuotePage';

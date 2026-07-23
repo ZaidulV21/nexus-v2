@@ -1,18 +1,19 @@
 import { Link } from 'react-router-dom';
 import { Mail, Phone, MapPin, ArrowUpRight, Linkedin, Twitter, Facebook, Instagram } from 'lucide-react';
-import { NAVIGATION, COMPANY_INFO } from '../constants';
+import { COMPANY_INFO } from '../constants';
+import { usePublicServiceList } from '@/queries/usePublicServices';
 
-const SERVICE_LINKS = NAVIGATION.find((n) => n.label === 'Services')?.children ?? [];
 const PAGE_LINKS = [
   { label: 'About', href: '/about' },
   { label: 'Industries', href: '/industries' },
   { label: 'Projects', href: '/projects' },
   { label: 'How It Works', href: '/how-it-works' },
-  { label: 'Resources', href: '/resources' },
   { label: 'Contact', href: '/contact' },
 ];
 
 export function Footer() {
+  const { data: services } = usePublicServiceList();
+
   return (
     <footer className="bg-ink text-white/70">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -43,10 +44,10 @@ export function Footer() {
           <div>
             <h4 className="mb-4 text-sm font-semibold text-white">Services</h4>
             <ul className="space-y-2.5">
-              {SERVICE_LINKS.map((s) => (
-                <li key={s.href}>
-                  <Link to={s.href} className="group flex items-center gap-1 text-sm transition-colors hover:text-white">
-                    {s.label}
+              {services.map((s) => (
+                <li key={s.id}>
+                  <Link to={`/services/${s.slug}`} className="group flex items-center gap-1 text-sm transition-colors hover:text-white">
+                    {s.name}
                     <ArrowUpRight className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-100" />
                   </Link>
                 </li>

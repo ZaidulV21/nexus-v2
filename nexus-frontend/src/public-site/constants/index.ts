@@ -2,25 +2,11 @@ import type { NavItem, ServiceItem, IndustryItem, ProcessStep, StatItem, Testimo
 
 export const NAVIGATION: NavItem[] = [
   { label: 'Home', href: '/' },
-  {
-    label: 'Services',
-    href: '/services',
-    children: [
-      { label: 'Interior Design', href: '/services/interior-design' },
-      { label: 'Solar Installation', href: '/services/solar-installation' },
-      { label: 'Electrical Works', href: '/services/electrical-works' },
-      { label: 'CCTV Installation', href: '/services/cctv-installation' },
-      { label: 'Signage Solutions', href: '/services/signage-solutions' },
-      { label: 'Website & IT Services', href: '/services/website-it-services' },
-      { label: 'E-Commerce Development', href: '/services/ecommerce-development' },
-      { label: 'Security Consulting', href: '/services/security-consulting' },
-    ],
-  },
+  { label: 'Services', href: '/services' },
   { label: 'Industries', href: '/industries' },
   { label: 'How It Works', href: '/how-it-works' },
   { label: 'Projects', href: '/projects' },
   { label: 'About', href: '/about' },
-  { label: 'Resources', href: '/resources' },
   { label: 'Contact', href: '/contact' },
 ];
 

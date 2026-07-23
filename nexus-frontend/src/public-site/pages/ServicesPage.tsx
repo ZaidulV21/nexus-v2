@@ -1,11 +1,13 @@
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
-import { SERVICES } from '../constants';
+import { usePublicServices } from '@/queries/usePublicServices';
 import { PageHero } from '../components/PageHero';
 import { ServiceCard } from '../components/ServiceCard';
 
 export function ServicesPage() {
+  const { data: services = [], isLoading } = usePublicServices();
+
   return (
     <div>
       <PageHero
@@ -15,19 +17,34 @@ export function ServicesPage() {
 
       <section className="py-16 sm:py-20">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {SERVICES.map((service, index) => (
-              <ServiceCard
-                key={service.id}
-                name={service.name}
-                slug={service.slug}
-                description={service.shortDescription}
-                icon={service.icon}
-                index={index}
-                variant="featured"
-              />
-            ))}
-          </div>
+          {isLoading ? (
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} className="h-48 animate-pulse rounded-2xl bg-canvas" />
+              ))}
+            </div>
+          ) : services.length === 0 ? (
+            <div className="py-12 text-center">
+              <p className="text-ink-muted">No services available at the moment.</p>
+              <Link to="/get-quote" className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-accent">
+                Get a Quote <ArrowRight className="h-4 w-4" />
+              </Link>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {services.map((service, index) => (
+                <ServiceCard
+                  key={service.id}
+                  name={service.name}
+                  slug={service.slug}
+                  description={service.shortDescription}
+                  icon={service.icon}
+                  index={index}
+                  variant="featured"
+                />
+              ))}
+            </div>
+          )}
 
           <motion.div
             initial={{ opacity: 0, y: 20 }}

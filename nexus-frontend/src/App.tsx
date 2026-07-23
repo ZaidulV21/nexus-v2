@@ -53,7 +53,7 @@ import {
   ProjectsPage,
   AboutPage,
   ContactPage,
-  ResourcesPage,
+  // ResourcesPage — disabled, can be restored later
   GetQuotePage,
 } from '@/public-site/pages';
 
@@ -72,7 +72,8 @@ export default function App() {
           <Route path="how-it-works" element={<HowItWorksPage />} />
           <Route path="projects" element={<ProjectsPage />} />
           <Route path="about" element={<AboutPage />} />
-          <Route path="resources" element={<ResourcesPage />} />
+          {/* Resources page — disabled, can be restored later */}
+          {/* <Route path="resources" element={<ResourcesPage />} /> */}
           <Route path="contact" element={<ContactPage />} />
           <Route path="get-quote" element={<GetQuotePage />} />
         </Route>
