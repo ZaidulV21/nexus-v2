@@ -1,4 +1,5 @@
-import { motion } from 'framer-motion';
+import { useRef } from 'react';
+import { motion, useScroll, useTransform } from 'framer-motion';
 import { ClipboardList, MessageSquare, MapPin, FileText, Hammer, CheckCircle } from 'lucide-react';
 import { PROCESS_STEPS } from '../constants';
 import { SectionHeader } from '../components/SectionHeader';
@@ -13,6 +14,15 @@ const iconMap: Record<string, React.ElementType> = {
 };
 
 export function ProcessSection() {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const { scrollYProgress } = useScroll({
+    target: containerRef,
+    offset: ['start center', 'end center'],
+  });
+
+  const fillHeight = useTransform(scrollYProgress, [0, 1], ['0%', '100%']);
+
   return (
     <section className="py-20 sm:py-28 bg-canvas">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -22,8 +32,15 @@ export function ProcessSection() {
           description="From initial requirement to final handover, every project follows our proven 6-step process."
         />
 
-        <div className="mt-16 relative">
-          <div className="absolute left-6 top-0 bottom-0 hidden w-px bg-gradient-to-b from-accent/20 via-accent/40 to-accent/20 lg:left-1/2 lg:-translate-x-px" />
+        <div ref={containerRef} className="mt-16 relative">
+          {/* Track line (background, full length, faint) */}
+          <div className="absolute left-6 top-0 bottom-0 w-px bg-border lg:left-1/2 lg:-translate-x-px" />
+
+          {/* Fill line (animates in on scroll) */}
+          <motion.div
+            className="absolute left-6 top-0 w-px bg-accent lg:left-1/2 lg:-translate-x-px"
+            style={{ height: fillHeight }}
+          />
 
           <div className="space-y-8 lg:space-y-0">
             {PROCESS_STEPS.map((step, index) => {

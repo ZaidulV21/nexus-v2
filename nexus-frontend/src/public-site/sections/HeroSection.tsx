@@ -5,6 +5,7 @@ import { ArrowRight, ChevronLeft, ChevronRight, Play, Shield, Clock, Award } fro
 import { cn } from '@/lib/utils';
 
 interface Slide {
+  label: string;
   badge: string;
   headline: string;
   headlineAccent?: string;
@@ -14,10 +15,13 @@ interface Slide {
   ctaHref: string;
   secondaryCtaLabel: string;
   secondaryCtaHref: string;
+  image: string;
+  imageAlt: string;
 }
 
 const SLIDES: Slide[] = [
   {
+    label: 'Overview',
     badge: 'Trusted by 500+ businesses across India',
     headline: 'One Partner For All Your',
     headlineAccent: 'Business Infrastructure',
@@ -27,8 +31,11 @@ const SLIDES: Slide[] = [
     ctaHref: '/get-quote',
     secondaryCtaLabel: 'See How It Works',
     secondaryCtaHref: '/how-it-works',
+    image: 'https://images.unsplash.com/photo-1497366811353-6870744d04b2?auto=format&fit=crop&w=1920&q=80',
+    imageAlt: 'Modern commercial office interior under natural light',
   },
   {
+    label: 'Process',
     badge: 'End-to-end project management',
     headline: 'From Concept to Completion',
     headlineAccent: 'Managed by Experts',
@@ -37,8 +44,11 @@ const SLIDES: Slide[] = [
     ctaHref: '/contact',
     secondaryCtaLabel: 'View Our Process',
     secondaryCtaHref: '/how-it-works',
+    image: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=1920&q=80',
+    imageAlt: 'Project team reviewing site plans on location',
   },
   {
+    label: 'Services',
     badge: '8+ infrastructure services',
     headline: 'Interior • Solar • Electrical',
     headlineAccent: 'IT • Signage • CCTV',
@@ -47,6 +57,22 @@ const SLIDES: Slide[] = [
     ctaHref: '/services',
     secondaryCtaLabel: 'Get a Combined Quote',
     secondaryCtaHref: '/get-quote',
+    image: 'https://images.unsplash.com/photo-1509391366360-2e959784a276?auto=format&fit=crop&w=1920&q=80',
+    imageAlt: 'Rooftop solar panel installation at golden hour',
+  },
+  {
+    label: 'On-Site',
+    badge: 'Verified vendors, on-site accountability',
+    headline: 'Certified Crews,',
+    headlineAccent: 'Zero Guesswork',
+    headlineSuffix: 'On Every Job',
+    subtext: 'Every technician on a Nexus project is vetted and insured. Site progress, photos, and sign-offs are logged in real time so you always know exactly where things stand.',
+    ctaLabel: 'Talk to a Coordinator',
+    ctaHref: '/contact',
+    secondaryCtaLabel: 'See Our Vendors',
+    secondaryCtaHref: '/how-it-works',
+    image: 'https://images.unsplash.com/photo-1581092160562-40aa08e78837?auto=format&fit=crop&w=1920&q=80',
+    imageAlt: 'Electrical technician working on a panel installation',
   },
 ];
 
@@ -106,18 +132,51 @@ export function HeroSection() {
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
-      {/* Background gradient effects */}
+      <style>{`
+        @keyframes hero-progress {
+          from { transform: scaleX(0); }
+          to { transform: scaleX(1); }
+        }
+        .hero-progress-bar {
+          animation-name: hero-progress;
+          animation-timing-function: linear;
+          animation-fill-mode: forwards;
+        }
+      `}</style>
+
+      {/* Background image layer — crossfades + slow ken-burns zoom per slide */}
       <div className="absolute inset-0">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 h-[700px] w-[1000px] rounded-full bg-accent/8 blur-[150px]" />
-        <div className="absolute bottom-0 right-0 h-[400px] w-[500px] rounded-full bg-accent/4 blur-[120px]" />
+        <AnimatePresence mode="sync">
+          <motion.div
+            key={activeIndex}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 1, ease: 'easeInOut' }}
+            className="absolute inset-0"
+          >
+            <motion.img
+              src={slide.image}
+              alt={slide.imageAlt}
+              initial={{ scale: 1 }}
+              animate={{ scale: 1.09 }}
+              transition={{ duration: AUTO_ROTATE_INTERVAL / 1000 + 1, ease: 'linear' }}
+              className="h-full w-full object-cover"
+            />
+          </motion.div>
+        </AnimatePresence>
+
+        {/* Readability scrims */}
+        <div className="absolute inset-0 bg-gradient-to-r from-ink via-ink/85 to-ink/40 lg:via-ink/75 lg:to-ink/25" />
+        <div className="absolute inset-0 bg-gradient-to-t from-ink via-transparent to-ink/30" />
         <div className="absolute inset-0" style={{
           backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(255,255,255,0.025) 1px, transparent 0)',
           backgroundSize: '48px 48px',
         }} />
       </div>
 
-      <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-20 sm:py-28 lg:py-36">
-        <div className="grid gap-14 lg:grid-cols-2 lg:gap-20 items-center">
+      <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-20 sm:py-28 lg:py-36 lg:pt-10">
+        <div className="grid gap-14 lg:grid-cols-2 lg:gap-20 items-end lg:items-center">
           {/* Left: Text content with AnimatePresence for slide transitions */}
           <div className="relative min-h-[360px] sm:min-h-[420px]">
             <AnimatePresence mode="wait">
@@ -136,7 +195,7 @@ export function HeroSection() {
                 </div>
 
                 {/* Headline */}
-                <h1 className="mt-8 text-4xl font-bold tracking-tight text-white sm:text-5xl lg:text-6xl xl:text-[4.25rem] leading-[1.08]">
+                <h1 className="mt-8 text-4xl font-bold tracking-tight text-white sm:text-5xl lg:text-6xl xl:text-[4.25rem] leading-[1.08] [text-wrap:balance]">
                   {slide.headline}{' '}
                   {slide.headlineAccent && (
                     <>
@@ -150,7 +209,7 @@ export function HeroSection() {
                 </h1>
 
                 {/* Subtext */}
-                <p className="mt-6 max-w-xl text-lg text-white/50 leading-relaxed">
+                <p className="mt-6 max-w-xl text-lg text-white/60 leading-relaxed">
                   {slide.subtext}
                 </p>
 
@@ -165,7 +224,7 @@ export function HeroSection() {
                   </Link>
                   <Link
                     to={slide.secondaryCtaHref}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/12 bg-white/5 px-8 py-4 text-sm font-semibold text-white/80 backdrop-blur-sm transition-all hover:bg-white/8 hover:text-white"
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/5 px-8 py-4 text-sm font-semibold text-white/80 backdrop-blur-sm transition-all hover:bg-white/10 hover:text-white"
                   >
                     <Play className="h-4 w-4" />
                     {slide.secondaryCtaLabel}
@@ -175,15 +234,15 @@ export function HeroSection() {
             </AnimatePresence>
           </div>
 
-          {/* Right side — project dashboard visualization (static, same across slides) */}
+          {/* Right side — floating live-project card over the background photo */}
           <motion.div
             initial={{ opacity: 0, scale: 0.96, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
-            className="relative hidden lg:block"
+            className="relative hidden lg:block lg:justify-self-end lg:w-[420px]"
           >
-            <div className="relative rounded-2xl border border-white/8 bg-white/[0.03] p-1 backdrop-blur-sm">
-              <div className="rounded-xl bg-gradient-to-br from-white/[0.06] to-white/[0.02] p-8">
+            <div className="relative rounded-2xl border border-white/10 bg-ink/40 p-1 backdrop-blur-xl shadow-2xl shadow-black/40">
+              <div className="rounded-xl bg-gradient-to-br from-white/[0.08] to-white/[0.02] p-8">
                 {/* Dashboard header */}
                 <div className="flex items-center justify-between mb-6">
                   <div>
@@ -257,48 +316,77 @@ export function HeroSection() {
           </motion.div>
         </div>
 
-        {/* Navigation controls — arrows + dots */}
-        <div className="mt-12 flex items-center justify-between lg:mt-16">
-          {/* Arrows */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={goPrev}
-              className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/60 backdrop-blur-sm transition-all hover:border-white/20 hover:bg-white/8 hover:text-white"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <button
-              onClick={goNext}
-              className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/60 backdrop-blur-sm transition-all hover:border-white/20 hover:bg-white/8 hover:text-white"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          </div>
-
-          {/* Dots */}
-          <div className="flex items-center gap-2">
-            {SLIDES.map((_, i) => (
+        {/* Navigation — labeled slide tabs with autoplay progress, arrows, trust badges */}
+        <div className="mt-12 flex flex-col gap-6 lg:mt-16">
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            {SLIDES.map((s, i) => (
               <button
-                key={i}
+                key={s.label}
                 onClick={() => goTo(i)}
+                aria-current={i === activeIndex}
+                aria-label={`Show ${s.label} slide`}
                 className={cn(
-                  'h-2 rounded-full transition-all duration-300',
+                  'group relative flex-1 overflow-hidden rounded-full border transition-colors duration-300',
                   i === activeIndex
-                    ? 'w-8 bg-accent'
-                    : 'w-2 bg-white/20 hover:bg-white/30'
+                    ? 'border-white/25 bg-white/10'
+                    : 'border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06]'
                 )}
-              />
+              >
+                <span
+                  className={cn(
+                    'block px-3 py-2 text-center text-[11px] font-semibold uppercase tracking-wide transition-colors sm:text-xs',
+                    i === activeIndex ? 'text-white' : 'text-white/45 group-hover:text-white/70'
+                  )}
+                >
+                  {s.label}
+                </span>
+                {i === activeIndex && (
+                  <span className="absolute inset-x-0 bottom-0 h-[2px] bg-white/15">
+                    <span
+                      key={activeIndex}
+                      style={{
+                        animationDuration: `${AUTO_ROTATE_INTERVAL}ms`,
+                        animationPlayState: isPaused ? 'paused' : 'running',
+                      }}
+                      className="hero-progress-bar block h-full origin-left bg-accent"
+                    />
+                  </span>
+                )}
+              </button>
             ))}
           </div>
 
-          {/* Trust badges — desktop only */}
-          <div className="hidden sm:flex items-center gap-6">
-            {TRUST_BADGES.map((badge) => (
-              <div key={badge.label} className="flex items-center gap-2 text-sm text-white/40">
-                <badge.icon className="h-4 w-4 text-accent/60" />
-                <span>{badge.label}</span>
-              </div>
-            ))}
+          <div className="flex items-center justify-between">
+            {/* Arrows */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={goPrev}
+                aria-label="Previous slide"
+                className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/60 backdrop-blur-sm transition-all hover:border-white/20 hover:bg-white/8 hover:text-white"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <button
+                onClick={goNext}
+                aria-label="Next slide"
+                className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/60 backdrop-blur-sm transition-all hover:border-white/20 hover:bg-white/8 hover:text-white"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+              <span className="ml-2 text-xs tabular-nums text-white/35">
+                {String(activeIndex + 1).padStart(2, '0')} / {String(SLIDES.length).padStart(2, '0')}
+              </span>
+            </div>
+
+            {/* Trust badges — desktop only */}
+            <div className="hidden sm:flex items-center gap-6">
+              {TRUST_BADGES.map((badge) => (
+                <div key={badge.label} className="flex items-center gap-2 text-sm text-white/40">
+                  <badge.icon className="h-4 w-4 text-accent/60" />
+                  <span>{badge.label}</span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>

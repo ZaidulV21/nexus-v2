@@ -237,6 +237,7 @@ export const FEATURED_PROJECTS: ProjectItem[] = [
   {
     id: '1',
     title: 'Tech Park Office Complex',
+    image:'https://plus.unsplash.com/premium_photo-1663133994495-ecdc3cc03fff?q=80&w=1170&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
     category: 'Interior Design',
     industry: 'Corporate Offices',
     description: 'Complete interior fit-out for a 50,000 sq ft tech park including workspaces, meeting rooms, and recreational areas.',
@@ -245,6 +246,7 @@ export const FEATURED_PROJECTS: ProjectItem[] = [
   {
     id: '2',
     title: 'Solar Farm Installation',
+    image:'https://images.unsplash.com/photo-1508514177221-188b1cf16e9d?q=80&w=1172&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
     category: 'Solar Installation',
     industry: 'Manufacturing',
     description: '2MW solar installation for an industrial manufacturing facility reducing energy costs by 40%.',
@@ -253,6 +255,7 @@ export const FEATURED_PROJECTS: ProjectItem[] = [
   {
     id: '3',
     title: 'Smart Retail Chain',
+    image:'https://plus.unsplash.com/premium_photo-1661521063809-8d846817e10f?q=80&w=1170&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
     category: 'CCTV Installation',
     industry: 'Retail',
     description: 'Centralized surveillance system across 25 retail outlets with remote monitoring capabilities.',
@@ -261,6 +264,7 @@ export const FEATURED_PROJECTS: ProjectItem[] = [
   {
     id: '4',
     title: 'Hotel Renovation Project',
+    image:'https://plus.unsplash.com/premium_photo-1661964402307-02267d1423f5?q=80&w=1073&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
     category: 'Interior Design',
     industry: 'Hospitality',
     description: 'Full renovation of a 120-room hotel including lobby, restaurant, and conference facilities.',
