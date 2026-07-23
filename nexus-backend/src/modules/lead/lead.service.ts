@@ -1,18 +1,33 @@
+import bcrypt from 'bcrypt';
 import { runInTransaction } from '../../core/utils/transaction';
 import { leadRepository, leadServiceRepository, leadActivityNoteRepository } from './lead.repository';
+import { clientRepository } from '../client/client.repository';
 import { serviceRepository } from '../catalog/service.repository';
+import { otpService } from '../otp/otp.service';
 import { timelineService } from '../timeline/timeline.service';
 import { auditService } from '../audit/audit.service';
 import { notificationsService } from '../notifications/notifications.service';
 import { statusEngineService } from '../status-engine/statusEngine.service';
 import { CreateLeadInput, AddServiceToLeadInput, UpdateLeadServiceStatusInput, ArchiveLeadInput } from './lead.types';
 import { NotFoundError, ValidationError } from '../../core/errors/AppError';
+import { env } from '../../config/env';
 
 export const leadService = {
   // Atomic multi-service intake: either the whole enquiry is recorded, or
   // none of it is. Each Lead Service snapshots the questionnaire version
   // active at submission time.
+  //
+  // When a password is provided (quote wizard flow), the email must have
+  // been verified via OTP and a Client portal account is created alongside
+  // the Lead in the same transaction.
   async createLead(input: CreateLeadInput) {
+    if (input.password && input.email) {
+      const isVerified = await otpService.isEmailVerified(input.email);
+      if (!isVerified) {
+        throw new ValidationError('Email verification is required. Please verify your email before submitting.');
+      }
+    }
+
     const result = await runInTransaction(async (tx) => {
       const leadNumber = await leadRepository.generateLeadNumber(tx);
 
@@ -44,7 +59,32 @@ export const leadService = {
 
       const leadServices = await leadServiceRepository.createMany(lead.id, serviceRecords, tx);
 
-      return { lead, leadServices };
+      // When password is provided (wizard flow), create a Client portal
+      // account linked to this Lead in the same transaction.
+      let client = null;
+      if (input.password && input.email) {
+        const existingClient = await clientRepository.findByEmail(input.email);
+        if (existingClient) {
+          throw new ValidationError('An account already exists for this email address');
+        }
+
+        const passwordHash = await bcrypt.hash(input.password, env.bcryptSaltRounds);
+        const clientNumber = await clientRepository.generateClientNumber(tx);
+        client = await clientRepository.create(
+          {
+            clientNumber,
+            companyName: input.companyName ?? undefined,
+            contactName: input.contactName,
+            phone: input.phone,
+            email: input.email,
+            passwordHash,
+            sourceLeadId: lead.id,
+          },
+          tx
+        );
+      }
+
+      return { lead, leadServices, client };
     });
 
     await timelineService.recordEvent({

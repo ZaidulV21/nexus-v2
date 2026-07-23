@@ -9,36 +9,69 @@ const BRAND_LIGHT_BG = '#f9fafb';
 export interface ClientWelcomeEmailData {
   clientName: string;
   loginEmail: string;
-  tempPassword: string;
   portalUrl: string;
 }
 
 export function renderClientWelcomeEmail(data: ClientWelcomeEmailData, branding: EmailBranding): string {
-  const { clientName, loginEmail, tempPassword, portalUrl } = data;
+  const { clientName, loginEmail, portalUrl } = data;
   const companyName = branding.companyName || 'Nexus';
 
   const bodyContent = `
-    <h1 style="margin: 0 0 8px; font-size: 22px; font-weight: 700; color: ${BRAND_PRIMARY};">Welcome to ${companyName}</h1>
-    <p style="margin: 0 0 24px; font-size: 15px; color: ${BRAND_SECONDARY};">Your client portal account is ready</p>
+    <h1 style="margin: 0 0 8px; font-size: 22px; font-weight: 700; color: ${BRAND_PRIMARY};">Welcome to ${companyName} Client Portal</h1>
+    <p style="margin: 0 0 24px; font-size: 15px; color: ${BRAND_SECONDARY};">Your enquiry has been accepted</p>
 
     <p style="margin: 0 0 16px; font-size: 15px; color: ${BRAND_TEXT};">
-      Hi ${clientName},
+      Hello ${clientName},
     </p>
     <p style="margin: 0 0 24px; font-size: 15px; color: ${BRAND_TEXT};">
-      Your account has been created. You can now log in to the client portal to view quotations, invoices, and project updates.
+      You can now access the ${companyName} Client Portal to manage your projects and stay updated.
     </p>
 
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 24px; border: 1px solid ${BRAND_BORDER}; border-radius: 6px; overflow: hidden;">
       <tr>
         <td style="padding: 16px; background-color: ${BRAND_LIGHT_BG};">
-          <p style="margin: 0 0 4px; font-size: 12px; color: ${BRAND_SECONDARY}; text-transform: uppercase; letter-spacing: 0.5px;">Login Email</p>
-          <p style="margin: 0; font-size: 15px; font-weight: 600; color: ${BRAND_TEXT};">${loginEmail}</p>
+          <p style="margin: 0 0 12px; font-size: 14px; color: ${BRAND_TEXT};">You can now:</p>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+            <tr>
+              <td style="padding: 4px 0; font-size: 14px; color: ${BRAND_TEXT};">
+                <span style="color: ${BRAND_PRIMARY}; font-weight: 600;">&#10003;</span>&nbsp;&nbsp;View Quotations
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 4px 0; font-size: 14px; color: ${BRAND_TEXT};">
+                <span style="color: ${BRAND_PRIMARY}; font-weight: 600;">&#10003;</span>&nbsp;&nbsp;Accept or Reject Quotations
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 4px 0; font-size: 14px; color: ${BRAND_TEXT};">
+                <span style="color: ${BRAND_PRIMARY}; font-weight: 600;">&#10003;</span>&nbsp;&nbsp;Track Projects
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 4px 0; font-size: 14px; color: ${BRAND_TEXT};">
+                <span style="color: ${BRAND_PRIMARY}; font-weight: 600;">&#10003;</span>&nbsp;&nbsp;View Invoices
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 4px 0; font-size: 14px; color: ${BRAND_TEXT};">
+                <span style="color: ${BRAND_PRIMARY}; font-weight: 600;">&#10003;</span>&nbsp;&nbsp;Make Payments
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 4px 0; font-size: 14px; color: ${BRAND_TEXT};">
+                <span style="color: ${BRAND_PRIMARY}; font-weight: 600;">&#10003;</span>&nbsp;&nbsp;Download Documents
+              </td>
+            </tr>
+          </table>
         </td>
       </tr>
+    </table>
+
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 16px;">
       <tr>
-        <td style="padding: 16px; border-top: 1px solid ${BRAND_BORDER};">
-          <p style="margin: 0 0 4px; font-size: 12px; color: ${BRAND_SECONDARY}; text-transform: uppercase; letter-spacing: 0.5px;">Temporary Password</p>
-          <p style="margin: 0; font-size: 15px; font-weight: 600; color: ${BRAND_TEXT}; font-family: 'Courier New', Courier, monospace; background-color: ${BRAND_LIGHT_BG}; padding: 4px 8px; border-radius: 4px; display: inline-block;">${tempPassword}</p>
+        <td style="padding: 16px; background-color: ${BRAND_LIGHT_BG}; border: 1px solid ${BRAND_BORDER}; border-radius: 6px;">
+          <p style="margin: 0 0 4px; font-size: 12px; color: ${BRAND_SECONDARY}; text-transform: uppercase; letter-spacing: 0.5px;">Login Email</p>
+          <p style="margin: 0; font-size: 15px; font-weight: 600; color: ${BRAND_TEXT};">${loginEmail}</p>
         </td>
       </tr>
     </table>
@@ -47,7 +80,7 @@ export function renderClientWelcomeEmail(data: ClientWelcomeEmailData, branding:
       <tr>
         <td align="center" style="padding-bottom: 16px;">
           <a href="${portalUrl}" style="display: inline-block; padding: 12px 32px; background-color: ${BRAND_PRIMARY}; color: #ffffff; font-size: 14px; font-weight: 600; text-decoration: none; border-radius: 6px;">
-            Login to Portal
+            Open Client Portal
           </a>
         </td>
       </tr>
@@ -55,9 +88,9 @@ export function renderClientWelcomeEmail(data: ClientWelcomeEmailData, branding:
 
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 8px;">
       <tr>
-        <td style="padding: 12px 16px; background-color: #fef3c7; border: 1px solid #f59e0b; border-radius: 6px;">
-          <p style="margin: 0; font-size: 13px; color: #92400e;">
-            <strong>Security note:</strong> For your protection, please change your password after your first login.
+        <td style="padding: 12px 16px; background-color: ${BRAND_LIGHT_BG}; border: 1px solid ${BRAND_BORDER}; border-radius: 6px;">
+          <p style="margin: 0; font-size: 13px; color: ${BRAND_SECONDARY};">
+            If you've forgotten your password, simply use the "Forgot Password" option on the login page.
           </p>
         </td>
       </tr>
@@ -68,5 +101,5 @@ export function renderClientWelcomeEmail(data: ClientWelcomeEmailData, branding:
     </p>
   `;
 
-  return renderBaseEmail({ branding, preheader: `Your ${companyName} client portal account is ready` }, bodyContent);
+  return renderBaseEmail({ branding, preheader: `Welcome to ${companyName} Client Portal` }, bodyContent);
 }

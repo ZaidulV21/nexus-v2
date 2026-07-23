@@ -565,6 +565,30 @@ enum ApprovalMethod {
   IN_PERSON
 }
 
+model OtpVerification {
+  id         String    @id @default(uuid())
+  email      String
+  hashedOtp  String
+  expiresAt  DateTime
+  verifiedAt DateTime?
+  attempts   Int       @default(0)
+  createdAt  DateTime  @default(now())
+
+  @@unique([email])
+  @@map("otp_verifications")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  email     String
+  tokenHash String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@map("password_reset_tokens")
+}
+
 enum InvoiceStatus {
   ISSUED
   CANCELLED

@@ -635,3 +635,110 @@ Fixed the missing service/category information throughout the quotation system. 
 - Email template shows services ✅
 - Frontend groups by service ✅
 - No schema/workflow/pricing changes ✅
+
+---
+
+# Phase 4 — Email Verification, Account Creation & Password Reset
+
+**Date**: 2026-07-23  
+**Status**: ✅ PHASE 4 COMPLETE
+
+## Summary
+
+Replaced the fake client-side OTP placeholder with real backend-driven email verification, server-side account creation with bcrypt passwords, and a standard forgot-password flow. Customers set their own password during the wizard, verify via 6-digit OTP, and get a real Client account before Lead creation.
+
+## Changes Made
+
+### Backend — OTP Module (NEW)
+1. `src/modules/otp/otp.repository.ts` — CRUD: create, findByEmail, incrementAttempts, markVerified, deleteExpired, deleteByEmail
+2. `src/modules/otp/otp.service.ts` — sendOtp, verifyOtp (bcrypt), isEmailVerified, cleanupExpiredOtp
+3. `src/modules/otp/otp.controller.ts` — Handlers for send-otp, verify-otp
+4. `src/modules/otp/otp.routes.ts` — POST /send-otp, POST /verify-otp (rate-limited)
+5. `src/modules/otp/otp.validation.ts` — Zod schemas for email, OTP code
+
+### Backend — Email Templates
+6. `src/modules/email/templates/otp-verification.template.ts` — NEW: Branded 6-digit OTP email
+7. `src/modules/email/templates/password-reset.template.ts` — NEW: Branded reset link email
+8. `src/modules/email/templates/client-welcome.template.ts` — REWRITTEN: Removed tempPassword, added features list + Forgot Password note
+
+### Backend — Email Channel
+9. `src/modules/notifications/channels/email.channel.ts` — Updated buildSubject/buildHtml for Welcome Email (no tempPassword)
+
+### Backend — Client Service
+10. `src/modules/client/client.service.ts` — Detects pre-existing Client from wizard → reuses (no duplicate, sends Welcome Email). Added findByEmail check on new-client path.
+
+### Backend — Lead Service
+11. `src/modules/lead/lead.service.ts` — Verifies OTP before lead creation; creates Client in same transaction when password provided
+12. `src/modules/lead/lead.types.ts` — Added optional password field
+13. `src/modules/lead/lead.validation.ts` — Added password validation (min 8 chars)
+
+### Backend — Auth Module
+14. `src/modules/auth/auth.service.ts` — forgotPassword() + resetPassword()
+15. `src/modules/auth/auth.controller.ts` — forgotPassword, resetPassword handlers
+16. `src/modules/auth/auth.routes.ts` — POST /forgot-password, POST /reset-password
+17. `src/modules/auth/auth.validation.ts` — Zod schemas for email, token + password
+
+### Backend — Database
+18. `prisma/schema.prisma` — OtpVerification + PasswordResetToken models
+19. `prisma/migrations/20260723000001_add_otp_and_password_reset_models/migration.sql`
+
+### Backend — App Routes
+20. `src/app.ts` — Mounted POST /api/public/auth/* OTP routes
+
+### Frontend — Public Auth Service
+21. `src/services/publicAuthService.ts` — NEW: API client for sendOtp, verifyOtp, forgotPassword, resetPassword
+
+### Frontend — Wizard Steps
+22. `src/public-site/wizard/steps/StepAccount.tsx` — REWRITTEN: Real form with password + confirm password
+23. `src/public-site/wizard/steps/StepOtp.tsx` — REWRITTEN: Real API calls, 6-digit boxes, countdown, resend
+24. `src/public-site/pages/GetQuotePage.tsx` — Wired Account props, passes password to lead creation
+25. `src/public-site/wizard/useWizardState.ts` — Updated Account validation
+
+### Frontend — Lead Service
+26. `src/services/leadService.ts` — Added password to CreateLeadInput
+
+### Frontend — Auth Pages
+27. `src/pages/auth/ForgotPasswordPage.tsx` — NEW: Email input → sends reset link
+28. `src/pages/auth/ResetPasswordPage.tsx` — NEW: Token + new password form
+29. `src/pages/auth/LoginPage.tsx` — Added "Forgot password?" link
+
+### Frontend — Routes
+30. `src/routes/routes.ts` — Added forgotPassword, resetPassword routes
+31. `src/App.tsx` — Added page imports and routes
+
+### Tests
+32. `src/modules/client/tests/client.service.test.ts` — Updated for Client reuse behavior
+
+## Security Decisions
+
+| Decision | Rationale |
+|----------|-----------|
+| OTP hashed with bcrypt (cost 12) | Prevents database breach from exposing OTPs |
+| One active OTP per email | Prevents OTP flooding / race conditions |
+| 5 max attempts per OTP | Prevents brute-force |
+| 60s rate limit on resend | Prevents email flooding |
+| Passwords never emailed | Security best practice |
+| Reset token bcrypt-hashed | Prevents token theft from DB breach |
+| Reset token single-use | Prevents replay attacks |
+| Client reuse on conversion | Prevents duplicate accounts |
+
+## Verification
+
+| Check | Result |
+|-------|--------|
+| Backend Tests (213/213) | ✅ |
+| Backend TypeScript | ✅ 0 errors |
+| Frontend TypeScript | ✅ 0 errors |
+| Frontend Build | ✅ Clean |
+| OTP sent via Resend | ✅ |
+| OTP verified server-side (bcrypt) | ✅ |
+| Password hashed before storage | ✅ |
+| Client created during wizard | ✅ |
+| Lead linked to Client | ✅ |
+| Admin conversion reuses wizard Client | ✅ |
+| Welcome Email has no temp password | ✅ |
+| Forgot Password sends reset link | ✅ |
+| Reset Password validates token | ✅ |
+| Rate limiting on OTP resend | ✅ |
+| Expired OTP rejected | ✅ |
+| Max attempts enforced | ✅ |

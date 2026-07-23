@@ -38,7 +38,7 @@ All business modules from the PRD are implemented and wired to the backend API:
 - **Projects** (`/projects`) — Featured project portfolio
 - **About** (`/about`) — Company story, values, stats
 - **Contact** (`/contact`) — Contact form with business details
-- **Get Quote** (`/get-quote`) — 8-step config-driven wizard with dynamic question engine, file uploads, OTP verification, and lead submission via backend API
+- **Get Quote** (`/get-quote`) — 8-step config-driven wizard with dynamic question engine, file uploads, OTP verification (server-side), account creation with password, and lead submission via backend API
 
 ## How to run
 
@@ -95,8 +95,8 @@ src/
         StepUploads.tsx   - Per-service file upload zones with previews
         StepReview.tsx    - Full review of all wizard sections with edit links
         StepContact.tsx   - Contact form (name, email, phone, address, preferences)
-        StepAccount.tsx   - Auto-creation info card
-        StepOtp.tsx       - OTP verification screen (placeholder)
+        StepAccount.tsx   - Password creation form (email readonly, password + confirm)
+        StepOtp.tsx       - OTP verification screen (real API, 6-digit boxes, countdown)
         StepSubmit.tsx    - Loading spinner during submission
 ```
 
@@ -159,8 +159,8 @@ The Get Quote page (`/get-quote`) is an 8-step wizard with a **dynamic question 
 3. **Step 2 — Files**: Per-service file upload zones with previews
 4. **Step 3 — Review**: Full summary of services, answers, files, contact with edit links per section
 5. **Step 4 — Contact**: Contact form (name, email, phone, address, preferences)
-6. **Step 5 — Account**: Info card explaining auto-creation from verified email
-7. **Step 6 — OTP**: Email verification (placeholder — wired to backend when ready)
+6. **Step 5 — Account**: Password creation form (email readonly, password + confirm with validation)
+7. **Step 6 — OTP**: Email verification via 6-digit code (real API, countdown timer, resend)
 8. **Step 7 — Submit**: Loading state → submission → success screen with reference number
 
 ### Key Design Decisions
@@ -169,7 +169,9 @@ The Get Quote page (`/get-quote`) is an 8-step wizard with a **dynamic question 
 - **localStorage persistence**: Wizard state survives page refreshes (files excluded). Users can close and return.
 - **Step validation**: Each step has a `canProceed` check. Back/Next buttons are disabled when invalid.
 - **Progress tracking**: `completedSteps` Set tracks which sections have data, shown as checkmarks in the progress bar.
-- **Lead submission**: Maps wizard state to `CreateLeadInput` (`contactName`, `phone`, `email`, `services[]`) and submits via `useCreateLead()` mutation.
+- **Real OTP verification**: 6-digit code sent via backend API, verified server-side with bcrypt, 60s resend countdown, auto-focus/auto-advance input boxes.
+- **Account creation**: Customer sets password during wizard → bcrypt-hashed → stored on Client account. Lead created linked to this Client.
+- **Lead submission**: Maps wizard state to `CreateLeadInput` (`contactName`, `phone`, `email`, `services[]`, `password`) and submits via `useCreateLead()` mutation.
 
 ### How to Add Questions for a New Service
 

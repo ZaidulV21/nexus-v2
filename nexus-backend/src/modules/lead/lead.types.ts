@@ -10,6 +10,8 @@ export interface CreateLeadInput {
   companyName?: string;
   source?: string;
   services: CreateLeadServiceInput[];
+  /** When provided, a Client portal account is created alongside the Lead */
+  password?: string;
 }
 
 export interface AddServiceToLeadInput {

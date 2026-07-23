@@ -13,6 +13,7 @@ export interface CreateLeadInput {
   companyName?: string;
   source?: string;
   services: CreateLeadServiceInput[];
+  password?: string;
 }
 
 export interface UpdateLeadInput {

@@ -12,6 +12,7 @@ export const createLeadSchema = z.object({
   companyName: z.string().optional(),
   source: z.string().optional(),
   services: z.array(leadServiceSchema).min(1, 'At least one service must be selected'),
+  password: z.string().min(8, 'Password must be at least 8 characters').optional(),
 });
 
 export const addServiceToLeadSchema = leadServiceSchema;

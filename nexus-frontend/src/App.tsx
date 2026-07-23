@@ -38,6 +38,8 @@ import { PortalDocumentsPage } from '@/pages/portal/PortalDocumentsPage';
 import { PortalNotificationsPage } from '@/pages/portal/PortalNotificationsPage';
 
 import { LoginPage } from '@/pages/auth/LoginPage';
+import { ForgotPasswordPage } from '@/pages/auth/ForgotPasswordPage';
+import { ResetPasswordPage } from '@/pages/auth/ResetPasswordPage';
 import { NotFoundPage } from '@/pages/errors/NotFoundPage';
 import { ProtectedRoute } from '@/app/ProtectedRoute';
 import { PortalProtectedRoute } from '@/app/PortalProtectedRoute';
@@ -82,6 +84,8 @@ export default function App() {
             2. LOGIN — shared, no layout wrapper
             ═══════════════════════════════════════════════════════════════ */}
         <Route path="login" element={<LoginPage />} />
+        <Route path="forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="reset-password" element={<ResetPasswordPage />} />
 
         {/* ═══════════════════════════════════════════════════════════════
             3. ADMIN CRM — /admin/*, requires ADMIN auth

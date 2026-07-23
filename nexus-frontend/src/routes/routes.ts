@@ -65,4 +65,6 @@ export const ROUTES = {
 
   // ── Auth ───────────────────────────────────────────────────────────
   login: '/login',
+  forgotPassword: '/forgot-password',
+  resetPassword: '/reset-password',
 } as const;

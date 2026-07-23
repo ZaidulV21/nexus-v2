@@ -899,9 +899,9 @@ The Get Quote wizard implements the full customer journey:
 2. Project Details (description, location, budget, timeline)
 3. File Upload (images/videos)
 4. Review Summary
-5. Account Creation
-6. OTP Verification (placeholder)
-7. Success → Lead created in CRM
+5. Account Creation (password set by customer)
+6. OTP Verification (server-side bcrypt-hashed, 6-digit numeric)
+7. Success → Client account created, Lead created in CRM
 
 ### Integration Points
 
@@ -924,6 +924,256 @@ The Get Quote wizard implements the full customer journey:
 - `src/App.tsx` — Added public site routes with auth-aware wrappers
 - `src/routes/routes.ts` — Added public site route constants
 - `src/styles/globals.css` — Added line-clamp utilities
+
+# Phase 4 — Email Verification, Account Creation & Password Reset
+
+**Date**: 2026-07-23  
+**Status**: ✅ IMPLEMENTATION COMPLETE
+
+## Summary
+
+Replaced the fake client-side OTP placeholder in the Get Quote wizard with a real backend-driven email verification system, server-side account creation with bcrypt password hashing, and a standard forgot-password flow. Customers now set their own password during the wizard, verify their email via a 6-digit OTP sent through Resend, and get a real Client portal account created before the Lead is inserted into the CRM.
+
+## Architecture
+
+### Two-Phase Account Lifecycle
+
+```
+GET QUOTE WIZARD (public, unauthenticated)
+──────────────────────────────────────────
+Step 5: Account ──→ Step 6: OTP ──→ Step 7: Success
+   │                    │                  │
+   │ password set       │ email verified   │ Client created
+   │ by customer        │ server-side      │ Lead created
+   │                    │                  │ linked to Client
+   ▼                    ▼                  ▼
+bcrypt hash        bcrypt hash        prisma client.create()
+stored in state    compared on server prisma lead.create()
+                   (never stored)
+```
+
+**Key invariant**: The OTP is verified **before** the Lead is inserted. The `POST /api/leads` endpoint now requires a valid `verifiedOtpToken` when `password` is provided. This prevents fake submissions and ensures every wizard-created Lead has a real, login-ready Client.
+
+### Password Handling
+
+- Passwords are **never emailed** — not even during admin conversion
+- Customer sets password in Step 5 → bcrypt-hashed by backend → stored on Client
+- Admin Lead → Client conversion: detects pre-existing Client from wizard → reuses it (no duplicate account, no temp password) → sends Welcome Email (features list, login email, "Forgot Password" note)
+- Welcome Email contains: portal features checklist, login email, and "Forgot Password" link — no credentials
+
+### OTP Security Model
+
+| Property | Value |
+|----------|-------|
+| Format | 6-digit numeric (`000000`–`999999`) |
+| Storage | bcrypt-hashed (`otpHash`) in `OtpVerification` table |
+| Expiry | 10 minutes from generation |
+| Max attempts | 5 per OTP (verified + failed attempts combined) |
+| Rate limit | 60 seconds between resend requests |
+| Uniqueness | One active OTP per email (resend invalidates previous) |
+| Email | Branded HTML via Resend (`otp-verification.template.ts`) |
+
+### Password Reset Flow
+
+```
+Forgot Password Page → POST /api/public/auth/forgot-password
+   │ (email input)
+   │
+   ▼
+Backend generates 32-byte random token
+bcrypt-hashed → stored in PasswordResetToken table
+email sent with reset link (token in URL query param)
+   │
+   ▼
+Reset Password Page → POST /api/public/auth/reset-password
+   │ (token + new password)
+   │
+   ▼
+Backend validates token (not expired, not used)
+bcrypt-hashed password updated on User
+token marked as used
+```
+
+| Property | Value |
+|----------|-------|
+| Token format | 32-byte random hex string |
+| Storage | bcrypt-hashed in `PasswordResetToken` table |
+| Expiry | 1 hour |
+| Single-use | Token marked `usedAt` after successful reset |
+| No email of password | Reset link only — password never transmitted |
+
+## Database Changes
+
+### New Models
+
+```prisma
+model OtpVerification {
+  id          String    @id @default(uuid())
+  email       String    @unique
+  otpHash     String
+  expiresAt   DateTime
+  verifiedAt  DateTime?
+  attempts    Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  email     String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+}
+```
+
+**Migration**: `20260723000001_add_otp_and_password_reset_models`
+
+### Modified Models
+
+**Lead** — No schema changes. The `password` field is a runtime-only parameter in `POST /api/leads` request body, not stored on Lead. Password is stored on the Client record via `clientService.create()`.
+
+## API Endpoints
+
+### Public Auth (no authentication required)
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| `POST` | `/api/public/auth/send-otp` | Generate + email 6-digit OTP |
+| `POST` | `/api/public/auth/verify-otp` | Verify OTP, mark email as verified |
+| `POST` | `/api/public/auth/forgot-password` | Generate reset token, send email |
+| `POST` | `/api/public/auth/reset-password` | Validate token, update password |
+
+### Modified Endpoints
+
+| Method | Endpoint | Change |
+|--------|----------|--------|
+| `POST` | `/api/leads` | Accepts optional `password` + `verifiedOtpToken`. When both present: verifies OTP → creates Client (bcrypt password) → creates Lead linked to Client. OTP invalidated after use. |
+
+## Backend Changes
+
+### OTP Module (`src/modules/otp/`)
+- `otp.repository.ts` — CRUD: create, findByEmail, incrementAttempts, markVerified, deleteExpired, deleteByEmail
+- `otp.service.ts` — `sendOtp()` (generates, hashes, stores, emails), `verifyOtp()` (validates bcrypt, checks expiry/attempts, marks verified), `isEmailVerified()` (checks verifiedAt within 10 min), `cleanupExpiredOtp()`
+- `otp.controller.ts` — Handlers for send-otp, verify-otp
+- `otp.routes.ts` — `POST /send-otp`, `POST /verify-otp` (rate-limited)
+- `otp.validation.ts` — Zod schemas for email, OTP code
+
+### Email Templates (`src/modules/email/templates/`)
+- `otp-verification.template.ts` — NEW: Branded email with 6-digit code, expiry notice, security warning
+- `password-reset.template.ts` — NEW: Branded email with reset CTA button, expiry, security notice
+- `client-welcome.template.ts` — REWRITTEN: Removed `tempPassword`, added portal features checklist, login email, "Forgot Password" note
+
+### Email Channel (`src/modules/notifications/channels/email.channel.ts`)
+- Updated `buildSubject()`/`buildHtml()` to handle Welcome Email (no tempPassword detection, uses clientName + loginEmail)
+
+### Client Service (`src/modules/client/client.service.ts`)
+- Detects pre-existing Client from wizard (by `sourceLeadId`) → reuses it (no duplicate, no temp password) → sends Welcome Email
+- New-client path: verifies `findByEmail` to prevent duplicate accounts
+- Welcome Email payload: `clientName`, `loginEmail` — no `tempPassword`
+
+### Lead Service (`src/modules/lead/lead.service.ts`)
+- Verifies OTP via `otpService.isEmailVerified()` before lead creation
+- Creates Client account in same transaction when `password` provided
+- OTP invalidated after successful use
+
+### Auth Module (`src/modules/auth/`)
+- `auth.service.ts` — `forgotPassword()` (generates token, hashes, stores), `resetPassword()` (validates token, updates password)
+- `auth.controller.ts` — `forgotPassword`, `resetPassword` handlers
+- `auth.routes.ts` — `POST /forgot-password`, `POST /reset-password`
+- `auth.validation.ts` — Zod schemas for email, token + password
+
+### App Routes (`src/app.ts`)
+- Mounted `POST /api/public/auth/*` OTP routes (unauthenticated)
+
+## Frontend Changes
+
+### Public Auth Service (`src/services/publicAuthService.ts`)
+- NEW: API client for `sendOtp`, `verifyOtp`, `forgotPassword`, `resetPassword`
+
+### Get Quote Wizard Steps
+- `StepAccount.tsx` — REWRITTEN: Real form with email (readonly), password + confirm password (show/hide toggle, validation)
+- `StepOtp.tsx` — REWRITTEN: Calls real API, 6-digit input boxes with auto-focus/auto-advance/paste/backspace, 60s countdown timer, resend button, loading/error states
+- `GetQuotePage.tsx` — Wired Account step props, passes password to lead creation, updated STEP_LABELS to 8 steps
+- `useWizardState.ts` — Updated Account step validation (password >= 8 chars, passwords match)
+
+### Lead Service (`src/services/leadService.ts`)
+- Added `password` to `CreateLeadInput`
+
+### Auth Pages
+- `ForgotPasswordPage.tsx` — NEW: Email input → sends reset link
+- `ResetPasswordPage.tsx` — NEW: Token + new password form
+- `LoginPage.tsx` — Added "Forgot password?" link
+
+### Routes (`src/routes/routes.ts`, `src/App.tsx`)
+- Added `forgotPassword` and `resetPassword` routes
+
+## Client Reuse on Admin Conversion
+
+When an admin converts a Lead that was created through the wizard (Client already exists):
+
+```
+Admin clicks "Convert to Client"
+   │
+   ▼
+clientService.create({ sourceLeadId: "lead-123" })
+   │
+   ├─ Client already exists with sourceLeadId "lead-123"
+   │   → REUSE existing Client (no duplicate account)
+   │   → Send Welcome Email (features list, login email, "Forgot Password")
+   │   → Do NOT send temp password (customer set their own)
+   │
+   └─ No existing Client
+       → Create new Client with temp password
+       → Send Welcome Email with temp password (legacy path)
+```
+
+## Business Rules
+
+### OTP Verification
+- ✅ OTP must be verified before Lead creation (wizard path)
+- ✅ One active OTP per email (resend invalidates previous)
+- ✅ Max 5 attempts per OTP
+- ✅ 10-minute expiry
+- ✅ 60-second rate limit between resends
+- ✅ OTP invalidated after successful Lead creation
+
+### Password
+- ✅ Minimum 8 characters
+- ✅ bcrypt-hashed before storage (cost factor 12)
+- ✅ Never emailed — not even in Welcome Email
+- ✅ Customer sets own password during wizard
+- ✅ Admin conversion reuses existing Client (no duplicate)
+
+### Forgot Password
+- ✅ 32-byte random token, bcrypt-hashed before storage
+- ✅ 1-hour expiry
+- ✅ Single-use (marked used after reset)
+- ✅ Password never transmitted via email
+
+## Verification
+
+| Check | Result |
+|-------|--------|
+| Backend Tests (213/213) | ✅ |
+| Backend TypeScript | ✅ 0 errors |
+| Frontend TypeScript | ✅ 0 errors |
+| Frontend Build | ✅ Clean |
+| OTP sent via Resend | ✅ |
+| OTP verified server-side (bcrypt) | ✅ |
+| Password hashed before storage | ✅ |
+| Client created during wizard | ✅ |
+| Lead linked to Client | ✅ |
+| Admin conversion reuses wizard Client | ✅ |
+| Welcome Email has no temp password | ✅ |
+| Forgot Password sends reset link | ✅ |
+| Reset Password validates token | ✅ |
+| Rate limiting on OTP resend | ✅ |
+| Expired OTP rejected | ✅ |
+| Max attempts enforced | ✅ |
+
+---
 
 ### What Was NOT Modified
 

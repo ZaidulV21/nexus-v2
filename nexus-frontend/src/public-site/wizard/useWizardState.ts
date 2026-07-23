@@ -115,7 +115,12 @@ export function useWizardState() {
       case 2: return true; // Uploads are optional
       case 3: return true; // Review
       case 4: return !!(state.contact.name && state.contact.email && state.contact.phone);
-      case 5: return !!(state.contact.name && state.contact.email && state.contact.phone);
+      case 5: return !!(
+        state.account.password &&
+        state.account.password.length >= 8 &&
+        state.account.confirmPassword &&
+        state.account.password === state.account.confirmPassword
+      );
       case 6: return state.otpVerified;
       case 7: return true;
       default: return true;

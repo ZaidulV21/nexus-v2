@@ -14,10 +14,13 @@ jest.mock('../client.repository', () => ({
 }));
 jest.mock('../../lead/lead.repository', () => ({
   leadRepository: { findById: jest.fn(), markConverted: jest.fn() },
-  leadServiceRepository: { listForLead: jest.fn() },
+  leadServiceRepository: { listForLead: jest.fn().mockResolvedValue([]) },
 }));
 jest.mock('../../quotation/quotation.repository', () => ({
   quotationRepository: { migrateLeadQuotationsToClient: jest.fn().mockResolvedValue({ count: 0 }) },
+}));
+jest.mock('../../../config/database', () => ({
+  prisma: {},
 }));
 jest.mock('../../timeline/timeline.service', () => ({ timelineService: { recordEvent: jest.fn() } }));
 jest.mock('../../audit/audit.service', () => ({ auditService: { recordAudit: jest.fn() } }));
@@ -29,6 +32,10 @@ import { quotationRepository } from '../../quotation/quotation.repository';
 import { clientService } from '../client.service';
 
 describe('clientService.convertLeadToClient', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   it('rejects converting a Lead that has no qualified services', async () => {
     (leadRepository.findById as jest.Mock).mockResolvedValue({ id: 'lead1', email: 'x@y.com' });
     (clientRepository.findBySourceLeadId as jest.Mock).mockResolvedValue(null);
@@ -39,11 +46,25 @@ describe('clientService.convertLeadToClient', () => {
     );
   });
 
-  it('rejects converting an already-converted Lead', async () => {
-    (leadRepository.findById as jest.Mock).mockResolvedValue({ id: 'lead1' });
-    (clientRepository.findBySourceLeadId as jest.Mock).mockResolvedValue({ id: 'existing-client' });
+  it('reuses an existing Client portal account when one already exists for the Lead', async () => {
+    (leadRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'lead1',
+      leadNumber: 'L-00001',
+      email: 'john@example.com',
+    });
+    (clientRepository.findBySourceLeadId as jest.Mock).mockResolvedValue({
+      id: 'existing-client',
+      contactName: 'John',
+      email: 'john@example.com',
+      clientNumber: 'C-00001',
+    });
+    (leadServiceRepository.listForLead as jest.Mock).mockResolvedValue([{ status: 'QUOTE PREPARING' }]);
+    (quotationRepository.migrateLeadQuotationsToClient as jest.Mock).mockResolvedValue({ count: 1 });
 
-    await expect(clientService.convertLeadToClient('lead1')).rejects.toThrow('already been converted');
+    const result = await clientService.convertLeadToClient('lead1', 'admin1');
+    expect(result.id).toBe('existing-client');
+    expect(leadRepository.markConverted).toHaveBeenCalledWith('lead1');
+    expect(clientRepository.create).not.toHaveBeenCalled();
   });
 
   it('rejects converting a Lead when the email already belongs to another client', async () => {

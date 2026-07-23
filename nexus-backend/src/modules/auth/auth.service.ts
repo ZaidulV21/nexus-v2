@@ -1,6 +1,8 @@
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
+import { randomBytes, createHash } from 'crypto';
 import { authRepository } from './auth.repository';
+import { prisma } from '../../config/database';
 import { env } from '../../config/env';
 import { UnauthorizedError, ValidationError, NotFoundError } from '../../core/errors/AppError';
 import { LoginInput, ChangePasswordInput } from './auth.types';
@@ -9,6 +11,12 @@ import { AuthPayload } from '../../core/middleware/authenticate';
 function signToken(payload: AuthPayload): string {
   return jwt.sign(payload, env.jwtSecret, { expiresIn: env.jwtExpiresIn } as jwt.SignOptions);
 }
+
+function hashToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
+}
+
+const PASSWORD_RESET_EXPIRY_MINUTES = 60;
 
 export const authService = {
   async login(input: LoginInput) {
@@ -66,6 +74,63 @@ export const authService = {
     if (!match) throw new UnauthorizedError('Current password is incorrect');
     const hash = await bcrypt.hash(input.newPassword, env.bcryptSaltRounds);
     await authRepository.updateClientPassword(userId, hash);
+    return { success: true };
+  },
+
+  async forgotPassword(email: string) {
+    const normalizedEmail = email.trim().toLowerCase();
+
+    // Find client by email
+    const client = await authRepository.findClientByEmail(normalizedEmail);
+    if (!client) {
+      // Return success even if email doesn't exist to prevent email enumeration
+      return { success: true };
+    }
+
+    // Generate a secure random token
+    const rawToken = randomBytes(32).toString('hex');
+    const tokenHashVal = hashToken(rawToken);
+    const expiresAt = new Date(Date.now() + PASSWORD_RESET_EXPIRY_MINUTES * 60 * 1000);
+
+    // Delete any existing tokens for this email, then create new one
+    await prisma.passwordResetToken.deleteMany({ where: { email: normalizedEmail } });
+    await prisma.passwordResetToken.create({
+      data: { email: normalizedEmail, tokenHash: tokenHashVal, expiresAt },
+    });
+
+    return { success: true, token: rawToken, clientName: client.contactName };
+  },
+
+  async resetPassword(token: string, newPassword: string) {
+    const tokenHashVal = hashToken(token);
+
+    const record = await prisma.passwordResetToken.findFirst({
+      where: { tokenHash: tokenHashVal, usedAt: null },
+    });
+
+    if (!record) {
+      throw new ValidationError('Invalid or expired reset link');
+    }
+
+    if (new Date() > record.expiresAt) {
+      throw new ValidationError('Reset link has expired. Please request a new one.');
+    }
+
+    // Find client and update password
+    const client = await authRepository.findClientByEmail(record.email);
+    if (!client) {
+      throw new NotFoundError('Account not found');
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, env.bcryptSaltRounds);
+    await authRepository.updateClientPassword(client.id, passwordHash);
+
+    // Mark token as used
+    await prisma.passwordResetToken.update({
+      where: { id: record.id },
+      data: { usedAt: new Date() },
+    });
+
     return { success: true };
   },
 

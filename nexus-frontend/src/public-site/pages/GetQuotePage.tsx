@@ -18,10 +18,10 @@ import {
 import { useCreateLead } from '@/queries/useLeads';
 import type { CreateLeadInput } from '@/services/leadService';
 
-const STEP_LABELS = ['Services', 'Details', 'Files', 'Review', 'Contact', 'Verify', 'Submit'];
+const STEP_LABELS = ['Services', 'Details', 'Files', 'Review', 'Contact', 'Account', 'Verify', 'Submit'];
 
 function buildLeadInput(wizard: ReturnType<typeof useWizardState>): CreateLeadInput {
-  const { selectedServices, answers, contact } = wizard.state;
+  const { selectedServices, answers, contact, account } = wizard.state;
 
   return {
     contactName: contact.name,
@@ -33,6 +33,7 @@ function buildLeadInput(wizard: ReturnType<typeof useWizardState>): CreateLeadIn
       serviceId,
       questionnaireAnswers: answers[serviceId] || {},
     })),
+    password: account.password || undefined,
   };
 }
 
@@ -49,7 +50,8 @@ export function GetQuotePage() {
     if (Object.keys(state.answers).length > 0) steps.add(1);
     if (state.files.length > 0) steps.add(2);
     if (state.contact.name && state.contact.email && state.contact.phone) steps.add(4);
-    if (state.otpVerified) steps.add(5);
+    if (state.account.password && state.account.password.length >= 8 && state.account.password === state.account.confirmPassword) steps.add(5);
+    if (state.otpVerified) steps.add(6);
     return steps;
   }, [state]);
 
@@ -60,7 +62,12 @@ export function GetQuotePage() {
       case 2: return true;
       case 3: return true;
       case 4: return state.contact.name.trim() !== '' && state.contact.email.trim() !== '' && state.contact.phone.trim() !== '';
-      case 5: return true;
+      case 5: return !!(
+        state.account.password &&
+        state.account.password.length >= 8 &&
+        state.account.confirmPassword &&
+        state.account.password === state.account.confirmPassword
+      );
       case 6: return state.otpVerified;
       default: return true;
     }
@@ -181,7 +188,11 @@ export function GetQuotePage() {
                 <StepContact contact={state.contact} onUpdate={wizard.updateContact} />
               )}
               {state.currentStep === 5 && (
-                <StepAccount contact={state.contact} />
+                <StepAccount
+                  contact={state.contact}
+                  account={state.account}
+                  onUpdate={wizard.updateAccount}
+                />
               )}
               {state.currentStep === 6 && (
                 <StepOtp

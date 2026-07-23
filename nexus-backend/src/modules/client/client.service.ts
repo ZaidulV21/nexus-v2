@@ -4,6 +4,7 @@ import { runInTransaction } from '../../core/utils/transaction';
 import { clientRepository } from './client.repository';
 import { leadRepository, leadServiceRepository } from '../lead/lead.repository';
 import { quotationRepository } from '../quotation/quotation.repository';
+import { prisma } from '../../config/database';
 import { timelineService } from '../timeline/timeline.service';
 import { auditService } from '../audit/audit.service';
 import { notificationsService } from '../notifications/notifications.service';
@@ -16,17 +17,12 @@ function generateTempPassword(): string {
 
 export const clientService = {
   // Implements PRD's Lead -> Client conversion: Admin-triggered when the Lead
-  // is qualified and ready for quotation workflow. Requires basic business
-  // validation (qualified status, required data, at least one service).
-  // Quotations are created AFTER conversion for the Client, not before.
+  // is qualified and ready for quotation workflow. If a Client portal account
+  // was already created during the quote wizard, it is reused — no duplicate
+  // account is created and no temporary password is generated.
   async convertLeadToClient(leadId: string, actorUserId?: string) {
     const lead = await leadRepository.findById(leadId);
     if (!lead) throw new NotFoundError('Lead not found');
-
-    const existingClient = await clientRepository.findBySourceLeadId(leadId);
-    if (existingClient) {
-      throw new ConflictError('This Lead has already been converted to a Client');
-    }
 
     const leadServices = await leadServiceRepository.listForLead(leadId);
     if (leadServices.length === 0) {
@@ -48,6 +44,63 @@ export const clientService = {
       throw new ValidationError('Lead must have an email address on file to create a Client login');
     }
 
+    // Check if a Client portal account was already created during the quote wizard.
+    const existingClient = await clientRepository.findBySourceLeadId(leadId);
+    if (existingClient) {
+      // Client already exists — reuse it. Migrate any Lead quotations and
+      // send the Welcome Email without creating a duplicate account.
+      const migration = await quotationRepository.migrateLeadQuotationsToClient(lead.id, existingClient.id, prisma);
+
+      if (!lead.convertedAt) {
+        await leadRepository.markConverted(lead.id);
+      }
+
+      await timelineService.recordEvent({
+        entityType: 'LEAD',
+        entityId: lead.id,
+        eventType: 'CLIENT_ACCOUNT_CREATED',
+        description: `Existing Client account reused for ${existingClient.contactName}`,
+        actorUserId,
+      });
+
+      await timelineService.recordEvent({
+        entityType: 'CLIENT',
+        entityId: existingClient.id,
+        eventType: 'QUOTATIONS_MIGRATED',
+        description: `${migration.count} quotation(s) migrated from Lead ${lead.leadNumber} to Client ${existingClient.clientNumber}`,
+        actorUserId,
+        metadata: { sourceLeadId: lead.id, sourceLeadNumber: lead.leadNumber, migratedQuotations: migration.count },
+      });
+
+      await auditService.recordAudit({
+        entityType: 'CLIENT',
+        entityId: existingClient.id,
+        action: 'CREATE',
+        afterState: { clientId: existingClient.id, sourceLeadId: lead.id, reused: true },
+        actorUserId,
+      });
+
+      await auditService.recordAudit({
+        entityType: 'CLIENT',
+        entityId: existingClient.id,
+        action: 'QUOTATIONS_MIGRATED',
+        beforeState: { leadId: lead.id, leadNumber: lead.leadNumber },
+        afterState: { clientId: existingClient.id, clientNumber: existingClient.clientNumber, migratedQuotations: migration.count },
+        actorUserId,
+      });
+
+      await notificationsService.emitEvent({
+        eventType: 'client.account.created',
+        entityType: 'CLIENT',
+        entityId: existingClient.id,
+        recipient: existingClient.email,
+        payload: { clientName: existingClient.contactName, loginEmail: existingClient.email, clientId: existingClient.id },
+      });
+
+      return existingClient;
+    }
+
+    // No pre-existing Client — create a new account with a temporary password.
     const existingEmailClient = await clientRepository.findByEmail(lead.email);
     if (existingEmailClient) {
       throw new ConflictError('A client account already exists for this email address');
@@ -129,7 +182,7 @@ export const clientService = {
       entityType: 'CLIENT',
       entityId: client.id,
       recipient: client.email,
-      payload: { clientName: client.contactName, tempPassword, loginEmail: client.email, clientId: client.id },
+      payload: { clientName: client.contactName, loginEmail: client.email, clientId: client.id },
     });
 
     return client;

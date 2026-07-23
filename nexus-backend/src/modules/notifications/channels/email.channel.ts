@@ -64,9 +64,9 @@ function buildSubject(payload: Record<string, unknown>): string | null {
   if (payload.amount !== undefined && payload.invoiceNumber) {
     return `Payment Receipt — ${payload.invoiceNumber}`;
   }
-  if (payload.loginEmail && payload.tempPassword) {
+  if (payload.clientName && payload.loginEmail && !payload.tempPassword) {
     const companyName = 'Nexus';
-    return `Welcome to ${companyName} — Your portal account is ready`;
+    return `Welcome to ${companyName} Client Portal`;
   }
   return null;
 }
@@ -130,12 +130,11 @@ function buildHtml(
     );
   }
 
-  if (payload.loginEmail && payload.tempPassword) {
+  if (payload.clientName && payload.loginEmail && !payload.tempPassword) {
     return renderClientWelcomeEmail(
       {
         clientName: (payload.clientName as string) || 'there',
         loginEmail: payload.loginEmail as string,
-        tempPassword: payload.tempPassword as string,
         portalUrl: `${appUrl}/portal`,
       },
       branding
