@@ -2,12 +2,14 @@ import { useParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowRight, Check, Phone, Loader2 } from 'lucide-react';
 import { usePublicServiceBySlug, usePublicServices } from '@/queries/usePublicServices';
+import { usePublicCompany } from '../hooks';
 import { PageHero } from '../components/PageHero';
 
 export function ServiceDetailPage() {
   const { slug } = useParams<{ slug: string }>();
   const { data: service, isLoading } = usePublicServiceBySlug(slug);
   const { data: allServices = [] } = usePublicServices();
+  const company = usePublicCompany();
 
   if (isLoading) {
     return (
@@ -117,7 +119,7 @@ export function ServiceDetailPage() {
                       Get Free Quote
                     </Link>
                     <a
-                      href="tel:+91XXXXXXXXXX"
+                      href={`tel:${company.phone}`}
                       className="flex items-center gap-3 rounded-xl border border-border px-5 py-3 text-sm font-medium text-ink transition-all hover:bg-canvas"
                     >
                       <Phone className="h-4 w-4 text-accent" />

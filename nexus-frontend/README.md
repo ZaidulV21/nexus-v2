@@ -78,7 +78,7 @@ src/
                       IndustriesPage, HowItWorksPage, ProjectsPage, AboutPage, ContactPage,
                       ResourcesPage (disabled), GetQuotePage (live data)
     layouts/        - PublicLayout
-    hooks/          - useQuoteWizard, useScrollSpy, useMobileMenu
+    hooks/          - useQuoteWizard, useScrollSpy, useMobileMenu, usePublicCompany
     types/          - ServiceItem, IndustryItem, ProjectItem, TestimonialItem, FAQItem, QuoteWizardData
     constants/      - INDUSTRIES, PROCESS_STEPS, STATS, TESTIMONIALS, FAQS, NAVIGATION
 ```
@@ -103,6 +103,33 @@ The public website fetches services from the same backend API used by the Admin 
 
 The backend `Service` type doesn't have a `slug` field. Slugs are generated on the frontend via `slugify()` (from `@/lib/utils`) when mapping backend data to `ServiceItem`. Example: "Interior Design" → "interior-design".
 
+## Architecture: Company Settings Integration
+
+The public website consumes the same Company Settings API as the Admin Panel. No duplicate endpoints.
+
+- **`usePublicCompany()`** — Wraps the existing `useCompanySettings()` hook with graceful fallbacks for empty fields
+- Shares the same React Query cache key (`['company', 'detail']`) as the Admin Panel — single API call, reused everywhere
+- 60-second stale time means the settings are fetched once and cached across all public pages
+
+### What's Dynamic
+
+| Component | Dynamic Fields |
+|-----------|---------------|
+| Navbar | Logo image, Company name (first letter fallback) |
+| Footer | Logo, Company name, Tagline, Full address, Phone, Email, Social links (Facebook, LinkedIn, Twitter, Instagram), Copyright text |
+| Contact Page | Address, Phone, Email (sections hidden when empty) |
+| About Page | Company name in hero and story text, City/State in location references |
+
+### Graceful Fallback Strategy
+
+- If `companyName` is empty → falls back to "Nexus Managed Services"
+- If `logoUrl` is null → shows first letter of company name in a colored square
+- If `phone` is empty → Phone row hidden in Footer and Contact page
+- If `email` is empty → Email row hidden
+- If `address` fields are all empty → Address row hidden, falls back to hardcoded address
+- If social links are empty → Social icons section hidden entirely
+- Never shows "undefined", "null", or empty strings
+
 ## Design decisions
 
 - **Accent color** "Nexus Indigo" (`#4553FF`) — technical/trustworthy without generic AI defaults.
@@ -112,6 +139,7 @@ The backend `Service` type doesn't have a `slug` field. Slugs are generated on t
 - **Homepage layout**: Asymmetric card grids (2-col featured → 4-col compact → 2-col featured). Manual carousels with arrows + dots (no auto-play).
 - **Scroll animations**: Viewport-triggered staggered fade-ins via Framer Motion.
 - **No hardcoded services**: All service data flows from backend API through React Query. Admin CRUD automatically syncs to the public website.
+- **No hardcoded company info**: Company name, logo, address, phone, email, and social links are all fetched from the shared Company Settings API. Fallbacks ensure the site never shows blanks.
 
 ## Tech Stack
 

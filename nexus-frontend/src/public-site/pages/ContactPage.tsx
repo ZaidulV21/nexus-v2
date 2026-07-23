@@ -2,10 +2,19 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Mail, Phone, MapPin, Send, Clock, MessageSquare } from 'lucide-react';
 import { PageHero } from '../components/PageHero';
-import { COMPANY_INFO } from '../constants';
+import { usePublicCompany } from '../hooks';
 
 export function ContactPage() {
   const [submitted, setSubmitted] = useState(false);
+  const company = usePublicCompany();
+
+  const contactItems = [
+    company.fullAddress && { icon: MapPin, label: 'Address', value: company.fullAddress },
+    company.phone && { icon: Phone, label: 'Phone', value: company.phone },
+    company.email && { icon: Mail, label: 'Email', value: company.email },
+    { icon: Clock, label: 'Business Hours', value: 'Mon - Sat, 9:00 AM - 6:00 PM' },
+    { icon: MessageSquare, label: 'Response Time', value: 'Within 24 hours' },
+  ].filter(Boolean) as { icon: typeof MapPin; label: string; value: string }[];
 
   return (
     <div>
@@ -24,13 +33,7 @@ export function ContactPage() {
               </p>
 
               <div className="space-y-4">
-                {[
-                  { icon: MapPin, label: 'Address', value: COMPANY_INFO.address },
-                  { icon: Phone, label: 'Phone', value: COMPANY_INFO.phone },
-                  { icon: Mail, label: 'Email', value: COMPANY_INFO.email },
-                  { icon: Clock, label: 'Business Hours', value: 'Mon - Sat, 9:00 AM - 6:00 PM' },
-                  { icon: MessageSquare, label: 'Response Time', value: 'Within 24 hours' },
-                ].map((item) => (
+                {contactItems.map((item) => (
                   <div key={item.label} className="flex items-start gap-3 rounded-xl border border-border bg-white p-4">
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent-subtle text-accent">
                       <item.icon className="h-5 w-5" />

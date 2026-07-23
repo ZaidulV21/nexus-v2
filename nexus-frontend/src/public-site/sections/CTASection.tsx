@@ -1,8 +1,11 @@
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowRight, Phone } from 'lucide-react';
+import { usePublicCompany } from '../hooks';
 
 export function CTASection() {
+  const company = usePublicCompany();
+
   return (
     <section className="py-20 sm:py-28 bg-ink">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -33,13 +36,15 @@ export function CTASection() {
                 Get Free Quote
                 <ArrowRight className="h-4 w-4" />
               </Link>
-              <a
-                href="tel:+91XXXXXXXXXX"
-                className="inline-flex items-center gap-2 rounded-xl border border-white/20 px-7 py-3.5 text-sm font-semibold text-white transition-all hover:bg-white/10"
-              >
-                <Phone className="h-4 w-4" />
-                Call Us Now
-              </a>
+              {company.phone && (
+                <a
+                  href={`tel:${company.phone}`}
+                  className="inline-flex items-center gap-2 rounded-xl border border-white/20 px-7 py-3.5 text-sm font-semibold text-white transition-all hover:bg-white/10"
+                >
+                  <Phone className="h-4 w-4" />
+                  Call Us Now
+                </a>
+              )}
             </div>
           </div>
         </motion.div>

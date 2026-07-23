@@ -2,6 +2,7 @@ import { motion } from 'framer-motion';
 import { Target, Users, Award, Handshake, Shield, Lightbulb } from 'lucide-react';
 import { PageHero } from '../components/PageHero';
 import { CTASection } from '../sections/CTASection';
+import { usePublicCompany } from '../hooks';
 
 const values = [
   { icon: Target, title: 'Mission-Driven', description: 'We exist to simplify business infrastructure so our clients can focus on what they do best.' },
@@ -13,11 +14,13 @@ const values = [
 ];
 
 export function AboutPage() {
+  const company = usePublicCompany();
+
   return (
     <div>
       <PageHero
-        title="About Nexus"
-        description="Nexus Managed Services is a managed infrastructure platform headquartered in Lucknow, India. We coordinate trusted vendors for comprehensive business infrastructure projects."
+        title={`About ${company.name}`}
+        description={`${company.name} is a managed infrastructure platform${company.city ? ` headquartered in ${company.city}` : ''}. We coordinate trusted vendors for comprehensive business infrastructure projects.`}
       />
 
       <section className="py-16 sm:py-20">
@@ -32,13 +35,13 @@ export function AboutPage() {
               <h2 className="text-3xl font-bold text-ink sm:text-4xl">Our Story</h2>
               <div className="mt-6 space-y-4 text-ink-muted leading-relaxed">
                 <p>
-                  businesses often struggle with managing multiple vendors for different infrastructure needs. Finding reliable partners for interior design, electrical work, solar installation, security systems, and IT infrastructure can be overwhelming.
+                  Businesses often struggle with managing multiple vendors for different infrastructure needs. Finding reliable partners for interior design, electrical work, solar installation, security systems, and IT infrastructure can be overwhelming.
                 </p>
                 <p>
-                  Nexus was founded to solve this problem. We created a single platform that coordinates trusted, verified vendors for all your business infrastructure needs. From the first consultation to the final handover, we manage the entire process.
+                  {company.name} was founded to solve this problem. We created a single platform that coordinates trusted, verified vendors for all your business infrastructure needs. From the first consultation to the final handover, we manage the entire process.
                 </p>
                 <p>
-                  Headquartered in Lucknow, we serve businesses across Uttar Pradesh and beyond. Our network of 200+ verified vendors and our proven 6-step process ensures consistent quality and reliable delivery for every project.
+                  {company.city ? `Headquartered in ${company.city}, we serve businesses across ${company.state || 'India'} and beyond.` : 'We serve businesses across India and beyond.'} Our network of 200+ verified vendors and our proven 6-step process ensures consistent quality and reliable delivery for every project.
                 </p>
               </div>
             </motion.div>

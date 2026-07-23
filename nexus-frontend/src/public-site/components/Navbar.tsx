@@ -3,7 +3,8 @@ import { Link, NavLink, useLocation } from 'react-router-dom';
 import { Menu, X, ChevronDown, ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePublicServiceList } from '@/queries/usePublicServices';
-import { useMobileMenu } from '../hooks';
+import { usePublicCompany } from '../hooks';
+import { useMobileMenu } from '../hooks/useMobileMenu';
 import { AnimatePresence, motion } from 'framer-motion';
 
 const PAGE_LINKS = [
@@ -21,6 +22,7 @@ export function Navbar() {
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const location = useLocation();
   const { data: services } = usePublicServiceList();
+  const company = usePublicCompany();
 
   useEffect(() => {
     const handler = () => setScrolled(window.scrollY > 10);
@@ -45,11 +47,19 @@ export function Navbar() {
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-18 items-center justify-between">
           <Link to="/" className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-white text-sm font-bold">
-              N
-            </div>
+            {company.logoUrl ? (
+              <img
+                src={company.logoUrl}
+                alt={company.name}
+                className="h-8 w-8 shrink-0 rounded object-contain"
+              />
+            ) : (
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-white text-sm font-bold">
+                {company.name.charAt(0)}
+              </div>
+            )}
             <span className="text-lg font-bold tracking-tight text-ink">
-              Nexus
+              {company.name}
             </span>
           </Link>
 
