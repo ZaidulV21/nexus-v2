@@ -876,6 +876,7 @@ Added a premium public marketing website as a new module (`src/public-site/`) wi
 - **Auth-aware routing**: Shared paths (`/services`, `/projects`) use wrapper components that check authentication state and render the appropriate page (admin or public)
 - **Shared design system**: Uses existing Nexus Indigo accent, Tailwind tokens, and component patterns
 - **Framer Motion animations**: Smooth scroll-triggered animations and page transitions
+- **Scroll restoration**: Centralized `ScrollToTop` component integrated into `PublicLayout` ensures all public page navigations start at the top of the page. Works for Link clicks, browser history (Back/Forward), and all internal navigation. Does not affect `/admin/*` or `/portal/*` routes.
 
 ### Pages Built
 
@@ -913,7 +914,7 @@ The Get Quote wizard implements the full customer journey:
 ### Files Created
 
 **Module**: `src/public-site/` (30+ files)
-- 7 reusable components (Navbar, Footer, SectionHeader, PageHero, ServiceCard, FAQAccordion, TestimonialCard)
+- 8 reusable components (Navbar, Footer, ScrollToTop, SectionHeader, PageHero, ServiceCard, FAQAccordion, TestimonialCard)
 - 9 homepage sections (Hero, Process, Services, Stats, Projects, Industries, Testimonials, FAQs, CTA)
 - 10 pages (HomePage, ServicesPage, ServiceDetailPage, IndustriesPage, HowItWorksPage, ProjectsPage, AboutPage, ContactPage, ResourcesPage, GetQuotePage)
 - 4 layout/route wrappers (PublicLayout, ServicesRoute, ProjectsRoute, ServiceDetailRoute)

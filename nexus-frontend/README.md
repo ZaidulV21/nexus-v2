@@ -70,7 +70,7 @@ src/
   services/         - API client functions for every module
   styles/           - globals.css (design tokens)
   public-site/      - Public Marketing Website
-    components/     - Navbar (dynamic services from API), Footer, SectionHeader, PageHero, ServiceCard,
+    components/     - Navbar (dynamic services from API), Footer, ScrollToTop, SectionHeader, PageHero, ServiceCard,
                       FAQAccordion, TestimonialCard, TestimonialsCarousel, motion (FadeIn/StaggerGroup/ScaleIn)
     sections/       - HeroSection (premium slider), ClientLogosSection, ProblemSolutionSection,
                       ServicesSection (live data), ProcessSection, StatsSection, ProjectsSection,
@@ -223,6 +223,7 @@ If no config entry exists for a service, a generic "Describe your requirements" 
 - **Signature motif**: thin node-and-thread connector line grounded in what the product does.
 - **Hero slider**: Premium full-width slider with manual navigation (arrows + dots), auto-rotate every 7s, pause on hover, touch swipe, AnimatePresence fade+slide transitions.
 - **Homepage layout**: Asymmetric card grids (2-col featured → 4-col compact → 2-col featured). Manual carousels with arrows + dots (no auto-play).
+- **Scroll restoration**: Centralized `ScrollToTop` component in `PublicLayout` ensures all public page navigations start at the top of the page. Handles Link clicks, browser history, and all internal navigation.
 - **Scroll animations**: Viewport-triggered staggered fade-ins via Framer Motion.
 - **No hardcoded services**: All service data flows from backend API through React Query. Admin CRUD automatically syncs to the public website.
 - **No hardcoded company info**: Company name, logo, address, phone, email, and social links are all fetched from the shared Company Settings API. Fallbacks ensure the site never shows blanks.
