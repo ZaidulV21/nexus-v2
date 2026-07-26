@@ -2031,3 +2031,79 @@ Services → Questions → Uploads → Contact → Review → Account/Login → 
 | Frontend production build: clean | ✅ |
 | Backend unchanged | ✅ |
 | File upload APIs still functional | ✅ |
+
+---
+
+# Phase 13 — Client Portal Service Request
+
+**Date**: 2026-07-26  
+**Status**: ✅ IMPLEMENTATION COMPLETE
+
+## Summary
+
+Existing clients can submit new service requests directly from the Client Portal. The request flow reuses the Quote Wizard's Services and Questions steps but skips Contact, Account creation, Login, and OTP — the client is already authenticated. On submission, a Lead is created with `clientId` set to the authenticated client's ID, appearing in the normal admin Lead module with no new CRM workflow.
+
+## New Flow
+
+```
+Portal Dashboard → Request Service → Select Services → Answer Questions → Review → Submit → Success
+```
+
+## Changes Made
+
+### Frontend (5 files)
+
+1. **`src/routes/routes.ts`**
+   - Added `serviceRequest: '/portal/service-request'` to portal routes
+
+2. **`src/App.tsx`**
+   - Added `PortalServiceRequestPage` import
+   - Added `<Route path="service-request" element={<PortalServiceRequestPage />} />` under portal section
+
+3. **`src/app/PortalLayout.tsx`**
+   - Added `PlusCircle` icon import
+   - Added "Request Service" nav item with `PlusCircle` icon to `PORTAL_NAV` (after Dashboard)
+
+4. **`src/pages/portal/PortalDashboardPage.tsx`**
+   - Added `PlusCircle` icon import
+   - Added "Request new service" quick action button in `PageHeader` actions
+
+5. **`src/pages/portal/PortalServiceRequestPage.tsx`** (NEW)
+   - Self-contained 3-step wizard with local React state (no localStorage persistence)
+   - Step 1: Reuses `StepServices` component for service selection
+   - Step 2: Reuses `StepQuestions` component for per-service questionnaire
+   - Step 3: Custom review step showing selected services and answers
+   - On submit: fetches client profile via `clientService.getById()`, calls `leadService.create()` with `clientId` from auth context and `source: 'PORTAL'`
+   - Success state with confirmation message and navigation options
+
+### Backend
+
+No changes needed. `clientId` support in Lead creation already existed from Phase 11.
+
+### What Was NOT Changed
+
+- Public Quote Wizard (unchanged)
+- Admin Lead module (leads appear normally)
+- Backend Lead service/validation/routes
+- Client Portal authentication flow
+- Existing portal pages
+
+## Verification
+
+| Check | Result |
+|-------|--------|
+| Route: /portal/service-request loads | ✅ |
+| Sidebar: "Request Service" nav item visible | ✅ |
+| Dashboard: "Request new service" button visible | ✅ |
+| Step 1: Services selection works | ✅ |
+| Step 2: Questions render for selected services | ✅ |
+| Step 3: Review shows selections | ✅ |
+| Back/Next navigation correct | ✅ |
+| Submit creates Lead with clientId | ✅ |
+| Source set to 'PORTAL' | ✅ |
+| Success state shows confirmation | ✅ |
+| Admin sees lead in normal Lead module | ✅ |
+| Backend tests: 217/217 | ✅ |
+| Backend unchanged | ✅ |
+| Frontend TypeScript: 0 errors | ✅ |
+| Frontend build: clean | ✅ |

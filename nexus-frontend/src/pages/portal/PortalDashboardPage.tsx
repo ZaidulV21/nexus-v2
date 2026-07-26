@@ -9,6 +9,7 @@ import {
   FolderKanban,
   FolderOpen,
   MessageSquare,
+  PlusCircle,
   Receipt,
 } from 'lucide-react';
 import { useAuth } from '@/app/AuthContext';
@@ -135,6 +136,11 @@ export function PortalDashboardPage() {
         description="Track project progress, review quotations and invoices, and access your documents in one place."
         actions={
           <>
+            <Button variant="secondary" size="sm" asChild>
+              <Link to={ROUTES.portal.serviceRequest}>
+                <PlusCircle className="h-3.5 w-3.5" /> Request new service
+              </Link>
+            </Button>
             <Button variant="secondary" size="sm" asChild>
               <Link to={ROUTES.portal.messages}>
                 <MessageSquare className="h-3.5 w-3.5" /> Message us

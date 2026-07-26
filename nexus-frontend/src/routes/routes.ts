@@ -61,6 +61,7 @@ export const ROUTES = {
     messages: '/portal/messages',
     documents: '/portal/documents',
     notifications: '/portal/notifications',
+    serviceRequest: '/portal/service-request',
   },
 
   // ── Auth ───────────────────────────────────────────────────────────

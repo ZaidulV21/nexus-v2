@@ -1,5 +1,5 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, FolderKanban, Receipt, MessageSquare, FolderOpen, FileText, Bell, LogOut } from 'lucide-react';
+import { LayoutDashboard, FolderKanban, Receipt, MessageSquare, FolderOpen, FileText, Bell, LogOut, PlusCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ROUTES } from '@/routes/routes';
 import { CompanyLogo, CompanyName } from '@/components/layout/CompanyLogo';
@@ -13,6 +13,7 @@ import { ThemeToggle } from '@/components/theme/ThemeToggle';
 
 const PORTAL_NAV = [
   { label: 'Dashboard', icon: LayoutDashboard, to: ROUTES.portal.dashboard },
+  { label: 'Request Service', icon: PlusCircle, to: ROUTES.portal.serviceRequest },
   { label: 'Quotations', icon: FileText, to: ROUTES.portal.quotations },
   { label: 'My Projects', icon: FolderKanban, to: ROUTES.portal.projects },
   { label: 'Invoices', icon: Receipt, to: ROUTES.portal.invoices },

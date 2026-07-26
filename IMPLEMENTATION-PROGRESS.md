@@ -1090,3 +1090,72 @@ Services → Questions → Contact → Review → Account/Login → OTP (new use
 | Backend unchanged | ✅ |
 | Frontend TypeScript: 0 errors | ✅ |
 | Frontend build: clean | ✅ |
+
+---
+
+# Phase 13 — Client Portal Service Request
+
+**Date**: 2026-07-26  
+**Status**: ✅ PHASE 13 COMPLETE
+
+## Summary
+
+Existing clients can submit new service requests from the Client Portal. The request reuses the Quote Wizard's Services and Questions steps but skips Contact, Account, Login, and OTP (client is already authenticated). The submission creates a Lead with `clientId` set, appearing in the normal admin Lead module.
+
+## New Flow
+
+```
+Portal Dashboard → Request Service → Select Services → Answer Questions → Review → Submit
+```
+
+## Changes Made
+
+### Frontend Files Modified (4 files)
+
+1. **`src/routes/routes.ts`**
+   - Added `serviceRequest: '/portal/service-request'` to portal routes
+
+2. **`src/App.tsx`**
+   - Added `PortalServiceRequestPage` import and route under portal section
+
+3. **`src/app/PortalLayout.tsx`**
+   - Added "Request Service" nav item with `PlusCircle` icon to sidebar
+
+4. **`src/pages/portal/PortalDashboardPage.tsx`**
+   - Added "Request new service" quick action button in PageHeader
+
+### Frontend Files Created (1 file)
+
+1. **`src/pages/portal/PortalServiceRequestPage.tsx`**
+   - 3-step wizard: Services → Questions → Review
+   - Reuses `StepServices` and `StepQuestions` from public wizard
+   - Custom review step showing selected services and answers
+   - Fetches client profile for contact info via `clientService.getById()`
+   - Submits via `useCreateLead()` with `clientId` from auth context
+   - `source: 'PORTAL'` to distinguish from public wizard leads
+   - Success state with links to dashboard and option to submit another request
+
+### What Was NOT Changed
+
+- Backend (no changes needed — `clientId` support already existed from Phase 11)
+- Public Quote Wizard (unchanged)
+- Admin Lead module (leads appear normally)
+
+## Verification
+
+| Check | Result |
+|-------|--------|
+| Route: /portal/service-request loads | ✅ |
+| Sidebar: "Request Service" nav item visible | ✅ |
+| Dashboard: "Request new service" button visible | ✅ |
+| Step 1: Services selection works | ✅ |
+| Step 2: Questions render for selected services | ✅ |
+| Step 3: Review shows selections | ✅ |
+| Back/Next navigation correct | ✅ |
+| Submit creates Lead with clientId | ✅ |
+| Success state shows confirmation | ✅ |
+| Admin sees lead in normal Lead module | ✅ |
+| Backend tests: 217/217 | ✅ |
+| Backend unchanged | ✅ |
+| Frontend TypeScript: 0 errors | ✅ |
+| Frontend build: clean | ✅ |

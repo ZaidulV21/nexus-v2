@@ -36,6 +36,7 @@ import { PortalInvoiceDetailPage } from '@/pages/portal/PortalInvoiceDetailPage'
 import { PortalMessagesPage } from '@/pages/portal/PortalMessagesPage';
 import { PortalDocumentsPage } from '@/pages/portal/PortalDocumentsPage';
 import { PortalNotificationsPage } from '@/pages/portal/PortalNotificationsPage';
+import { PortalServiceRequestPage } from '@/pages/portal/PortalServiceRequestPage';
 
 import { LoginPage } from '@/pages/auth/LoginPage';
 import { ForgotPasswordPage } from '@/pages/auth/ForgotPasswordPage';
@@ -143,6 +144,7 @@ export default function App() {
           <Route path="messages" element={<PortalMessagesPage />} />
           <Route path="documents" element={<PortalDocumentsPage />} />
           <Route path="notifications" element={<PortalNotificationsPage />} />
+          <Route path="service-request" element={<PortalServiceRequestPage />} />
         </Route>
 
         {/* ═══════════════════════════════════════════════════════════════
