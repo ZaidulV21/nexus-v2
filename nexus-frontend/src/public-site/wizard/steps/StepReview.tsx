@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Edit2, FileText, Image, Video, User, Mail, Phone, Building, MapPin, Clock, MessageSquare } from 'lucide-react';
+import { Edit2, User, Mail, Phone, Building, MapPin, Clock, MessageSquare } from 'lucide-react';
 import { usePublicServices } from '@/queries/usePublicServices';
 import { getQuestionsForService } from '../serviceQuestions';
 import type { WizardState } from '../types';
@@ -8,8 +8,6 @@ interface StepReviewProps {
   state: WizardState;
   goTo: (step: number) => void;
 }
-
-const FILE_ICONS = { image: Image, video: Video, document: FileText };
 
 const PREFERRED_CONTACT_LABELS: Record<string, string> = {
   phone: 'Phone',
@@ -103,33 +101,6 @@ export function StepReview({ state, goTo }: StepReviewProps) {
           );
         })}
 
-        {/* Files */}
-        {state.files.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="rounded-2xl border border-border bg-surface p-5"
-          >
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-ink">Uploaded Files ({state.files.length})</h3>
-              <button onClick={() => goTo(2)} className="text-xs font-medium text-accent hover:text-accent-hover flex items-center gap-1">
-                <Edit2 className="h-3 w-3" /> Edit
-              </button>
-            </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {state.files.map((f) => {
-                const FileIcon = FILE_ICONS[f.type];
-                return (
-                  <span key={f.id} className="inline-flex items-center gap-1.5 rounded-lg bg-canvas border border-border px-2.5 py-1 text-xs text-ink-muted">
-                    <FileIcon className="h-3 w-3" />
-                    {f.file.name}
-                  </span>
-                );
-              })}
-            </div>
-          </motion.div>
-        )}
-
         {/* Contact — all fields */}
         <motion.div
           initial={{ opacity: 0, y: 12 }}
@@ -138,7 +109,7 @@ export function StepReview({ state, goTo }: StepReviewProps) {
         >
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-ink">Contact Information</h3>
-            <button onClick={() => goTo(3)} className="text-xs font-medium text-accent hover:text-accent-hover flex items-center gap-1">
+            <button onClick={() => goTo(2)} className="text-xs font-medium text-accent hover:text-accent-hover flex items-center gap-1">
               <Edit2 className="h-3 w-3" /> Edit
             </button>
           </div>

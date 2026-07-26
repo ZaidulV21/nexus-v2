@@ -8,7 +8,6 @@ import { WizardNavigation } from '../wizard/WizardNavigation';
 import {
   StepServices,
   StepQuestions,
-  StepUploads,
   StepReview,
   StepContact,
   StepAccount,
@@ -23,8 +22,8 @@ import { publicAuthService } from '@/services/publicAuthService';
 import { useAuth } from '@/app/AuthContext';
 import type { CreateLeadInput } from '@/services/leadService';
 
-// Step order: 0=Services, 1=Questions, 2=Uploads, 3=Contact, 4=Review, 5=Account/Login, 6=OTP, 7=Submit
-const BASE_STEP_LABELS = ['Services', 'Details', 'Files', 'Contact', 'Review', 'Account', 'Verify', 'Submit'];
+// Step order: 0=Services, 1=Questions, 2=Contact, 3=Review, 4=Account/Login, 5=OTP, 6=Submit
+const BASE_STEP_LABELS = ['Services', 'Details', 'Contact', 'Review', 'Account', 'Verify', 'Submit'];
 
 function buildLeadInput(wizard: ReturnType<typeof useWizardState>, isLoggedIn: boolean, clientId?: string): CreateLeadInput {
   const { selectedServices, answers, contact, account } = wizard.state;
@@ -87,7 +86,7 @@ export function GetQuotePage() {
   const returnedFromReset = searchParams.get('returned') === 'true';
 
   useEffect(() => {
-    if (returnedFromReset && state.currentStep === 5 && state.emailExists === true) {
+    if (returnedFromReset && state.currentStep === 4 && state.emailExists === true) {
       // User returned from password reset — show login step with preserved data
       // The wizard state is already restored from localStorage
     }
@@ -109,14 +108,13 @@ export function GetQuotePage() {
     const steps = new Set<number>();
     if (state.selectedServices.length > 0) steps.add(0);
     if (Object.keys(state.answers).length > 0) steps.add(1);
-    if (state.files.length > 0) steps.add(2);
-    if (state.contact.name.trim() && state.contact.email.trim() && state.contact.phone.trim()) steps.add(3);
+    if (state.contact.name.trim() && state.contact.email.trim() && state.contact.phone.trim()) steps.add(2);
     if (state.emailExists === false) {
-      if (state.account.password && state.account.password.length >= 8 && state.account.password === state.account.confirmPassword) steps.add(5);
-      if (state.otpVerified) steps.add(6);
+      if (state.account.password && state.account.password.length >= 8 && state.account.password === state.account.confirmPassword) steps.add(4);
+      if (state.otpVerified) steps.add(5);
     }
     if (state.emailExists === true && loginSuccess) {
-      steps.add(5); // Login complete
+      steps.add(4); // Login complete
     }
     return steps;
   }, [state, loginSuccess]);
@@ -126,10 +124,9 @@ export function GetQuotePage() {
     switch (state.currentStep) {
       case 0: return state.selectedServices.length > 0;
       case 1: return validateRequiredQuestions(state.selectedServices, state.answers, services);
-      case 2: return true;
-      case 3: return state.contact.name.trim() !== '' && state.contact.email.trim() !== '' && state.contact.phone.trim() !== '';
-      case 4: return true;
-      case 5: {
+      case 2: return state.contact.name.trim() !== '' && state.contact.email.trim() !== '' && state.contact.phone.trim() !== '';
+      case 3: return true;
+      case 4: {
         if (loginSuccess) return true; // Post-login review — Submit button in review handles it
         if (state.emailExists === true) return true; // Login step — handled internally
         return !!(
@@ -139,14 +136,14 @@ export function GetQuotePage() {
           state.account.password === state.account.confirmPassword
         );
       }
-      case 6: return state.otpVerified;
+      case 5: return state.otpVerified;
       default: return true;
     }
   }, [state, services, loginSuccess]);
 
   // Reset showContactErrors when leaving contact step
   useEffect(() => {
-    if (state.currentStep !== 3) {
+    if (state.currentStep !== 2) {
       setShowContactErrors(false);
     }
   }, [state.currentStep]);
@@ -154,14 +151,14 @@ export function GetQuotePage() {
   const handleNext = useCallback(async () => {
     if (!canProceedCurrentStep) {
       // Show inline validation on Contact step
-      if (state.currentStep === 3) {
+      if (state.currentStep === 2) {
         setShowContactErrors(true);
       }
       return;
     }
 
-    // After Contact step (3): check email
-    if (state.currentStep === 3) {
+    // After Contact step (2): check email
+    if (state.currentStep === 2) {
       if (state.emailExists !== null) {
         wizard.next();
         return;
@@ -181,16 +178,16 @@ export function GetQuotePage() {
       return;
     }
 
-    // After Login step (5) for existing users: go to post-login review summary
-    if (state.currentStep === 5 && state.emailExists === true && !loginSuccess) {
+    // After Login step (4) for existing users: go to post-login review summary
+    if (state.currentStep === 4 && state.emailExists === true && !loginSuccess) {
       // Login is handled by StepLogin — Next shouldn't advance
       // This path shouldn't be reached because WizardNavigation is hidden during login
       return;
     }
 
-    // After post-login review (5 with loginSuccess): go to Submit
-    if (state.currentStep === 5 && loginSuccess) {
-      wizard.goTo(7);
+    // After post-login review (4 with loginSuccess): go to Submit
+    if (state.currentStep === 4 && loginSuccess) {
+      wizard.goTo(6);
       return;
     }
 
@@ -259,8 +256,8 @@ export function GetQuotePage() {
     );
   }
 
-  // ── Post-login review summary (existing user, step 5 after login) ──
-  const isPostLoginReview = state.currentStep === 5 && state.emailExists === true && loginSuccess;
+  // ── Post-login review summary (existing user, step 4 after login) ──
+  const isPostLoginReview = state.currentStep === 4 && state.emailExists === true && loginSuccess;
 
   const selectedServiceData = services.filter((s) => state.selectedServices.includes(s.id));
 
@@ -369,20 +366,6 @@ export function GetQuotePage() {
                         })}
                       </dl>
                     </div>
-
-                    {/* Files */}
-                    {state.files.length > 0 && (
-                      <div className="rounded-2xl border border-border bg-canvas p-5">
-                        <h3 className="text-sm font-semibold text-ink mb-3">Uploaded Files ({state.files.length})</h3>
-                        <div className="flex flex-wrap gap-2">
-                          {state.files.map((f) => (
-                            <span key={f.id} className="inline-flex items-center gap-1.5 rounded-lg bg-surface border border-border px-2.5 py-1 text-xs text-ink-muted">
-                              {f.file.name}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
                   </div>
 
                   {/* Submit error */}
@@ -436,31 +419,23 @@ export function GetQuotePage() {
                     />
                   )}
                   {state.currentStep === 2 && (
-                    <StepUploads
-                      selectedServices={state.selectedServices}
-                      files={state.files}
-                      onAddFiles={wizard.addFiles}
-                      onRemoveFile={wizard.removeFile}
-                    />
-                  )}
-                  {state.currentStep === 3 && (
                     <StepContact
                       contact={state.contact}
                       onUpdate={wizard.updateContact}
                       showErrors={showContactErrors}
                     />
                   )}
-                  {state.currentStep === 4 && (
+                  {state.currentStep === 3 && (
                     <StepReview state={state} goTo={wizard.goTo} />
                   )}
-                  {state.currentStep === 5 && state.emailExists === false && (
+                  {state.currentStep === 4 && state.emailExists === false && (
                     <StepAccount
                       contact={state.contact}
                       account={state.account}
                       onUpdate={wizard.updateAccount}
                     />
                   )}
-                  {state.currentStep === 5 && state.emailExists === true && !loginSuccess && (
+                  {state.currentStep === 4 && state.emailExists === true && !loginSuccess && (
                     <StepLogin
                       email={state.contact.email}
                       authLogin={authLogin}
@@ -469,20 +444,20 @@ export function GetQuotePage() {
                       onClearError={() => setLoginError(null)}
                     />
                   )}
-                  {state.currentStep === 5 && state.emailExists === null && (
+                  {state.currentStep === 4 && state.emailExists === null && (
                     <div className="p-6 sm:p-8 text-center">
                       <span className="inline-block h-8 w-8 animate-spin rounded-full border-2 border-accent border-t-transparent" />
                       <p className="mt-3 text-sm text-ink-muted">Checking your email...</p>
                     </div>
                   )}
-                  {state.currentStep === 6 && (
+                  {state.currentStep === 5 && (
                     <StepOtp
                       email={state.contact.email}
                       isVerified={state.otpVerified}
                       onVerify={() => wizard.setOtpVerified(true)}
                     />
                   )}
-                  {state.currentStep === 7 && (
+                  {state.currentStep === 6 && (
                     <StepSubmit isSubmitting={isSubmitting} />
                   )}
                 </>
@@ -491,10 +466,10 @@ export function GetQuotePage() {
           </AnimatePresence>
 
           {/* Wizard navigation — hidden during post-login review and submit step */}
-          {!isPostLoginReview && state.currentStep < 7 && (
+          {!isPostLoginReview && state.currentStep < 6 && (
             <WizardNavigation
               isFirstStep={state.currentStep === 0}
-              isLastStep={state.currentStep === 6}
+              isLastStep={state.currentStep === 5}
               canProceed={canProceedCurrentStep && !isCheckingEmail}
               onBack={wizard.prev}
               onNext={handleNext}

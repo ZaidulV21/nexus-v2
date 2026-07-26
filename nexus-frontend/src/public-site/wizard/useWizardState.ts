@@ -3,7 +3,7 @@ import type { WizardState, WizardFileEntry, WizardContactInfo } from './types';
 import { INITIAL_WIZARD_STATE } from './types';
 
 const STORAGE_KEY = 'nexus-quote-wizard';
-const STEP_LABELS = ['Services', 'Questions', 'Uploads', 'Contact', 'Review', 'Account', 'Verify', 'Submit'];
+const STEP_LABELS = ['Services', 'Questions', 'Contact', 'Review', 'Account', 'Verify', 'Submit'];
 
 function loadState(): WizardState {
   try {
@@ -119,15 +119,14 @@ export function useWizardState() {
   }, []);
 
   // Validation — step indices follow STEP_LABELS order:
-  // 0=Services, 1=Questions, 2=Uploads, 3=Contact, 4=Review, 5=Account/Login, 6=OTP, 7=Submit
+  // 0=Services, 1=Questions, 2=Contact, 3=Review, 4=Account/Login, 5=OTP, 6=Submit
   const canProceed = useCallback((): boolean => {
     switch (state.currentStep) {
       case 0: return state.selectedServices.length > 0;
       case 1: return true; // Questions validated in GetQuotePage (needs service data)
-      case 2: return true; // Uploads are optional
-      case 3: return !!(state.contact.name && state.contact.email && state.contact.phone);
-      case 4: return true; // Review
-      case 5: {
+      case 2: return !!(state.contact.name && state.contact.email && state.contact.phone);
+      case 3: return true; // Review
+      case 4: {
         // Account or Login step - different validation based on email check
         if (state.emailExists === true) {
           // Existing user: login step - handled by StepLogin internally
@@ -141,8 +140,8 @@ export function useWizardState() {
           state.account.password === state.account.confirmPassword
         );
       }
-      case 6: return state.otpVerified;
-      case 7: return true;
+      case 5: return state.otpVerified;
+      case 6: return true;
       default: return true;
     }
   }, [state]);

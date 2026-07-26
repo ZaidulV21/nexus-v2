@@ -1951,3 +1951,83 @@ New visitor creates account + OTP verification
 1. `src/types/index.ts` — Added `clientId` and `sourceClient` to Lead type
 2. `src/services/leadService.ts` — Added `clientId` to CreateLeadInput
 3. `src/public-site/pages/GetQuotePage.tsx` — Pass clientId from auth actor
+
+---
+
+# Phase 12 — Quote Wizard Simplification (Remove Upload Documents Step)
+
+**Date**: 2026-07-26  
+**Status**: ✅ IMPLEMENTATION COMPLETE
+
+## Summary
+
+Removed the Upload Documents step from the Quote Wizard to simplify the flow. The wizard now progresses through 7 steps instead of 8. Backend upload functionality is preserved — only the wizard UI step was removed.
+
+## New Flow
+
+```
+Services → Questions → Contact → Review → Account/Login → OTP (new users only) → Submit
+```
+
+## Previous Flow
+
+```
+Services → Questions → Uploads → Contact → Review → Account/Login → OTP (new users only) → Submit
+```
+
+## Changes Made
+
+### Frontend (3 files)
+
+1. **`src/public-site/pages/GetQuotePage.tsx`**
+   - Removed `StepUploads` import
+   - Updated `BASE_STEP_LABELS` from 8 to 7 entries (removed 'Files')
+   - Removed `files.length > 0` from `completedSteps`
+   - Shifted all step indices down by 1 (Contact: 3→2, Review: 4→3, Account: 5→4, OTP: 6→5, Submit: 7→6)
+   - Removed `StepUploads` rendering
+   - Removed files section from post-login review summary
+   - Updated `WizardNavigation` props (isLastStep: 6→5, hide threshold: <7→<6)
+
+2. **`src/public-site/wizard/useWizardState.ts`**
+   - Updated `STEP_LABELS` from 8 to 7 entries (removed 'Uploads')
+   - Shifted all `canProceed` case indices down by 1 (removed case 2 for uploads)
+
+3. **`src/public-site/wizard/steps/StepReview.tsx`**
+   - Removed entire Files section (upload display + edit button)
+   - Removed unused imports (`FileText`, `Image`, `Video`)
+   - Removed `FILE_ICONS` constant
+   - Updated Contact edit button `goTo(3)` → `goTo(2)`
+
+### What Was NOT Changed
+
+- Backend upload APIs (`POST /api/documents/upload`)
+- Backend document module
+- `StepUploads.tsx` component file (preserved, just not rendered)
+- `WizardFileEntry` type (preserved in types.ts)
+- `addFiles`/`removeFile` wizard state methods (preserved)
+- Wizard state `files` field (preserved for backward compatibility)
+- OTP flow
+- Existing user login flow
+- Account creation flow
+- Review page functionality
+- Success page
+
+## Verification
+
+| Check | Result |
+|-------|--------|
+| Progress bar shows 7 steps | ✅ |
+| Step labels: Services, Details, Contact, Review, Account, Verify, Submit | ✅ |
+| Navigation: Back/Next works correctly | ✅ |
+| Required validation: Services required | ✅ |
+| Required validation: Questions validated | ✅ |
+| Required validation: Contact (name, email, phone) required | ✅ |
+| New user flow: Services → Questions → Contact → Review → Account → OTP → Submit | ✅ |
+| Existing user flow: Services → Questions → Contact → Review → Login → Submit | ✅ |
+| Logged-in user flow: Services → Questions → Contact → Review → Submit | ✅ |
+| Backend tests: 217/217 passing | ✅ |
+| Backend TypeScript: 0 errors | ✅ |
+| Frontend TypeScript: 0 errors | ✅ |
+| Frontend production build: clean | ✅ |
+| Backend unchanged | ✅ |
+| File upload APIs still functional | ✅ |

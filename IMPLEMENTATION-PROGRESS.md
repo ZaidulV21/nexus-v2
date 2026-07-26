@@ -1026,3 +1026,67 @@ model Client {
 | DB column `leads.clientId` type | ✅ `text` (matches `clients.id`) |
 | DB FK constraint exists | ✅ `leads_clientId_fkey` |
 | `nexus-frontend vite build` | ✅ Clean |
+
+---
+
+# Phase 12 — Quote Wizard Simplification (Remove Upload Documents Step)
+
+**Date**: 2026-07-26  
+**Status**: ✅ PHASE 12 COMPLETE
+
+## Summary
+
+Removed the Upload Documents step from the Quote Wizard. The wizard now has 7 steps instead of 8.
+
+## New Flow
+
+```
+Services → Questions → Contact → Review → Account/Login → OTP (new users only) → Submit
+```
+
+## Changes Made
+
+### Frontend Files Modified (3 files)
+
+1. **`src/public-site/pages/GetQuotePage.tsx`**
+   - Removed `StepUploads` import
+   - Updated `BASE_STEP_LABELS` (removed 'Files')
+   - Removed files from `completedSteps`
+   - Shifted all step indices down by 1
+   - Removed `StepUploads` rendering
+   - Removed files section from post-login review
+   - Updated `WizardNavigation` props
+
+2. **`src/public-site/wizard/useWizardState.ts`**
+   - Updated `STEP_LABELS` (removed 'Uploads')
+   - Shifted `canProceed` case indices down by 1
+
+3. **`src/public-site/wizard/steps/StepReview.tsx`**
+   - Removed Files section + edit button
+   - Removed unused imports (`FileText`, `Image`, `Video`)
+   - Removed `FILE_ICONS` constant
+   - Updated Contact edit button `goTo(3)` → `goTo(2)`
+
+### What Was NOT Changed
+
+- Backend upload APIs
+- `StepUploads.tsx` component file (preserved, not rendered)
+- Wizard state `files` field and methods (preserved)
+- OTP, login, account creation flows
+- Backend (217 tests still passing)
+
+## Verification
+
+| Check | Result |
+|-------|--------|
+| Progress bar: 7 steps | ✅ |
+| Labels: Services, Details, Contact, Review, Account, Verify, Submit | ✅ |
+| Navigation: Back/Next correct | ✅ |
+| Required validation works | ✅ |
+| New user flow complete | ✅ |
+| Existing user flow complete | ✅ |
+| Logged-in user flow complete | ✅ |
+| Backend tests: 217/217 | ✅ |
+| Backend unchanged | ✅ |
+| Frontend TypeScript: 0 errors | ✅ |
+| Frontend build: clean | ✅ |
