@@ -13,6 +13,8 @@ import { ROUTES } from '@/routes/routes';
 export function ResetPasswordPage() {
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token') || '';
+  const returnTo = searchParams.get('returnTo');
+  const isWizardFlow = returnTo === 'get-quote';
 
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -51,7 +53,7 @@ export function ResetPasswordPage() {
             This password reset link is invalid or missing. Please request a new one.
           </p>
           <Link
-            to="/forgot-password"
+            to={isWizardFlow ? `/forgot-password?returnTo=get-quote` : '/forgot-password'}
             className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-accent hover:text-accent-hover"
           >
             Request new reset link
@@ -72,17 +74,27 @@ export function ResetPasswordPage() {
             </div>
             <h1 className="text-lg font-semibold text-ink">Password Reset Successfully</h1>
             <p className="text-sm text-ink-muted">
-              Your password has been updated. You can now sign in with your new password.
+              Your password has been updated. {isWizardFlow ? 'You can now sign in with your new password and continue your quote request.' : 'You can now sign in with your new password.'}
             </p>
           </div>
           <Card>
             <CardContent className="pt-6 text-center">
-              <Link
-                to={ROUTES.login}
-                className="inline-flex items-center gap-2 rounded-xl bg-accent px-6 py-2.5 text-sm font-semibold text-white hover:bg-accent-hover"
-              >
-                Sign in to Client Portal
-              </Link>
+              {isWizardFlow ? (
+                <Link
+                  to={`${ROUTES.public.getQuote}?returned=true`}
+                  className="inline-flex items-center gap-2 rounded-xl bg-accent px-6 py-2.5 text-sm font-semibold text-white hover:bg-accent-hover"
+                >
+                  Back to Get a Quote
+                  <ArrowLeft className="h-3.5 w-3.5 rotate-180" />
+                </Link>
+              ) : (
+                <Link
+                  to={ROUTES.login}
+                  className="inline-flex items-center gap-2 rounded-xl bg-accent px-6 py-2.5 text-sm font-semibold text-white hover:bg-accent-hover"
+                >
+                  Sign in to Client Portal
+                </Link>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -156,11 +168,11 @@ export function ResetPasswordPage() {
 
               <div className="text-center">
                 <Link
-                  to={ROUTES.login}
+                  to={isWizardFlow ? `${ROUTES.public.getQuote}?returned=true` : ROUTES.login}
                   className="inline-flex items-center gap-1.5 text-sm font-medium text-ink-muted hover:text-ink"
                 >
                   <ArrowLeft className="h-3.5 w-3.5" />
-                  Back to login
+                  {isWizardFlow ? 'Back to Quote Wizard' : 'Back to login'}
                 </Link>
               </div>
             </form>

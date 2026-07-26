@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useNavigate, useLocation, Navigate, Link } from 'react-router-dom';
-import { Mail, Lock } from 'lucide-react';
+import { Mail, Lock, ArrowLeft } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
@@ -77,6 +77,16 @@ export function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-canvas px-4">
       <div className="w-full max-w-sm">
+        <div className="mb-4">
+          <Link
+            to="/"
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-ink-muted hover:text-ink transition-colors"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Back to Home
+          </Link>
+        </div>
+
         <div className="mb-6 flex flex-col items-center gap-2">
           <CompanyLogo className="h-7 w-7" />
           <h1 className="text-lg font-semibold text-ink">Sign in to <CompanyName fallback="Nexus" /></h1>
@@ -141,6 +151,15 @@ export function LoginPage() {
             </form>
           </CardContent>
         </Card>
+
+        <div className="mt-4 text-center">
+          <p className="text-sm text-ink-muted">
+            Don't have an account?{' '}
+            <Link to={ROUTES.public.getQuote} className="font-medium text-accent hover:text-accent-hover">
+              Create one here
+            </Link>
+          </p>
+        </div>
       </div>
     </div>
   );

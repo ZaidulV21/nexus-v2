@@ -3,14 +3,13 @@ import type { WizardState, WizardFileEntry, WizardContactInfo } from './types';
 import { INITIAL_WIZARD_STATE } from './types';
 
 const STORAGE_KEY = 'nexus-quote-wizard';
-const STEP_LABELS = ['Services', 'Questions', 'Uploads', 'Review', 'Contact', 'Account', 'Verify', 'Submit'];
+const STEP_LABELS = ['Services', 'Questions', 'Uploads', 'Contact', 'Review', 'Account', 'Verify', 'Submit'];
 
 function loadState(): WizardState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<WizardState>;
-      // Restore contact and account, but reset transient state
       return {
         ...INITIAL_WIZARD_STATE,
         currentStep: parsed.currentStep ?? 0,
@@ -19,6 +18,7 @@ function loadState(): WizardState {
         contact: { ...INITIAL_WIZARD_STATE.contact, ...parsed.contact },
         account: INITIAL_WIZARD_STATE.account,
         otpVerified: false,
+        emailExists: parsed.emailExists ?? null,
       };
     }
   } catch { /* ignore */ }
@@ -91,7 +91,14 @@ export function useWizardState() {
   }, []);
 
   const updateContact = useCallback((partial: Partial<WizardContactInfo>) => {
-    setState((s) => ({ ...s, contact: { ...s.contact, ...partial } }));
+    setState((s) => {
+      const newContact = { ...s.contact, ...partial };
+      // If email changed, reset email check status so it re-validates
+      if (partial.email !== undefined && partial.email !== s.contact.email) {
+        return { ...s, contact: newContact, emailExists: null, otpVerified: false };
+      }
+      return { ...s, contact: newContact };
+    });
   }, []);
 
   const updateAccount = useCallback((partial: Partial<WizardState['account']>) => {
@@ -102,25 +109,38 @@ export function useWizardState() {
     setState((s) => ({ ...s, otpVerified: verified }));
   }, []);
 
+  const setEmailExists = useCallback((exists: boolean) => {
+    setState((s) => ({ ...s, emailExists: exists }));
+  }, []);
+
   const reset = useCallback(() => {
     localStorage.removeItem(STORAGE_KEY);
     setState(INITIAL_WIZARD_STATE);
   }, []);
 
-  // Validation
+  // Validation — step indices follow STEP_LABELS order:
+  // 0=Services, 1=Questions, 2=Uploads, 3=Contact, 4=Review, 5=Account/Login, 6=OTP, 7=Submit
   const canProceed = useCallback((): boolean => {
     switch (state.currentStep) {
       case 0: return state.selectedServices.length > 0;
-      case 1: return true; // Questions are optional per the config
+      case 1: return true; // Questions validated in GetQuotePage (needs service data)
       case 2: return true; // Uploads are optional
-      case 3: return true; // Review
-      case 4: return !!(state.contact.name && state.contact.email && state.contact.phone);
-      case 5: return !!(
-        state.account.password &&
-        state.account.password.length >= 8 &&
-        state.account.confirmPassword &&
-        state.account.password === state.account.confirmPassword
-      );
+      case 3: return !!(state.contact.name && state.contact.email && state.contact.phone);
+      case 4: return true; // Review
+      case 5: {
+        // Account or Login step - different validation based on email check
+        if (state.emailExists === true) {
+          // Existing user: login step - handled by StepLogin internally
+          return true;
+        }
+        // New user: account creation
+        return !!(
+          state.account.password &&
+          state.account.password.length >= 8 &&
+          state.account.confirmPassword &&
+          state.account.password === state.account.confirmPassword
+        );
+      }
       case 6: return state.otpVerified;
       case 7: return true;
       default: return true;
@@ -140,6 +160,7 @@ export function useWizardState() {
     updateContact,
     updateAccount,
     setOtpVerified,
+    setEmailExists,
     reset,
     canProceed,
   };

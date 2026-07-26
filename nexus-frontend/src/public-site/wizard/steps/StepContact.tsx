@@ -4,9 +4,14 @@ import type { WizardContactInfo } from '../types';
 interface StepContactProps {
   contact: WizardContactInfo;
   onUpdate: (partial: Partial<WizardContactInfo>) => void;
+  showErrors?: boolean;
 }
 
-export function StepContact({ contact, onUpdate }: StepContactProps) {
+export function StepContact({ contact, onUpdate, showErrors }: StepContactProps) {
+  const nameEmpty = showErrors && !contact.name.trim();
+  const emailEmpty = showErrors && !contact.email.trim();
+  const phoneEmpty = showErrors && !contact.phone.trim();
+
   return (
     <div className="p-6 sm:p-8">
       <h2 className="text-xl font-bold text-ink">Contact Details</h2>
@@ -27,8 +32,11 @@ export function StepContact({ contact, onUpdate }: StepContactProps) {
               value={contact.name}
               onChange={(e) => onUpdate({ name: e.target.value })}
               placeholder="Your full name"
-              className="w-full rounded-xl border border-border bg-canvas px-4 py-2.5 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+              className={`w-full rounded-xl border bg-canvas px-4 py-2.5 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 ${
+                nameEmpty ? 'border-red-300 bg-red-50' : 'border-border'
+              }`}
             />
+            {nameEmpty && <p className="mt-1 text-xs text-red-500">Name is required</p>}
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-ink">Email *</label>
@@ -37,8 +45,11 @@ export function StepContact({ contact, onUpdate }: StepContactProps) {
               value={contact.email}
               onChange={(e) => onUpdate({ email: e.target.value })}
               placeholder="you@company.com"
-              className="w-full rounded-xl border border-border bg-canvas px-4 py-2.5 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+              className={`w-full rounded-xl border bg-canvas px-4 py-2.5 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 ${
+                emailEmpty ? 'border-red-300 bg-red-50' : 'border-border'
+              }`}
             />
+            {emailEmpty && <p className="mt-1 text-xs text-red-500">Email is required</p>}
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-ink">Phone *</label>
@@ -47,8 +58,11 @@ export function StepContact({ contact, onUpdate }: StepContactProps) {
               value={contact.phone}
               onChange={(e) => onUpdate({ phone: e.target.value })}
               placeholder="+91 XXXXX XXXXX"
-              className="w-full rounded-xl border border-border bg-canvas px-4 py-2.5 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+              className={`w-full rounded-xl border bg-canvas px-4 py-2.5 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 ${
+                phoneEmpty ? 'border-red-300 bg-red-50' : 'border-border'
+              }`}
             />
+            {phoneEmpty && <p className="mt-1 text-xs text-red-500">Phone number is required</p>}
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-ink">Company</label>

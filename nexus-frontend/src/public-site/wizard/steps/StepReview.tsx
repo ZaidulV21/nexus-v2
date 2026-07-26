@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Edit2, FileText, Image, Video } from 'lucide-react';
+import { Edit2, FileText, Image, Video, User, Mail, Phone, Building, MapPin, Clock, MessageSquare } from 'lucide-react';
 import { usePublicServices } from '@/queries/usePublicServices';
 import { getQuestionsForService } from '../serviceQuestions';
 import type { WizardState } from '../types';
@@ -10,6 +10,19 @@ interface StepReviewProps {
 }
 
 const FILE_ICONS = { image: Image, video: Video, document: FileText };
+
+const PREFERRED_CONTACT_LABELS: Record<string, string> = {
+  phone: 'Phone',
+  email: 'Email',
+  whatsapp: 'WhatsApp',
+};
+
+const PREFERRED_TIME_LABELS: Record<string, string> = {
+  morning: 'Morning (9 AM - 12 PM)',
+  afternoon: 'Afternoon (12 PM - 4 PM)',
+  evening: 'Evening (4 PM - 7 PM)',
+  anytime: 'Anytime',
+};
 
 export function StepReview({ state, goTo }: StepReviewProps) {
   const { data: services = [] } = usePublicServices();
@@ -117,7 +130,7 @@ export function StepReview({ state, goTo }: StepReviewProps) {
           </motion.div>
         )}
 
-        {/* Contact */}
+        {/* Contact — all fields */}
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -125,16 +138,66 @@ export function StepReview({ state, goTo }: StepReviewProps) {
         >
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-ink">Contact Information</h3>
-            <button onClick={() => goTo(4)} className="text-xs font-medium text-accent hover:text-accent-hover flex items-center gap-1">
+            <button onClick={() => goTo(3)} className="text-xs font-medium text-accent hover:text-accent-hover flex items-center gap-1">
               <Edit2 className="h-3 w-3" /> Edit
             </button>
           </div>
-          <dl className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 text-sm">
-            <div><dt className="text-ink-faint">Name</dt><dd className="text-ink mt-0.5">{state.contact.name}</dd></div>
-            <div><dt className="text-ink-faint">Email</dt><dd className="text-ink mt-0.5">{state.contact.email}</dd></div>
-            <div><dt className="text-ink-faint">Phone</dt><dd className="text-ink mt-0.5">{state.contact.phone}</dd></div>
-            {state.contact.company && <div><dt className="text-ink-faint">Company</dt><dd className="text-ink mt-0.5">{state.contact.company}</dd></div>}
-            {state.contact.city && <div><dt className="text-ink-faint">City</dt><dd className="text-ink mt-0.5">{state.contact.city}</dd></div>}
+          <dl className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 text-sm">
+            <div className="flex items-start gap-2">
+              <User className="h-4 w-4 mt-0.5 shrink-0 text-ink-faint" />
+              <div>
+                <dt className="text-ink-faint">Full Name</dt>
+                <dd className="text-ink mt-0.5">{state.contact.name || '—'}</dd>
+              </div>
+            </div>
+            <div className="flex items-start gap-2">
+              <Mail className="h-4 w-4 mt-0.5 shrink-0 text-ink-faint" />
+              <div>
+                <dt className="text-ink-faint">Email</dt>
+                <dd className="text-ink mt-0.5">{state.contact.email || '—'}</dd>
+              </div>
+            </div>
+            <div className="flex items-start gap-2">
+              <Phone className="h-4 w-4 mt-0.5 shrink-0 text-ink-faint" />
+              <div>
+                <dt className="text-ink-faint">Phone</dt>
+                <dd className="text-ink mt-0.5">{state.contact.phone || '—'}</dd>
+              </div>
+            </div>
+            {state.contact.company && (
+              <div className="flex items-start gap-2">
+                <Building className="h-4 w-4 mt-0.5 shrink-0 text-ink-faint" />
+                <div>
+                  <dt className="text-ink-faint">Company</dt>
+                  <dd className="text-ink mt-0.5">{state.contact.company}</dd>
+                </div>
+              </div>
+            )}
+            {(state.contact.address || state.contact.city || state.contact.state || state.contact.country) && (
+              <div className="flex items-start gap-2">
+                <MapPin className="h-4 w-4 mt-0.5 shrink-0 text-ink-faint" />
+                <div>
+                  <dt className="text-ink-faint">Address</dt>
+                  <dd className="text-ink mt-0.5">
+                    {[state.contact.address, state.contact.city, state.contact.state, state.contact.country].filter(Boolean).join(', ')}
+                  </dd>
+                </div>
+              </div>
+            )}
+            <div className="flex items-start gap-2">
+              <MessageSquare className="h-4 w-4 mt-0.5 shrink-0 text-ink-faint" />
+              <div>
+                <dt className="text-ink-faint">Preferred Contact</dt>
+                <dd className="text-ink mt-0.5">{PREFERRED_CONTACT_LABELS[state.contact.preferredContact] || state.contact.preferredContact}</dd>
+              </div>
+            </div>
+            <div className="flex items-start gap-2">
+              <Clock className="h-4 w-4 mt-0.5 shrink-0 text-ink-faint" />
+              <div>
+                <dt className="text-ink-faint">Preferred Time</dt>
+                <dd className="text-ink mt-0.5">{PREFERRED_TIME_LABELS[state.contact.preferredTime] || state.contact.preferredTime}</dd>
+              </div>
+            </div>
           </dl>
         </motion.div>
       </div>

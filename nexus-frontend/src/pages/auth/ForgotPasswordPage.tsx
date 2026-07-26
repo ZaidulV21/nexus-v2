@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Mail, ArrowLeft } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
@@ -11,6 +11,10 @@ import { ApiError } from '@/lib/api';
 import { ROUTES } from '@/routes/routes';
 
 export function ForgotPasswordPage() {
+  const [searchParams] = useSearchParams();
+  const returnTo = searchParams.get('returnTo');
+  const isWizardFlow = returnTo === 'get-quote';
+
   const [email, setEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -53,14 +57,32 @@ export function ForgotPasswordPage() {
                 <p className="mt-4 text-xs text-ink-faint">
                   Didn't receive the email? Check your spam folder or try again.
                 </p>
-                <div className="mt-6">
-                  <Link
-                    to={ROUTES.login}
-                    className="inline-flex items-center gap-1.5 text-sm font-medium text-accent hover:text-accent-hover"
-                  >
-                    <ArrowLeft className="h-3.5 w-3.5" />
-                    Back to login
-                  </Link>
+                <div className="mt-6 flex flex-col items-center gap-3">
+                  {isWizardFlow ? (
+                    <Link
+                      to={`${ROUTES.public.getQuote}?returned=true`}
+                      className="inline-flex items-center gap-2 rounded-xl bg-accent px-6 py-2.5 text-sm font-semibold text-white hover:bg-accent-hover"
+                    >
+                      Back to Get a Quote
+                    </Link>
+                  ) : (
+                    <Link
+                      to={ROUTES.login}
+                      className="inline-flex items-center gap-2 rounded-xl bg-accent px-6 py-2.5 text-sm font-semibold text-white hover:bg-accent-hover"
+                    >
+                      <ArrowLeft className="h-3.5 w-3.5" />
+                      Back to login
+                    </Link>
+                  )}
+                  {isWizardFlow && (
+                    <Link
+                      to={ROUTES.login}
+                      className="inline-flex items-center gap-1.5 text-sm font-medium text-ink-muted hover:text-ink"
+                    >
+                      <ArrowLeft className="h-3.5 w-3.5" />
+                      Back to login instead
+                    </Link>
+                  )}
                 </div>
               </div>
             ) : (
@@ -88,11 +110,11 @@ export function ForgotPasswordPage() {
 
                 <div className="text-center">
                   <Link
-                    to={ROUTES.login}
+                    to={isWizardFlow ? `${ROUTES.public.getQuote}?returned=true` : ROUTES.login}
                     className="inline-flex items-center gap-1.5 text-sm font-medium text-ink-muted hover:text-ink"
                   >
                     <ArrowLeft className="h-3.5 w-3.5" />
-                    Back to login
+                    {isWizardFlow ? 'Back to Quote Wizard' : 'Back to login'}
                   </Link>
                 </div>
               </form>

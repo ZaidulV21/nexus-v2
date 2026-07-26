@@ -1,6 +1,7 @@
 import bcrypt from 'bcrypt';
 import { randomInt } from 'crypto';
 import { otpRepository } from './otp.repository';
+import { authRepository } from '../auth/auth.repository';
 import { emailService } from '../email/email.service';
 import { companyService } from '../company/company.service';
 import { env } from '../../config/env';
@@ -126,6 +127,12 @@ export const otpService = {
     if (!record || !record.verifiedAt) return false;
     if (new Date() > record.expiresAt) return false;
     return true;
+  },
+
+  async checkEmail(email: string): Promise<{ exists: boolean }> {
+    const normalizedEmail = normalizeEmail(email);
+    const existingClient = await authRepository.findClientByEmail(normalizedEmail);
+    return { exists: !!existingClient };
   },
 
   async cleanupExpired() {

@@ -21,20 +21,6 @@ export function StepOtp({ email, isVerified, onVerify }: StepOtpProps) {
   const [otpSent, setOtpSent] = useState(false);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
-  // Send OTP on mount
-  useEffect(() => {
-    if (!otpSent && email) {
-      handleSendOtp();
-    }
-  }, []);
-
-  // Cooldown timer
-  useEffect(() => {
-    if (cooldown <= 0) return;
-    const timer = setTimeout(() => setCooldown((c) => c - 1), 1000);
-    return () => clearTimeout(timer);
-  }, [cooldown]);
-
   const handleSendOtp = useCallback(async () => {
     if (!email) return;
     setIsSending(true);
@@ -49,6 +35,20 @@ export function StepOtp({ email, isVerified, onVerify }: StepOtpProps) {
       setIsSending(false);
     }
   }, [email]);
+
+  // Send OTP on mount
+  useEffect(() => {
+    if (!otpSent && email) {
+      handleSendOtp();
+    }
+  }, [otpSent, email, handleSendOtp]);
+
+  // Cooldown timer
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = setTimeout(() => setCooldown((c) => c - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [cooldown]);
 
   const handleVerify = useCallback(async () => {
     const otpString = otp.join('');

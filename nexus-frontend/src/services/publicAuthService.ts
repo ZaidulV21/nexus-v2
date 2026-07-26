@@ -18,6 +18,10 @@ export interface ResetPasswordInput {
   newPassword: string;
 }
 
+export interface CheckEmailResult {
+  exists: boolean;
+}
+
 export const publicAuthService = {
   sendOtp: (input: SendOtpInput) => api.post<{ success: boolean }>('/public/auth/send-otp', input),
 
@@ -26,4 +30,6 @@ export const publicAuthService = {
   forgotPassword: (input: ForgotPasswordInput) => api.post<{ success: boolean }>('/auth/forgot-password', input),
 
   resetPassword: (input: ResetPasswordInput) => api.post<{ success: boolean }>('/auth/reset-password', input),
+
+  checkEmail: (email: string) => api.post<CheckEmailResult>('/public/auth/check-email', { email }),
 };

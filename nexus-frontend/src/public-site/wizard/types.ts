@@ -70,6 +70,8 @@ export interface WizardState {
   account: WizardAccountInfo;
   /** Whether OTP has been verified */
   otpVerified: boolean;
+  /** null = not checked yet, true = email exists (existing user), false = new user */
+  emailExists: boolean | null;
 }
 
 export const INITIAL_WIZARD_STATE: WizardState = {
@@ -94,4 +96,5 @@ export const INITIAL_WIZARD_STATE: WizardState = {
     confirmPassword: '',
   },
   otpVerified: false,
+  emailExists: null,
 };

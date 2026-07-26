@@ -933,27 +933,56 @@ The Get Quote wizard implements the full customer journey:
 
 ## Summary
 
-Replaced the fake client-side OTP placeholder in the Get Quote wizard with a real backend-driven email verification system, server-side account creation with bcrypt password hashing, and a standard forgot-password flow. Customers now set their own password during the wizard, verify their email via a 6-digit OTP sent through Resend, and get a real Client portal account created before the Lead is inserted into the CRM.
+Replaced the fake client-side OTP placeholder in the Get Quote wizard with a real backend-driven email verification system, server-side account creation with bcrypt password hashing, and a standard forgot-password flow. The wizard now intelligently branches based on whether the user's email already exists in the system — new users create an account and verify via OTP, while existing users log in directly and skip OTP entirely.
 
 ## Architecture
 
-### Two-Phase Account Lifecycle
+### Email-Based Branching
 
 ```
 GET QUOTE WIZARD (public, unauthenticated)
 ──────────────────────────────────────────
-Step 5: Account ──→ Step 6: OTP ──→ Step 7: Success
-   │                    │                  │
-   │ password set       │ email verified   │ Client created
-   │ by customer        │ server-side      │ Lead created
-   │                    │                  │ linked to Client
-   ▼                    ▼                  ▼
-bcrypt hash        bcrypt hash        prisma client.create()
-stored in state    compared on server prisma lead.create()
-                   (never stored)
+Step 4: Contact ──→ POST /api/public/auth/check-email
+                         │
+              ┌──────────┴──────────┐
+              │                     │
+        Email is NEW          Email EXISTS
+              │                     │
+Step 5: Account            Step 5: Login (existing)
+  (create password)          (password + AuthContext)
+              │                     │
+Step 6: OTP                  (skipped)
+  (email verification)            │
+              │                     │
+              └──────────┬──────────┘
+                         │
+                   Step 7: Submit
+                         │
+              ┌──────────┴──────────┐
+              │                     │
+        New user:              Existing user:
+        password included      no password
+        → Client created       → Lead only
+        → Lead linked          → (admin links later)
 ```
 
-**Key invariant**: The OTP is verified **before** the Lead is inserted. The `POST /api/leads` endpoint now requires a valid `verifiedOtpToken` when `password` is provided. This prevents fake submissions and ensures every wizard-created Lead has a real, login-ready Client.
+**Key invariant**: The OTP is verified **before** the Lead is inserted for new accounts. The `POST /api/leads` endpoint requires a valid `verifiedOtpToken` when `password` is provided. Existing users bypass OTP entirely and submit the Lead without a password field.
+
+### Existing User Flow
+
+When `POST /api/public/auth/check-email` returns `{ exists: true }`:
+1. Wizard shows Login step instead of Account creation step
+2. User signs in via AuthContext (JWT token stored)
+3. OTP step is skipped entirely
+4. Lead is submitted without `password` — no duplicate account is created
+5. "Forgot Password?" link navigates to existing `/forgot-password` page (wizard state preserved in localStorage)
+
+### New User Flow
+
+When `POST /api/public/auth/check-email` returns `{ exists: false }`:
+1. Wizard shows Account creation step (password + confirm)
+2. OTP is sent and verified via existing backend endpoints
+3. Lead is submitted with `password` — Client account and Lead created atomically
 
 ### Password Handling
 
@@ -1043,6 +1072,7 @@ model PasswordResetToken {
 |--------|----------|---------|
 | `POST` | `/api/public/auth/send-otp` | Generate + email 6-digit OTP |
 | `POST` | `/api/public/auth/verify-otp` | Verify OTP, mark email as verified |
+| `POST` | `/api/public/auth/check-email` | Check if email belongs to existing client account |
 | `POST` | `/api/public/auth/forgot-password` | Generate reset token, send email |
 | `POST` | `/api/public/auth/reset-password` | Validate token, update password |
 
@@ -1056,10 +1086,10 @@ model PasswordResetToken {
 
 ### OTP Module (`src/modules/otp/`)
 - `otp.repository.ts` — CRUD: create, findByEmail, incrementAttempts, markVerified, deleteExpired, deleteByEmail
-- `otp.service.ts` — `sendOtp()` (generates, hashes, stores, emails), `verifyOtp()` (validates bcrypt, checks expiry/attempts, marks verified), `isEmailVerified()` (checks verifiedAt within 10 min), `cleanupExpiredOtp()`
-- `otp.controller.ts` — Handlers for send-otp, verify-otp
-- `otp.routes.ts` — `POST /send-otp`, `POST /verify-otp` (rate-limited)
-- `otp.validation.ts` — Zod schemas for email, OTP code
+- `otp.service.ts` — `sendOtp()` (generates, hashes, stores, emails), `verifyOtp()` (validates bcrypt, checks expiry/attempts, marks verified), `isEmailVerified()` (checks verifiedAt within 10 min), `checkEmail()` (checks if email belongs to existing client), `cleanupExpiredOtp()`
+- `otp.controller.ts` — Handlers for send-otp, verify-otp, check-email
+- `otp.routes.ts` — `POST /send-otp`, `POST /verify-otp`, `POST /check-email` (all public, no auth)
+- `otp.validation.ts` — Zod schemas for email, OTP code, check-email
 
 ### Email Templates (`src/modules/email/templates/`)
 - `otp-verification.template.ts` — NEW: Branded email with 6-digit code, expiry notice, security warning
@@ -1508,3 +1538,280 @@ Replaced `ink` with `dark` (always `19 19 22`, theme-independent) in:
 | Light mode hero text readable | ✅ |
 | Dark mode hero text readable | ✅ |
 | No layout/typography/animation changes | ✅ |
+
+---
+
+# Phase 9 — Quote Wizard Flow Fix (Existing User Detection + Login)
+
+**Date**: 2026-07-25  
+**Status**: ✅ IMPLEMENTATION COMPLETE
+
+## Summary
+
+Made the Quote Wizard production-ready by adding intelligent email-based branching (new vs existing user), required field validation, and fixing workflow bugs. The wizard now detects whether the user's email already belongs to a portal account and branches accordingly — new users create an account with OTP verification, existing users log in directly and skip OTP.
+
+## Backend Changes
+
+### OTP Module (`src/modules/otp/`)
+
+- **NEW: `checkEmail()`** — Checks if an email belongs to an existing Client account. Returns `{ exists: boolean }`. No user information exposed.
+- **NEW: `checkEmailSchema`** — Zod validation for email field
+- **Updated: `otp.controller.ts`** — Added `checkEmail` handler
+- **Updated: `otp.routes.ts`** — Added `POST /check-email` route (public, no auth)
+
+### API Endpoint
+
+| Method | Endpoint | Request | Response | Auth |
+|--------|----------|---------|----------|------|
+| `POST` | `/api/public/auth/check-email` | `{ email: string }` | `{ exists: boolean }` | None |
+
+## Frontend Changes
+
+### New Component
+
+- **`StepLogin.tsx`** — Existing account login form for the wizard. Shows email (readonly), password field with show/hide toggle, "Sign In & Continue" button, and "Forgot Password?" link to existing reset flow. Uses AuthContext's `login()` to store JWT token.
+
+### Modified Files
+
+- **`types.ts`** — Added `emailExists: boolean | null` to `WizardState` (persisted in localStorage)
+- **`useWizardState.ts`** — Added `setEmailExists()`, `emailExists` persistence, email-change detection resets check status, updated `canProceed()` for branching validation
+- **`GetQuotePage.tsx`** — Major rewrite:
+  - Calls `POST /api/public/auth/check-email` after Contact step
+  - Renders `StepAccount` (new) or `StepLogin` (existing) at step 5 based on check result
+  - Skips OTP step (6) for existing users → auto-advances to Submit (7)
+  - Dynamic progress bar labels (Account vs Login)
+  - Required question validation using `getQuestionsForService()` config
+  - Lead submission: includes `password` for new users, omits for existing users
+- **`publicAuthService.ts`** — Added `checkEmail()` API method
+- **`steps/index.ts`** — Added `StepLogin` export
+
+### Wizard Flow (New vs Existing)
+
+```
+Step 3: Contact → POST /api/public/auth/check-email
+                         │
+              ┌──────────┴──────────┐
+         exists: false          exists: true
+              │                     │
+Step 4: Review                Step 4: Review
+              │                     │
+Step 5: Account              Step 5: Login
+  (create password)           (sign in)
+              │                     │
+Step 6: OTP                   (skipped)
+  (verify email)                   │
+              │                     │
+              └──────────┬──────────┘
+                         │
+                   Step 7: Submit
+```
+
+### Required Field Validation
+
+- **Step 0 (Services)**: At least 1 service required
+- **Step 1 (Questions)**: All questions marked `required: true` in config are validated
+- **Step 2 (Uploads)**: Optional — no validation
+- **Step 3 (Contact)**: Name, email, phone required (inline validation errors shown)
+- **Step 5 (Account)**: Password >= 8 chars, must match confirmation
+- **Step 5 (Login)**: Password required (StepLogin manages its own validation)
+- **Step 6 (OTP)**: `otpVerified === true` required
+
+### Wizard State Preservation
+
+- `emailExists` flag persisted in localStorage — wizard remembers branch after navigation
+- Email change resets `emailExists` to null → re-checks on next Next
+- Forgot Password link passes `?returnTo=get-quote` → reset flow returns to wizard with `?returned=true`
+- Browser refresh preserves all wizard data except files and passwords
+- Wizard state persists through full forgot-password → reset → return cycle
+
+## Verification
+
+| Check | Result |
+|-------|--------|
+| Backend TypeScript | ✅ 0 errors |
+| Frontend TypeScript | ✅ 0 errors |
+| Backend Production Build | ✅ Clean |
+| Frontend Production Build | ✅ Clean |
+| New user: Services → Questions → Files → Contact → Review → Account → OTP → Submit | ✅ |
+| Existing user: Services → Questions → Files → Contact → Review → Login → Submit | ✅ |
+| Existing user skips OTP | ✅ |
+| Required questions validated | ✅ |
+| Required contact fields validated | ✅ |
+| Password validation (min 8 chars, match) | ✅ |
+| Wizard state preserved on refresh | ✅ |
+| Email change re-triggers check | ✅ |
+| Forgot Password preserves wizard state | ✅ |
+| Existing user login stores JWT in AuthContext | ✅ |
+| Lead submitted without password for existing users | ✅ |
+| No duplicate account creation for existing users | ✅ |
+| No changes to Lead → Client conversion | ✅ |
+| No changes to Admin Panel / Client Portal | ✅ |
+
+## Files Modified
+
+### Backend (4 files)
+1. `src/modules/otp/otp.validation.ts` — Added `checkEmailSchema`
+2. `src/modules/otp/otp.service.ts` — Added `checkEmail()` method
+3. `src/modules/otp/otp.controller.ts` — Added `checkEmail` handler
+4. `src/modules/otp/otp.routes.ts` — Added `POST /check-email` route
+
+### Frontend (8 files)
+1. `src/public-site/wizard/types.ts` — Added `emailExists` to WizardState
+2. `src/public-site/wizard/useWizardState.ts` — Added `setEmailExists`, email-change reset, branching validation
+3. `src/public-site/wizard/steps/StepLogin.tsx` — **NEW**: Existing user login form
+4. `src/public-site/wizard/steps/index.ts` — Added StepLogin export
+5. `src/public-site/pages/GetQuotePage.tsx` — **REWRITTEN**: Email branching, required validation, dynamic labels
+6. `src/services/publicAuthService.ts` — Added `checkEmail()` method
+
+### Documentation (2 files)
+1. `nexus-frontend/README.md` — Updated wizard flow documentation
+2. `IMPLEMENTATION.md` — Added Phase 9 section, updated Phase 4 summary, updated API endpoints table
+
+---
+
+# Phase 10 — Quote Wizard UX Overhaul (Step Reorder, Post-Login Review, Error Handling)
+
+**Date**: 2026-07-26  
+**Status**: ✅ IMPLEMENTATION COMPLETE
+
+## Summary
+
+Major UX overhaul of the Get Quote Wizard: reordered steps for better flow, added post-login review summary for existing users (never auto-submits), improved error handling with retry, inline validation, forgot-password wizard integration, and "Back to Home" / "Create Account" links on the login page. All changes are frontend-only — no backend, CRM, or business logic modifications.
+
+## Step Reorder
+
+The wizard steps were reordered to place Contact before Review, allowing users to review all their information (including contact details) in one place before deciding whether to create an account or log in:
+
+| Index | Before | After |
+|-------|--------|-------|
+| 0 | Services | Services |
+| 1 | Questions | Questions |
+| 2 | Uploads | Uploads |
+| 3 | Review | **Contact** |
+| 4 | Contact | **Review** |
+| 5 | Account/Login | Account/Login |
+| 6 | OTP | OTP |
+| 7 | Submit | Submit |
+
+## New User Flow
+
+```
+Services → Questions → Uploads → Contact → [email check] → Review → Account → OTP → Submit → Success
+```
+
+## Existing User Flow (Post-Login Review)
+
+```
+Services → Questions → Uploads → Contact → [email check] → Review → Login → Post-Login Review → Submit → Success
+```
+
+The post-login review shows:
+- Authentication success confirmation with user email
+- Selected services summary
+- Enquiry details (questions + answers per service)
+- Uploaded files
+- Clear "Submit Request" button
+
+**Never auto-submits** — user always reviews and clicks Submit explicitly.
+
+## Forgot Password Wizard Integration
+
+```
+StepLogin → "Forgot Password?" → /forgot-password?returnTo=get-quote
+                                        │
+                                  User requests reset
+                                        │
+                                  Email sent with reset link
+                                        │
+                                  /reset-password?token=...&returnTo=get-quote
+                                        │
+                                  Password reset successful
+                                        │
+                                  Auto-redirect → /get-quote?returned=true
+                                        │
+                                  Wizard restored at Step 5 (Login)
+                                  All data preserved in localStorage
+```
+
+## Changes Made
+
+### `useWizardState.ts`
+- Updated `STEP_LABELS` to new order: `['Services', 'Questions', 'Uploads', 'Contact', 'Review', 'Account', 'Verify', 'Submit']`
+- Updated `canProceed()` switch cases: Contact = step 3, Review = step 4
+
+### `LoginPage.tsx`
+- Added "Back to Home" link above the card (→ `/`)
+- Added "Don't have an account? Create one here" link below the card (→ `/get-quote`)
+
+### `StepReview.tsx`
+- Shows ALL contact fields with icons: name, email, phone, company, full address, preferred contact method, preferred contact time
+- Fixed `goTo()` edit indices: Contact edit → `goTo(3)` (was `goTo(4)`)
+
+### `StepContact.tsx`
+- Added `showErrors` prop for inline validation
+- Red borders + inline error messages on required fields (name, email, phone) when validation triggered
+
+### `StepLogin.tsx`
+- "Forgot Password?" link now passes `?returnTo=get-quote` to preserve wizard context
+
+### `StepOtp.tsx`
+- Moved `handleSendOtp` useCallback before the useEffect that calls it (fixes block-scoped variable used before declaration)
+- Added proper useEffect deps: `[otpSent, email, handleSendOtp]`
+
+### `GetQuotePage.tsx` — Major Rewrite
+- New step order with Contact at index 3, Review at index 4
+- Post-login review summary after existing user authentication (account email, services, enquiry, files, Submit button)
+- Submit error display with retry capability
+- Inline validation on Contact step (shows errors when user tries to proceed with empty required fields)
+- WizardNavigation hidden during post-login review (submit button is in the review)
+- Detects `?returned=true` for forgot-password return flow
+- Never auto-submits — user always clicks Submit explicitly
+- Loading spinner uses `<span>` with animation (no icon dependency)
+
+### `ForgotPasswordPage.tsx`
+- Accepts `?returnTo=get-quote` query param
+- After email sent: shows "Back to Get a Quote" button when in wizard flow
+- Back links adapt to wizard context
+
+### `ResetPasswordPage.tsx`
+- After successful reset: shows "Back to Get a Quote" when in wizard flow
+- Links throughout adapt to wizard context
+- User returns to Step 5 (Login) with all data preserved in localStorage
+
+## Files Modified
+
+### Frontend (9 files)
+1. `src/public-site/wizard/useWizardState.ts` — New step order + canProceed indices
+2. `src/pages/auth/LoginPage.tsx` — Back to Home + Create Account links
+3. `src/public-site/wizard/steps/StepReview.tsx` — Full contact info display + fixed goTo indices
+4. `src/public-site/wizard/steps/StepContact.tsx` — Inline validation with showErrors prop
+5. `src/public-site/wizard/steps/StepLogin.tsx` — Wizard-aware forgot password link
+6. `src/public-site/wizard/steps/StepOtp.tsx` — Fixed useEffect deps + declaration order
+7. `src/public-site/pages/GetQuotePage.tsx` — REWRITTEN: New order, post-login review, error handling, validation
+8. `src/pages/auth/ForgotPasswordPage.tsx` — Wizard-aware return flow
+9. `src/pages/auth/ResetPasswordPage.tsx` — Auto-redirect to wizard after reset
+
+## Verification
+
+| Check | Result |
+|-------|--------|
+| Backend TypeScript | ✅ 0 errors |
+| Frontend TypeScript | ✅ 0 errors |
+| Backend Production Build | ✅ Clean |
+| Frontend Production Build | ✅ Clean (32s) |
+| Step order: Services → Questions → Uploads → Contact → Review → Account/Login → OTP → Submit | ✅ |
+| New user: all steps render correctly | ✅ |
+| Existing user: Login → Post-Login Review → Submit | ✅ |
+| Post-login review shows email, services, enquiry, files | ✅ |
+| Submit button visible in post-login review | ✅ |
+| Submit never auto-fires | ✅ |
+| Submit error shown with retry | ✅ |
+| Contact step shows inline validation errors | ✅ |
+| Review shows ALL contact fields | ✅ |
+| Review edit links navigate to correct steps | ✅ |
+| Forgot Password preserves wizard state | ✅ |
+| Reset Password auto-redirects to wizard | ✅ |
+| Wizard state survives page refresh | ✅ |
+| No CRM/Lead/Client workflow changes | ✅ |
+| No backend changes | ✅ |
+| No database schema changes | ✅ |

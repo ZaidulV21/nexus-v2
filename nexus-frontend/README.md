@@ -39,7 +39,7 @@ All business modules from the PRD are implemented and wired to the backend API:
 - **Projects** (`/projects`) — Featured project portfolio
 - **About** (`/about`) — Company story, values, stats
 - **Contact** (`/contact`) — Contact form with business details
-- **Get Quote** (`/get-quote`) — 8-step config-driven wizard with dynamic question engine, file uploads, OTP verification (server-side), account creation with password, and lead submission via backend API
+- **Get Quote** (`/get-quote`) — 8-step config-driven wizard with dynamic question engine, file uploads, OTP verification (server-side), account creation with password, existing user detection and login branching, post-login review summary, and lead submission via backend API
 
 ## How to run
 
@@ -94,9 +94,10 @@ src/
         StepServices.tsx  - Multi-select service grid (API data, animated checkboxes)
         StepQuestions.tsx - Per-service dynamic questions via QuestionRenderer
         StepUploads.tsx   - Per-service file upload zones with previews
-        StepReview.tsx    - Full review of all wizard sections with edit links
-        StepContact.tsx   - Contact form (name, email, phone, address, preferences)
+        StepContact.tsx   - Contact form with inline validation (name, email, phone required)
+        StepReview.tsx    - Full review of all wizard sections with edit links + icons
         StepAccount.tsx   - Password creation form (email readonly, password + confirm)
+        StepLogin.tsx     - Existing user login form with error display and retry
         StepOtp.tsx       - OTP verification screen (real API, 6-digit boxes, countdown)
         StepSubmit.tsx    - Loading spinner during submission
 ```
@@ -155,24 +156,37 @@ The Get Quote page (`/get-quote`) is an 8-step wizard with a **dynamic question 
 
 ### Wizard Flow
 
+The wizard intelligently branches based on whether the user's email already exists in the system:
+
+**New User Flow:**
 1. **Step 0 — Services**: Multi-select grid from `usePublicServices()` API
-2. **Step 1 — Questions**: Per-service dynamic questions rendered by `QuestionRenderer` based on `serviceQuestions.ts` config
-3. **Step 2 — Files**: Per-service file upload zones with previews
-4. **Step 3 — Review**: Full summary of services, answers, files, contact with edit links per section
-5. **Step 4 — Contact**: Contact form (name, email, phone, address, preferences)
+2. **Step 1 — Questions**: Per-service dynamic questions rendered by `QuestionRenderer` based on `serviceQuestions.ts` config. Required fields validated before proceeding.
+3. **Step 2 — Files**: Per-service file upload zones with previews (optional)
+4. **Step 3 — Contact**: Contact form (name, email, phone, address, preferences) with inline validation. On Next, backend `check-email` API is called to detect existing accounts.
+5. **Step 4 — Review**: Full summary of services, answers, files, contact with edit links per section
 6. **Step 5 — Account**: Password creation form (email readonly, password + confirm with validation)
 7. **Step 6 — OTP**: Email verification via 6-digit code (real API, countdown timer, resend)
 8. **Step 7 — Submit**: Loading state → submission → success screen with reference number
 
+**Existing User Flow:**
+1. **Steps 0–3**: Same as new user
+2. **Step 4 — Review**: Full summary with all details
+3. **Step 5 — Login**: Existing account detected → sign in with password. Post-login shows review summary with account email, selected services, enquiry details, and visible "Submit Request" button. "Forgot Password?" links to the reset flow (wizard state preserved in localStorage).
+4. **Step 6 — Skipped**: Existing users bypass OTP verification
+5. **Step 7 — Submit**: Lead submitted without password (account already exists). Never auto-submits — user always clicks Submit explicitly.
+
 ### Key Design Decisions
 
 - **Config-driven**: Adding a new service = adding an entry to `SERVICE_QUESTION_CONFIGS` array in `serviceQuestions.ts`. No wizard logic changes needed.
-- **localStorage persistence**: Wizard state survives page refreshes (files excluded). Users can close and return.
-- **Step validation**: Each step has a `canProceed` check. Back/Next buttons are disabled when invalid.
-- **Progress tracking**: `completedSteps` Set tracks which sections have data, shown as checkmarks in the progress bar.
-- **Real OTP verification**: 6-digit code sent via backend API, verified server-side with bcrypt, 60s resend countdown, auto-focus/auto-advance input boxes.
-- **Account creation**: Customer sets password during wizard → bcrypt-hashed → stored on Client account. Lead created linked to this Client.
-- **Lead submission**: Maps wizard state to `CreateLeadInput` (`contactName`, `phone`, `email`, `services[]`, `password`) and submits via `useCreateLead()` mutation.
+- **localStorage persistence**: Wizard state survives page refreshes (files excluded). Users can close and return. `emailExists` flag is persisted so the wizard remembers the branch after navigation.
+- **Email-based branching**: After the Contact step, `POST /api/public/check-email` determines if the email belongs to an existing client. The wizard dynamically shows Account creation or Login form.
+- **Post-login review**: After existing user login, a summary screen shows account email, services, enquiry details, and a clear "Submit Request" button — never auto-submits.
+- **Step validation**: Each step has a `canProceed` check. Required questions (marked with `required: true` in config) are validated before the Next button enables. Contact step shows inline validation errors.
+- **Progress tracking**: `completedSteps` Set tracks which sections have data, shown as checkmarks in the progress bar. Step labels update dynamically (Account vs Login vs Review & Submit).
+- **Real OTP verification**: 6-digit code sent via backend API, verified server-side with bcrypt, 60s resend countdown, auto-focus/auto-advance input boxes. Only for new accounts.
+- **Existing user login**: Uses AuthContext's `login()` to store JWT token. Lead is submitted without `password` field, so no duplicate account is created.
+- **Lead submission**: Maps wizard state to `CreateLeadInput`. For new users includes `password` (creates Client account). For existing users omits `password` (Lead only).
+- **Forgot password integration**: StepLogin links to `/forgot-password?return-to=get-quote`. After password reset, user is redirected back to `/get-quote?returned=true` and can log in with the new password. Wizard state is preserved throughout.
 
 ### How to Add Questions for a New Service
 
@@ -228,6 +242,8 @@ If no config entry exists for a service, a generic "Describe your requirements" 
 - **No hardcoded services**: All service data flows from backend API through React Query. Admin CRUD automatically syncs to the public website.
 - **No hardcoded company info**: Company name, logo, address, phone, email, and social links are all fetched from the shared Company Settings API. Fallbacks ensure the site never shows blanks.
 - **Config-driven wizard**: Service-specific quote questions are defined in config arrays, not hardcoded wizard logic. Adding a service's questions = adding one config entry.
+- **Post-login review**: After existing user authentication, a summary screen shows exactly what will be submitted with a visible Submit button — never auto-submits.
+- **Forgot password from wizard**: Password reset returns the user to the wizard with all data preserved. The flow adapts based on `?returnTo=get-quote` URL parameter.
 
 ## Tech Stack
 

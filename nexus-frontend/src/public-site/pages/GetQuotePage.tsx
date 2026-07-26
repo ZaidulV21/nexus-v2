@@ -1,7 +1,7 @@
-import { useCallback, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useCallback, useMemo, useState, useEffect } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowRight, CheckCircle } from 'lucide-react';
+import { ArrowRight, CheckCircle, Send, User, Briefcase, FileText, AlertCircle } from 'lucide-react';
 import { useWizardState } from '../wizard/useWizardState';
 import { WizardProgress } from '../wizard/WizardProgress';
 import { WizardNavigation } from '../wizard/WizardNavigation';
@@ -12,15 +12,21 @@ import {
   StepReview,
   StepContact,
   StepAccount,
+  StepLogin,
   StepOtp,
   StepSubmit,
 } from '../wizard/steps';
 import { useCreateLead } from '@/queries/useLeads';
+import { usePublicServices } from '@/queries/usePublicServices';
+import { getQuestionsForService } from '../wizard/serviceQuestions';
+import { publicAuthService } from '@/services/publicAuthService';
+import { useAuth } from '@/app/AuthContext';
 import type { CreateLeadInput } from '@/services/leadService';
 
-const STEP_LABELS = ['Services', 'Details', 'Files', 'Review', 'Contact', 'Account', 'Verify', 'Submit'];
+// Step order: 0=Services, 1=Questions, 2=Uploads, 3=Contact, 4=Review, 5=Account/Login, 6=OTP, 7=Submit
+const BASE_STEP_LABELS = ['Services', 'Details', 'Files', 'Contact', 'Review', 'Account', 'Verify', 'Submit'];
 
-function buildLeadInput(wizard: ReturnType<typeof useWizardState>): CreateLeadInput {
+function buildLeadInput(wizard: ReturnType<typeof useWizardState>, isLoggedIn: boolean): CreateLeadInput {
   const { selectedServices, answers, contact, account } = wizard.state;
 
   return {
@@ -33,65 +39,186 @@ function buildLeadInput(wizard: ReturnType<typeof useWizardState>): CreateLeadIn
       serviceId,
       questionnaireAnswers: answers[serviceId] || {},
     })),
-    password: account.password || undefined,
+    password: isLoggedIn ? undefined : (account.password || undefined),
   };
+}
+
+function validateRequiredQuestions(
+  selectedServices: string[],
+  answers: Record<string, Record<string, string | string[]>>,
+  services: Array<{ id: string; slug: string }>
+): boolean {
+  for (const serviceId of selectedServices) {
+    const service = services.find((s) => s.id === serviceId);
+    if (!service) continue;
+    const config = getQuestionsForService(service.slug);
+    if (!config) continue;
+    const serviceAnswers = answers[serviceId] || {};
+    for (const q of config.questions) {
+      if (q.required) {
+        const val = serviceAnswers[q.id];
+        if (val === undefined || val === '' || (Array.isArray(val) && val.length === 0)) {
+          return false;
+        }
+      }
+    }
+  }
+  return true;
 }
 
 export function GetQuotePage() {
   const wizard = useWizardState();
   const { state } = wizard;
+  const { login: authLogin } = useAuth();
+  const { data: services = [] } = usePublicServices();
+  const [searchParams] = useSearchParams();
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [isCheckingEmail, setIsCheckingEmail] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [loginSuccess, setLoginSuccess] = useState(false);
+  const [showContactErrors, setShowContactErrors] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const createLeadMutation = useCreateLead();
 
+  // Check if we returned from forgot-password reset
+  const returnedFromReset = searchParams.get('returned') === 'true';
+
+  useEffect(() => {
+    if (returnedFromReset && state.currentStep === 5 && state.emailExists === true) {
+      // User returned from password reset — show login step with preserved data
+      // The wizard state is already restored from localStorage
+    }
+  }, [returnedFromReset, state.currentStep, state.emailExists]);
+
+  // Dynamic step labels based on email check result
+  const stepLabels = useMemo(() => {
+    const labels = [...BASE_STEP_LABELS];
+    if (state.emailExists === true && loginSuccess) {
+      labels[5] = 'Review & Submit';
+    } else if (state.emailExists === true) {
+      labels[5] = 'Login';
+    }
+    return labels;
+  }, [state.emailExists, loginSuccess]);
+
+  // Completed steps
   const completedSteps = useMemo(() => {
     const steps = new Set<number>();
     if (state.selectedServices.length > 0) steps.add(0);
     if (Object.keys(state.answers).length > 0) steps.add(1);
     if (state.files.length > 0) steps.add(2);
-    if (state.contact.name && state.contact.email && state.contact.phone) steps.add(4);
-    if (state.account.password && state.account.password.length >= 8 && state.account.password === state.account.confirmPassword) steps.add(5);
-    if (state.otpVerified) steps.add(6);
+    if (state.contact.name.trim() && state.contact.email.trim() && state.contact.phone.trim()) steps.add(3);
+    if (state.emailExists === false) {
+      if (state.account.password && state.account.password.length >= 8 && state.account.password === state.account.confirmPassword) steps.add(5);
+      if (state.otpVerified) steps.add(6);
+    }
+    if (state.emailExists === true && loginSuccess) {
+      steps.add(5); // Login complete
+    }
     return steps;
-  }, [state]);
+  }, [state, loginSuccess]);
 
+  // Can proceed current step
   const canProceedCurrentStep = useMemo(() => {
     switch (state.currentStep) {
       case 0: return state.selectedServices.length > 0;
-      case 1: return true;
+      case 1: return validateRequiredQuestions(state.selectedServices, state.answers, services);
       case 2: return true;
-      case 3: return true;
-      case 4: return state.contact.name.trim() !== '' && state.contact.email.trim() !== '' && state.contact.phone.trim() !== '';
-      case 5: return !!(
-        state.account.password &&
-        state.account.password.length >= 8 &&
-        state.account.confirmPassword &&
-        state.account.password === state.account.confirmPassword
-      );
+      case 3: return state.contact.name.trim() !== '' && state.contact.email.trim() !== '' && state.contact.phone.trim() !== '';
+      case 4: return true;
+      case 5: {
+        if (loginSuccess) return true; // Post-login review — Submit button in review handles it
+        if (state.emailExists === true) return true; // Login step — handled internally
+        return !!(
+          state.account.password &&
+          state.account.password.length >= 8 &&
+          state.account.confirmPassword &&
+          state.account.password === state.account.confirmPassword
+        );
+      }
       case 6: return state.otpVerified;
       default: return true;
     }
-  }, [state]);
+  }, [state, services, loginSuccess]);
 
-  const handleNext = useCallback(() => {
-    if (canProceedCurrentStep) wizard.next();
-  }, [canProceedCurrentStep, wizard]);
+  // Reset showContactErrors when leaving contact step
+  useEffect(() => {
+    if (state.currentStep !== 3) {
+      setShowContactErrors(false);
+    }
+  }, [state.currentStep]);
+
+  const handleNext = useCallback(async () => {
+    if (!canProceedCurrentStep) {
+      // Show inline validation on Contact step
+      if (state.currentStep === 3) {
+        setShowContactErrors(true);
+      }
+      return;
+    }
+
+    // After Contact step (3): check email
+    if (state.currentStep === 3) {
+      if (state.emailExists !== null) {
+        wizard.next();
+        return;
+      }
+
+      setIsCheckingEmail(true);
+      try {
+        const result = await publicAuthService.checkEmail(state.contact.email);
+        wizard.setEmailExists(result.exists);
+        wizard.next();
+      } catch {
+        wizard.setEmailExists(false);
+        wizard.next();
+      } finally {
+        setIsCheckingEmail(false);
+      }
+      return;
+    }
+
+    // After Login step (5) for existing users: go to post-login review summary
+    if (state.currentStep === 5 && state.emailExists === true && !loginSuccess) {
+      // Login is handled by StepLogin — Next shouldn't advance
+      // This path shouldn't be reached because WizardNavigation is hidden during login
+      return;
+    }
+
+    // After post-login review (5 with loginSuccess): go to Submit
+    if (state.currentStep === 5 && loginSuccess) {
+      wizard.goTo(7);
+      return;
+    }
+
+    wizard.next();
+  }, [canProceedCurrentStep, wizard, state.currentStep, state.emailExists, state.contact.email, loginSuccess]);
+
+  const handleLoginSuccess = useCallback(async () => {
+    setLoginError(null);
+    setLoginSuccess(true);
+    // Don't advance — stay on step 5, show post-login review summary
+  }, []);
 
   const handleSubmit = useCallback(async () => {
-    if (!canProceedCurrentStep || isSubmitting) return;
+    if (isSubmitting) return;
     setIsSubmitting(true);
+    setSubmitError(null);
     try {
-      const input = buildLeadInput(wizard);
+      const input = buildLeadInput(wizard, state.emailExists === true);
       await createLeadMutation.mutateAsync(input);
       setIsSuccess(true);
       wizard.reset();
-    } catch (err) {
-      console.error('Lead submission failed:', err);
+    } catch (err: any) {
+      setSubmitError(err.message || 'Submission failed. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
-  }, [canProceedCurrentStep, isSubmitting, wizard, createLeadMutation]);
+  }, [isSubmitting, wizard, createLeadMutation, state.emailExists]);
 
+  // ── Success screen ──────────────────────────────────────────────
   if (isSuccess) {
     return (
       <div className="min-h-screen bg-canvas pt-24 pb-16">
@@ -131,6 +258,11 @@ export function GetQuotePage() {
     );
   }
 
+  // ── Post-login review summary (existing user, step 5 after login) ──
+  const isPostLoginReview = state.currentStep === 5 && state.emailExists === true && loginSuccess;
+
+  const selectedServiceData = services.filter((s) => state.selectedServices.includes(s.id));
+
   return (
     <div className="min-h-screen bg-canvas pt-24 pb-16">
       <div className="mx-auto max-w-4xl px-4 sm:px-6">
@@ -146,7 +278,7 @@ export function GetQuotePage() {
         </motion.div>
 
         <WizardProgress
-          steps={STEP_LABELS}
+          steps={stepLabels}
           currentStep={state.currentStep}
           completedSteps={completedSteps}
         />
@@ -154,64 +286,215 @@ export function GetQuotePage() {
         <div className="rounded-2xl border border-border bg-surface shadow-xs mt-6">
           <AnimatePresence mode="wait">
             <motion.div
-              key={state.currentStep}
+              key={isPostLoginReview ? 'post-login-review' : state.currentStep}
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
               transition={{ duration: 0.25 }}
             >
-              {state.currentStep === 0 && (
-                <StepServices
-                  selectedServices={state.selectedServices}
-                  onToggle={wizard.toggleService}
-                />
-              )}
-              {state.currentStep === 1 && (
-                <StepQuestions
-                  selectedServices={state.selectedServices}
-                  answers={state.answers}
-                  onAnswer={wizard.setAnswer}
-                />
-              )}
-              {state.currentStep === 2 && (
-                <StepUploads
-                  selectedServices={state.selectedServices}
-                  files={state.files}
-                  onAddFiles={wizard.addFiles}
-                  onRemoveFile={wizard.removeFile}
-                />
-              )}
-              {state.currentStep === 3 && (
-                <StepReview state={state} goTo={wizard.goTo} />
-              )}
-              {state.currentStep === 4 && (
-                <StepContact contact={state.contact} onUpdate={wizard.updateContact} />
-              )}
-              {state.currentStep === 5 && (
-                <StepAccount
-                  contact={state.contact}
-                  account={state.account}
-                  onUpdate={wizard.updateAccount}
-                />
-              )}
-              {state.currentStep === 6 && (
-                <StepOtp
-                  email={state.contact.email}
-                  isVerified={state.otpVerified}
-                  onVerify={() => wizard.setOtpVerified(true)}
-                />
-              )}
-              {state.currentStep === 7 && (
-                <StepSubmit isSubmitting={isSubmitting} />
+              {/* Post-login review summary */}
+              {isPostLoginReview ? (
+                <div className="p-6 sm:p-8">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-green-100">
+                      <CheckCircle className="h-5 w-5 text-green-600" />
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-bold text-ink">Authentication Successful</h2>
+                      <p className="text-sm text-ink-muted">You're signed in as <span className="font-medium text-ink">{state.contact.email}</span></p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    {/* Account info */}
+                    <div className="rounded-2xl border border-border bg-canvas p-5">
+                      <div className="flex items-center gap-2 mb-3">
+                        <User className="h-4 w-4 text-ink-faint" />
+                        <h3 className="text-sm font-semibold text-ink">Account</h3>
+                      </div>
+                      <p className="text-sm text-ink-muted">{state.contact.email}</p>
+                    </div>
+
+                    {/* Selected services */}
+                    <div className="rounded-2xl border border-border bg-canvas p-5">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Briefcase className="h-4 w-4 text-ink-faint" />
+                        <h3 className="text-sm font-semibold text-ink">Selected Services</h3>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedServiceData.map((s) => (
+                          <span key={s.id} className="rounded-full bg-accent-subtle px-3 py-1 text-xs font-medium text-accent">
+                            {s.name}
+                          </span>
+                        ))}
+                        {selectedServiceData.length === 0 && (
+                          <p className="text-sm text-ink-faint">No services selected</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Enquiry summary */}
+                    <div className="rounded-2xl border border-border bg-canvas p-5">
+                      <div className="flex items-center gap-2 mb-3">
+                        <FileText className="h-4 w-4 text-ink-faint" />
+                        <h3 className="text-sm font-semibold text-ink">Enquiry Summary</h3>
+                      </div>
+                      <dl className="space-y-2 text-sm">
+                        {selectedServiceData.map((service) => {
+                          const config = getQuestionsForService(service.slug);
+                          const serviceAnswers = state.answers[service.id] || {};
+                          const hasAnswers = Object.keys(serviceAnswers).length > 0;
+                          if (!hasAnswers || !config) return null;
+                          return (
+                            <div key={service.id}>
+                              <dt className="font-medium text-ink">{service.name}</dt>
+                              <dd className="mt-1 text-ink-muted">
+                                {config.questions.map((q) => {
+                                  const val = serviceAnswers[q.id];
+                                  if (val === undefined || val === '' || (Array.isArray(val) && val.length === 0)) return null;
+                                  const displayVal = Array.isArray(val)
+                                    ? val.map((v) => q.options?.find((o) => o.value === v)?.label || v).join(', ')
+                                    : q.options?.find((o) => o.value === val)?.label || val;
+                                  return (
+                                    <span key={q.id} className="inline-block mr-3 mb-1">
+                                      <span className="text-ink-faint">{q.label}:</span>{' '}
+                                      <span className="font-medium text-ink">{displayVal}</span>
+                                    </span>
+                                  );
+                                })}
+                              </dd>
+                            </div>
+                          );
+                        })}
+                      </dl>
+                    </div>
+
+                    {/* Files */}
+                    {state.files.length > 0 && (
+                      <div className="rounded-2xl border border-border bg-canvas p-5">
+                        <h3 className="text-sm font-semibold text-ink mb-3">Uploaded Files ({state.files.length})</h3>
+                        <div className="flex flex-wrap gap-2">
+                          {state.files.map((f) => (
+                            <span key={f.id} className="inline-flex items-center gap-1.5 rounded-lg bg-surface border border-border px-2.5 py-1 text-xs text-ink-muted">
+                              {f.file.name}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Submit error */}
+                  {submitError && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="mt-4 flex items-center gap-2 rounded-xl bg-red-50 border border-red-200 px-4 py-3"
+                    >
+                      <AlertCircle className="h-4 w-4 text-red-500 shrink-0" />
+                      <p className="text-sm text-red-600">{submitError}</p>
+                    </motion.div>
+                  )}
+
+                  {/* Submit button */}
+                  <div className="mt-6 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={handleSubmit}
+                      disabled={isSubmitting}
+                      className="flex items-center gap-2 rounded-xl bg-accent px-8 py-3 text-sm font-semibold text-white hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {isSubmitting ? (
+                        <>
+                          <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                          Submitting...
+                        </>
+                      ) : (
+                        <>
+                          Submit Request
+                          <Send className="h-4 w-4" />
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Normal wizard steps */}
+                  {state.currentStep === 0 && (
+                    <StepServices
+                      selectedServices={state.selectedServices}
+                      onToggle={wizard.toggleService}
+                    />
+                  )}
+                  {state.currentStep === 1 && (
+                    <StepQuestions
+                      selectedServices={state.selectedServices}
+                      answers={state.answers}
+                      onAnswer={wizard.setAnswer}
+                    />
+                  )}
+                  {state.currentStep === 2 && (
+                    <StepUploads
+                      selectedServices={state.selectedServices}
+                      files={state.files}
+                      onAddFiles={wizard.addFiles}
+                      onRemoveFile={wizard.removeFile}
+                    />
+                  )}
+                  {state.currentStep === 3 && (
+                    <StepContact
+                      contact={state.contact}
+                      onUpdate={wizard.updateContact}
+                      showErrors={showContactErrors}
+                    />
+                  )}
+                  {state.currentStep === 4 && (
+                    <StepReview state={state} goTo={wizard.goTo} />
+                  )}
+                  {state.currentStep === 5 && state.emailExists === false && (
+                    <StepAccount
+                      contact={state.contact}
+                      account={state.account}
+                      onUpdate={wizard.updateAccount}
+                    />
+                  )}
+                  {state.currentStep === 5 && state.emailExists === true && !loginSuccess && (
+                    <StepLogin
+                      email={state.contact.email}
+                      authLogin={authLogin}
+                      onLoginSuccess={handleLoginSuccess}
+                      loginError={loginError}
+                      onClearError={() => setLoginError(null)}
+                    />
+                  )}
+                  {state.currentStep === 5 && state.emailExists === null && (
+                    <div className="p-6 sm:p-8 text-center">
+                      <span className="inline-block h-8 w-8 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+                      <p className="mt-3 text-sm text-ink-muted">Checking your email...</p>
+                    </div>
+                  )}
+                  {state.currentStep === 6 && (
+                    <StepOtp
+                      email={state.contact.email}
+                      isVerified={state.otpVerified}
+                      onVerify={() => wizard.setOtpVerified(true)}
+                    />
+                  )}
+                  {state.currentStep === 7 && (
+                    <StepSubmit isSubmitting={isSubmitting} />
+                  )}
+                </>
               )}
             </motion.div>
           </AnimatePresence>
 
-          {state.currentStep < 7 && (
+          {/* Wizard navigation — hidden during post-login review and submit step */}
+          {!isPostLoginReview && state.currentStep < 7 && (
             <WizardNavigation
               isFirstStep={state.currentStep === 0}
               isLastStep={state.currentStep === 6}
-              canProceed={canProceedCurrentStep}
+              canProceed={canProceedCurrentStep && !isCheckingEmail}
               onBack={wizard.prev}
               onNext={handleNext}
               onSubmit={handleSubmit}

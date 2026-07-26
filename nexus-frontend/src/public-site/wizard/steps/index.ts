@@ -4,5 +4,6 @@ export { StepUploads } from './StepUploads';
 export { StepReview } from './StepReview';
 export { StepContact } from './StepContact';
 export { StepAccount } from './StepAccount';
+export { StepLogin } from './StepLogin';
 export { StepOtp } from './StepOtp';
 export { StepSubmit } from './StepSubmit';
