@@ -31,6 +31,14 @@ export const clientRepository = {
     return prisma.client.update({ where: { id }, data });
   },
 
+  updateAccountStatus(id: string, isActive: boolean) {
+    return prisma.client.update({ where: { id }, data: { isActive } });
+  },
+
+  recordLogin(id: string) {
+    return prisma.client.update({ where: { id }, data: { lastLoginAt: new Date() } });
+  },
+
   async list(pagination: PaginationParams) {
     const where: any = { deletedAt: null };
     if (pagination.search) {

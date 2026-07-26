@@ -1159,3 +1159,81 @@ Portal Dashboard → Request Service → Select Services → Answer Questions �
 | Backend unchanged | ✅ |
 | Frontend TypeScript: 0 errors | ✅ |
 | Frontend build: clean | ✅ |
+
+---
+
+# Phase 4 — Client Account Management
+
+**Date:** 2026-07-26
+**Status:** IMPLEMENTATION COMPLETE
+
+## Summary
+
+Added an Account tab to the Client Detail page for managing client portal accounts. Admins can view account information, reset passwords, send welcome emails, and activate/deactivate accounts.
+
+## Backend Changes
+
+### Prisma Schema
+- Added `lastLoginAt DateTime?` to `Client` model
+- Migration: `20260726120000_add_client_last_login_at`
+
+### Client Repository (`client.repository.ts`)
+- Added `updateAccountStatus(id, isActive)`
+- Added `recordLogin(id)`
+
+### Client Validation (`client.validation.ts`)
+- Added `toggleClientActiveSchema`
+
+### Client Service (`client.service.ts`)
+- Added `resetPassword(id, actorUserId?)` — generates token, sends reset email, records timeline + audit
+- Added `sendWelcomeEmail(id, actorUserId?)` — sends branded welcome email, records timeline
+- Added `toggleActive(id, isActive, actorUserId?)` — activates/deactivates with idempotency check
+- Added helpers: `getBranding()`, `generateResetToken()`, `hashToken()`
+
+### Client Controller (`client.controller.ts`)
+- Added `resetPassword`, `sendWelcomeEmail`, `toggleActive` handlers
+
+### Client Routes (`client.routes.ts`)
+- Added `POST /:id/reset-password` (admin, `client.edit`)
+- Added `POST /:id/send-welcome` (admin, `client.edit`)
+- Added `PATCH /:id/active` (admin, `client.edit`)
+
+### Tests (`client.service.test.ts`)
+- Added 9 new tests (225 total, 20 suites)
+
+## Frontend Changes
+
+### Types (`types/index.ts`)
+- Extended `Client` with `lastLoginAt?: string | null`
+
+### Client Service (`services/clientService.ts`)
+- Added `resetPassword(id)`, `sendWelcomeEmail(id)`, `toggleActive(id, isActive)`
+
+### Queries (`queries/useClients.ts`)
+- Added `useResetClientPassword`, `useSendClientWelcomeEmail`, `useToggleClientActive`
+
+### New Component: `ClientAccountPanel.tsx`
+- Two-column layout: Account Information + Actions
+- Login Email, Account Status, Last Login, Account Created
+- Reset Password, Send Welcome Email, Activate/Deactivate Account buttons
+- ConfirmDialog for safety, toast notifications
+
+### Client Detail (`ClientDetailPage.tsx`)
+- Added "Account" tab between Overview and Timeline
+
+## Verification
+
+| Check | Result |
+|-------|--------|
+| Account tab visible in Client Detail | ✅ |
+| Account info displays correctly | ✅ |
+| Reset Password sends email | ✅ |
+| Send Welcome Email works | ✅ |
+| Deactivate Account blocks login | ✅ |
+| Activate Account restores access | ✅ |
+| Idempotency check works | ✅ |
+| Timeline events recorded | ✅ |
+| Audit log entries created | ✅ |
+| Backend tests: 225/225 | ✅ |
+| Frontend TypeScript: 0 errors | ✅ |
+| Backend TypeScript: 0 errors | ✅ |

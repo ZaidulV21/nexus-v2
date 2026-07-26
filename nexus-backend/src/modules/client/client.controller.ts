@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { clientService } from './client.service';
-import { updateClientSchema } from './client.validation';
+import { updateClientSchema, toggleClientActiveSchema } from './client.validation';
 import { ok, created, paginated } from '../../core/utils/response';
 import { parsePagination } from '../../core/utils/pagination';
 import { ValidationError, UnauthorizedError } from '../../core/errors/AppError';
@@ -39,6 +39,35 @@ export const clientController = {
       const parsed = updateClientSchema.safeParse(req.body);
       if (!parsed.success) throw new ValidationError('Invalid payload', parsed.error.flatten());
       const client = await clientService.update(req.params.id, parsed.data, req.user?.id);
+      return ok(res, client);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async resetPassword(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await clientService.resetPassword(req.params.id, req.user?.id);
+      return ok(res, result);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async sendWelcomeEmail(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await clientService.sendWelcomeEmail(req.params.id, req.user?.id);
+      return ok(res, result);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async toggleActive(req: Request, res: Response, next: NextFunction) {
+    try {
+      const parsed = toggleClientActiveSchema.safeParse(req.body);
+      if (!parsed.success) throw new ValidationError('Invalid payload', parsed.error.flatten());
+      const client = await clientService.toggleActive(req.params.id, parsed.data.isActive, req.user?.id);
       return ok(res, client);
     } catch (err) {
       next(err);

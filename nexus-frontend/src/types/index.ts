@@ -138,6 +138,7 @@ export interface Client {
   email: string;
   isActive: boolean;
   createdAt: string;
+  lastLoginAt?: string | null;
 }
 
 export interface ProjectService {

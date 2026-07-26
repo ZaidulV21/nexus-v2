@@ -32,4 +32,7 @@ export const clientService = {
     }),
   getById: (id: string) => api.get<Client>(`/clients/${id}`),
   update: (id: string, input: UpdateClientInput) => api.patch<Client>(`/clients/${id}`, input),
+  resetPassword: (id: string) => api.post<{ success: boolean }>(`/clients/${id}/reset-password`),
+  sendWelcomeEmail: (id: string) => api.post<{ success: boolean }>(`/clients/${id}/send-welcome`),
+  toggleActive: (id: string, isActive: boolean) => api.patch<Client>(`/clients/${id}/active`, { isActive }),
 };

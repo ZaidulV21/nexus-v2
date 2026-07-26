@@ -28,3 +28,34 @@ export function useUpdateClient(clientId: string) {
     },
   });
 }
+
+export function useResetClientPassword(clientId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => clientService.resetPassword(clientId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.clients.detail(clientId) });
+    },
+  });
+}
+
+export function useSendClientWelcomeEmail(clientId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => clientService.sendWelcomeEmail(clientId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.clients.detail(clientId) });
+    },
+  });
+}
+
+export function useToggleClientActive(clientId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (isActive: boolean) => clientService.toggleActive(clientId, isActive),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.clients.detail(clientId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.clients.all });
+    },
+  });
+}

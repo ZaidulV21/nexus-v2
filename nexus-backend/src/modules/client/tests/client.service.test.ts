@@ -9,6 +9,7 @@ jest.mock('../client.repository', () => ({
     findByEmail: jest.fn(),
     findById: jest.fn(),
     update: jest.fn(),
+    updateAccountStatus: jest.fn(),
     list: jest.fn(),
   },
 }));
@@ -20,15 +21,32 @@ jest.mock('../../quotation/quotation.repository', () => ({
   quotationRepository: { migrateLeadQuotationsToClient: jest.fn().mockResolvedValue({ count: 0 }) },
 }));
 jest.mock('../../../config/database', () => ({
-  prisma: {},
+  prisma: { passwordResetToken: { deleteMany: jest.fn(), create: jest.fn() } },
 }));
 jest.mock('../../timeline/timeline.service', () => ({ timelineService: { recordEvent: jest.fn() } }));
 jest.mock('../../audit/audit.service', () => ({ auditService: { recordAudit: jest.fn() } }));
 jest.mock('../../notifications/notifications.service', () => ({ notificationsService: { emitEvent: jest.fn() } }));
+jest.mock('../../auth/auth.repository', () => ({
+  authRepository: { updateClientPassword: jest.fn() },
+}));
+jest.mock('../../email/email.service', () => ({
+  emailService: { send: jest.fn().mockResolvedValue({ id: 'email-1' }) },
+}));
+jest.mock('../../company/company.service', () => ({
+  companyService: { get: jest.fn().mockResolvedValue({ companyName: 'TestCo' }) },
+}));
+jest.mock('../../email/templates/client-welcome.template', () => ({
+  renderClientWelcomeEmail: jest.fn().mockReturnValue('<html>welcome</html>'),
+}));
+jest.mock('../../email/templates/password-reset.template', () => ({
+  renderPasswordResetEmail: jest.fn().mockReturnValue('<html>reset</html>'),
+}));
 
 import { clientRepository } from '../client.repository';
 import { leadRepository, leadServiceRepository } from '../../lead/lead.repository';
 import { quotationRepository } from '../../quotation/quotation.repository';
+import { authRepository } from '../../auth/auth.repository';
+import { emailService } from '../../email/email.service';
 import { clientService } from '../client.service';
 
 describe('clientService.convertLeadToClient', () => {
@@ -156,5 +174,109 @@ describe('clientService.convertLeadToClient', () => {
     expect(clientRepository.generateClientNumber).not.toHaveBeenCalled();
     // findBySourceLeadId is NOT called when clientId is set (early return)
     expect(clientRepository.findBySourceLeadId).not.toHaveBeenCalled();
+  });
+});
+
+describe('clientService.resetPassword', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('resets password and sends email', async () => {
+    (clientRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'client1',
+      contactName: 'John',
+      email: 'john@example.com',
+    });
+
+    const result = await clientService.resetPassword('client1', 'admin1');
+    expect(result).toEqual({ success: true });
+    expect(authRepository.updateClientPassword).toHaveBeenCalledWith('client1', expect.any(String));
+    expect(emailService.send).toHaveBeenCalledWith(
+      expect.objectContaining({ to: 'john@example.com' })
+    );
+  });
+
+  it('throws NotFoundError for non-existent client', async () => {
+    (clientRepository.findById as jest.Mock).mockResolvedValue(null);
+
+    await expect(clientService.resetPassword('nonexistent')).rejects.toThrow('Client not found');
+  });
+});
+
+describe('clientService.sendWelcomeEmail', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('sends welcome email to client', async () => {
+    (clientRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'client1',
+      contactName: 'John',
+      email: 'john@example.com',
+    });
+
+    const result = await clientService.sendWelcomeEmail('client1', 'admin1');
+    expect(result).toEqual({ success: true });
+    expect(emailService.send).toHaveBeenCalledWith(
+      expect.objectContaining({ to: 'john@example.com' })
+    );
+  });
+
+  it('throws NotFoundError for non-existent client', async () => {
+    (clientRepository.findById as jest.Mock).mockResolvedValue(null);
+
+    await expect(clientService.sendWelcomeEmail('nonexistent')).rejects.toThrow('Client not found');
+  });
+});
+
+describe('clientService.toggleActive', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('deactivates an active client', async () => {
+    (clientRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'client1',
+      isActive: true,
+    });
+    (clientRepository.updateAccountStatus as jest.Mock).mockResolvedValue({
+      id: 'client1',
+      isActive: false,
+    });
+
+    const result = await clientService.toggleActive('client1', false, 'admin1');
+    expect(result.isActive).toBe(false);
+    expect(clientRepository.updateAccountStatus).toHaveBeenCalledWith('client1', false);
+  });
+
+  it('activates an inactive client', async () => {
+    (clientRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'client1',
+      isActive: false,
+    });
+    (clientRepository.updateAccountStatus as jest.Mock).mockResolvedValue({
+      id: 'client1',
+      isActive: true,
+    });
+
+    const result = await clientService.toggleActive('client1', true, 'admin1');
+    expect(result.isActive).toBe(true);
+    expect(clientRepository.updateAccountStatus).toHaveBeenCalledWith('client1', true);
+  });
+
+  it('throws when status is already as requested', async () => {
+    (clientRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'client1',
+      isActive: true,
+    });
+
+    await expect(clientService.toggleActive('client1', true)).rejects.toThrow('already active');
+  });
+
+  it('throws NotFoundError for non-existent client', async () => {
+    (clientRepository.findById as jest.Mock).mockResolvedValue(null);
+
+    await expect(clientService.toggleActive('nonexistent', false)).rejects.toThrow('Client not found');
   });
 });

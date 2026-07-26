@@ -4,6 +4,12 @@ import { runInTransaction } from '../../core/utils/transaction';
 import { clientRepository } from './client.repository';
 import { leadRepository, leadServiceRepository } from '../lead/lead.repository';
 import { quotationRepository } from '../quotation/quotation.repository';
+import { authRepository } from '../auth/auth.repository';
+import { emailService } from '../email/email.service';
+import { companyService } from '../company/company.service';
+import { renderClientWelcomeEmail } from '../email/templates/client-welcome.template';
+import { renderPasswordResetEmail } from '../email/templates/password-reset.template';
+import type { EmailBranding } from '../email/templates/base-email.template';
 import { prisma } from '../../config/database';
 import { timelineService } from '../timeline/timeline.service';
 import { auditService } from '../audit/audit.service';
@@ -13,6 +19,44 @@ import { NotFoundError, ConflictError, ValidationError } from '../../core/errors
 
 function generateTempPassword(): string {
   return randomBytes(9).toString('base64url');
+}
+
+function hashToken(token: string): string {
+  const { createHash } = require('crypto');
+  return createHash('sha256').update(token).digest('hex');
+}
+
+async function generateResetToken(email: string): Promise<string> {
+  const rawToken = randomBytes(32).toString('hex');
+  const tokenHashVal = hashToken(rawToken);
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+
+  await prisma.passwordResetToken.deleteMany({ where: { email } });
+  await prisma.passwordResetToken.create({
+    data: { email, tokenHash: tokenHashVal, expiresAt },
+  });
+
+  return rawToken;
+}
+
+async function getBranding(): Promise<EmailBranding> {
+  try {
+    const settings = await companyService.get();
+    return {
+      companyName: settings.companyName ?? undefined,
+      logoUrl: settings.logoUrl ?? undefined,
+      supportEmail: settings.supportEmail ?? undefined,
+      phone: settings.phone ?? undefined,
+      addressLine1: settings.addressLine1 ?? undefined,
+      addressLine2: settings.addressLine2 ?? undefined,
+      city: settings.city ?? undefined,
+      state: settings.state ?? undefined,
+      country: settings.country ?? undefined,
+      pincode: settings.pincode ?? undefined,
+    };
+  } catch {
+    return {};
+  }
 }
 
 export const clientService = {
@@ -270,5 +314,106 @@ export const clientService = {
 
   async list(pagination: any) {
     return clientRepository.list(pagination);
+  },
+
+  async resetPassword(id: string, actorUserId?: string) {
+    const client = await clientRepository.findById(id);
+    if (!client) throw new NotFoundError('Client not found');
+
+    const tempPassword = generateTempPassword();
+    const passwordHash = await bcrypt.hash(tempPassword, env.bcryptSaltRounds);
+    await authRepository.updateClientPassword(id, passwordHash);
+
+    const branding = await getBranding();
+    const appUrl = env.appUrl || 'http://localhost:5173';
+    const resetUrl = `${appUrl}/reset-password?token=${await generateResetToken(client.email)}`;
+
+    const html = renderPasswordResetEmail(
+      { clientName: client.contactName, resetUrl, expiryMinutes: 60 },
+      branding
+    );
+    await emailService.send({
+      to: client.email,
+      subject: 'Your password has been reset',
+      html,
+      replyTo: branding.supportEmail || undefined,
+    });
+
+    await timelineService.recordEvent({
+      entityType: 'CLIENT',
+      entityId: id,
+      eventType: 'CLIENT_UPDATED',
+      description: 'Admin reset client password',
+      actorUserId,
+    });
+
+    await auditService.recordAudit({
+      entityType: 'CLIENT',
+      entityId: id,
+      action: 'UPDATE',
+      afterState: { field: 'password', action: 'admin_reset' },
+      actorUserId,
+    });
+
+    return { success: true };
+  },
+
+  async sendWelcomeEmail(id: string, actorUserId?: string) {
+    const client = await clientRepository.findById(id);
+    if (!client) throw new NotFoundError('Client not found');
+
+    const branding = await getBranding();
+    const appUrl = env.appUrl || 'http://localhost:5173';
+    const portalUrl = `${appUrl}/login`;
+
+    const html = renderClientWelcomeEmail(
+      { clientName: client.contactName, loginEmail: client.email, portalUrl },
+      branding
+    );
+    await emailService.send({
+      to: client.email,
+      subject: `Welcome to ${branding.companyName || 'Nexus'} Client Portal`,
+      html,
+      replyTo: branding.supportEmail || undefined,
+    });
+
+    await timelineService.recordEvent({
+      entityType: 'CLIENT',
+      entityId: id,
+      eventType: 'CLIENT_UPDATED',
+      description: 'Welcome email sent to client',
+      actorUserId,
+    });
+
+    return { success: true };
+  },
+
+  async toggleActive(id: string, isActive: boolean, actorUserId?: string) {
+    const client = await clientRepository.findById(id);
+    if (!client) throw new NotFoundError('Client not found');
+    if (client.isActive === isActive) {
+      throw new ValidationError(`Client account is already ${isActive ? 'active' : 'inactive'}`);
+    }
+
+    const updated = await clientRepository.updateAccountStatus(id, isActive);
+
+    await timelineService.recordEvent({
+      entityType: 'CLIENT',
+      entityId: id,
+      eventType: isActive ? 'CLIENT_RESTORED' : 'CLIENT_UPDATED',
+      description: isActive ? 'Client account activated' : 'Client account deactivated',
+      actorUserId,
+    });
+
+    await auditService.recordAudit({
+      entityType: 'CLIENT',
+      entityId: id,
+      action: 'UPDATE',
+      beforeState: { isActive: client.isActive },
+      afterState: { isActive },
+      actorUserId,
+    });
+
+    return updated;
   },
 };

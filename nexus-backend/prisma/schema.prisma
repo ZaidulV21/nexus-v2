@@ -260,6 +260,7 @@ model Client {
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   deletedAt     DateTime?
+  lastLoginAt   DateTime?
   clientNumber  String         @unique
   gstin         String?
   sourceLead    Lead           @relation("SourceLead", fields: [sourceLeadId], references: [id])

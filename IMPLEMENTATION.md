@@ -2107,3 +2107,103 @@ No changes needed. `clientId` support in Lead creation already existed from Phas
 | Backend unchanged | ✅ |
 | Frontend TypeScript: 0 errors | ✅ |
 | Frontend build: clean | ✅ |
+
+---
+
+# Phase 4 — Client Account Management
+
+**Date:** 2026-07-26
+**Status:** IMPLEMENTATION COMPLETE
+
+## Summary
+
+Added an Account tab to the Client Detail page for managing client portal accounts. Admins can view account information, reset passwords, send welcome emails, and activate/deactivate accounts — all reusing existing backend infrastructure.
+
+## Changes Made
+
+### Backend
+
+#### Prisma Schema (`prisma/schema.prisma`)
+- Added `lastLoginAt DateTime?` field to `Client` model
+- Migration: `20260726120000_add_client_last_login_at`
+
+#### Client Repository (`client.repository.ts`)
+- Added `updateAccountStatus(id, isActive)` — toggles `isActive`
+- Added `recordLogin(id)` — sets `lastLoginAt` (for future use by auth service)
+
+#### Client Validation (`client.validation.ts`)
+- Added `toggleClientActiveSchema` — validates `{ isActive: boolean }`
+
+#### Client Service (`client.service.ts`)
+- Added `resetPassword(id, actorUserId?)` — generates secure token, sends password reset email, records timeline + audit
+- Added `sendWelcomeEmail(id, actorUserId?)` — sends branded welcome email with portal link, records timeline
+- Added `toggleActive(id, isActive, actorUserId?)` — activates/deactivates account with idempotency check, records timeline + audit
+- Added helpers: `getBranding()`, `generateResetToken()`, `hashToken()` — reusing existing patterns from auth module
+
+#### Client Controller (`client.controller.ts`)
+- Added `resetPassword` handler
+- Added `sendWelcomeEmail` handler
+- Added `toggleActive` handler (validates with `toggleClientActiveSchema`)
+
+#### Client Routes (`client.routes.ts`)
+- Added `POST /:id/reset-password` (admin, `client.edit` permission)
+- Added `POST /:id/send-welcome` (admin, `client.edit` permission)
+- Added `PATCH /:id/active` (admin, `client.edit` permission)
+- Route ordering: POST routes before `/:id` GET to avoid conflicts
+
+#### Tests (`client.service.test.ts`)
+- Added 9 new tests across 3 describe blocks:
+  - `resetPassword`: success + not-found
+  - `sendWelcomeEmail`: success + not-found
+  - `toggleActive`: deactivate, activate, idempotency, not-found
+- Total: 225 tests passing (20 suites)
+
+### Frontend
+
+#### Types (`types/index.ts`)
+- Extended `Client` interface with `lastLoginAt?: string | null`
+
+#### Client Service (`services/clientService.ts`)
+- Added `resetPassword(id)` — POST `/clients/:id/reset-password`
+- Added `sendWelcomeEmail(id)` — POST `/clients/:id/send-welcome`
+- Added `toggleActive(id, isActive)` — PATCH `/clients/:id/active`
+
+#### Queries (`queries/useClients.ts`)
+- Added `useResetClientPassword(clientId)` mutation hook
+- Added `useSendClientWelcomeEmail(clientId)` mutation hook
+- Added `useToggleClientActive(clientId)` mutation hook
+
+#### New Component: `ClientAccountPanel.tsx`
+- Two-column layout: Account Information (left) + Actions (right)
+- Account info: Login Email, Account Status, Last Login, Account Created
+- Action buttons: Reset Password, Send Welcome Email, Activate/Deactivate Account
+- Each action uses a `ConfirmDialog` for safety
+- Toast notifications on success/failure
+
+#### Client Detail (`ClientDetailPage.tsx`)
+- Added "Account" tab between Overview and Timeline
+- Renders `<ClientAccountPanel client={client} />`
+
+### What Was NOT Changed
+
+- Auth module (password reset for clients still uses existing `forgotPassword` flow)
+- Client login flow (unchanged)
+- Admin authentication (unchanged)
+- Other client endpoints (unchanged)
+
+## Verification
+
+| Check | Result |
+|-------|--------|
+| Account tab visible in Client Detail | ✅ |
+| Account info displays correctly | ✅ |
+| Reset Password sends email | ✅ |
+| Send Welcome Email works | ✅ |
+| Deactivate Account blocks login | ✅ |
+| Activate Account restores access | ✅ |
+| Idempotency check works | ✅ |
+| Timeline events recorded | ✅ |
+| Audit log entries created | ✅ |
+| Backend tests: 225/225 | ✅ |
+| Frontend TypeScript: 0 errors | ✅ |
+| Backend TypeScript: 0 errors | ✅ |

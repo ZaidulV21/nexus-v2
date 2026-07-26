@@ -9,6 +9,7 @@ import { EntityTimeline } from '@/components/common/EntityTimeline';
 import { EntityAuditLog } from '@/components/common/EntityAuditLog';
 import { useClient } from '@/queries/useClients';
 import { ClientOverviewPanel } from './components/ClientOverviewPanel';
+import { ClientAccountPanel } from './components/ClientAccountPanel';
 
 export function ClientDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -40,12 +41,16 @@ export function ClientDetailPage() {
           <Tabs defaultValue="overview">
             <TabsList>
               <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="account">Account</TabsTrigger>
               <TabsTrigger value="timeline">Timeline</TabsTrigger>
               <TabsTrigger value="audit">Audit Log</TabsTrigger>
             </TabsList>
 
             <TabsContent value="overview" className="pt-5">
               <ClientOverviewPanel client={client} />
+            </TabsContent>
+            <TabsContent value="account" className="pt-5">
+              <ClientAccountPanel client={client} />
             </TabsContent>
             <TabsContent value="timeline" className="pt-5">
               <EntityTimeline entityType="CLIENT" entityId={client.id} />

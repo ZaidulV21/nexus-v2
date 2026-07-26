@@ -5,3 +5,7 @@ export const updateClientSchema = z.object({
   contactName: z.string().min(1).optional(),
   phone: z.string().min(6).optional(),
 });
+
+export const toggleClientActiveSchema = z.object({
+  isActive: z.boolean(),
+});
