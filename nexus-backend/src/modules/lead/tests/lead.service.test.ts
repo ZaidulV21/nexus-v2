@@ -1,6 +1,20 @@
 jest.mock('../../../core/utils/transaction', () => ({
   runInTransaction: jest.fn((fn) => fn({})),
 }));
+jest.mock('../../catalog/service.repository', () => ({
+  serviceRepository: {
+    findById: jest.fn(),
+    getActiveQuestionnaire: jest.fn().mockResolvedValue(null),
+  },
+}));
+jest.mock('../../client/client.repository', () => ({
+  clientRepository: {
+    findById: jest.fn(),
+    findByEmail: jest.fn(),
+    generateClientNumber: jest.fn(),
+    create: jest.fn(),
+  },
+}));
 jest.mock('../lead.repository', () => ({
   leadRepository: {
     create: jest.fn(),
@@ -22,12 +36,6 @@ jest.mock('../lead.repository', () => ({
     listForLead: jest.fn(),
   },
 }));
-jest.mock('../../catalog/service.repository', () => ({
-  serviceRepository: {
-    findById: jest.fn(),
-    getActiveQuestionnaire: jest.fn().mockResolvedValue(null),
-  },
-}));
 jest.mock('../../timeline/timeline.service', () => ({
   timelineService: { recordEvent: jest.fn() },
 }));
@@ -40,8 +48,12 @@ jest.mock('../../notifications/notifications.service', () => ({
 jest.mock('../../status-engine/statusEngine.service', () => ({
   statusEngineService: { transition: jest.fn() },
 }));
+jest.mock('../../otp/otp.service', () => ({
+  otpService: { isEmailVerified: jest.fn().mockResolvedValue(true) },
+}));
 
 import { leadRepository, leadServiceRepository } from '../lead.repository';
+import { clientRepository } from '../../client/client.repository';
 import { serviceRepository } from '../../catalog/service.repository';
 import { statusEngineService } from '../../status-engine/statusEngine.service';
 import { ValidationError } from '../../../core/errors/AppError';
@@ -295,5 +307,93 @@ describe('leadService.restore', () => {
     (leadRepository.findById as jest.Mock).mockResolvedValue(null);
 
     await expect(leadService.restore('lead1', 'admin1')).rejects.toThrow('Lead not found');
+  });
+});
+
+describe('leadService.createLead - existing client (clientId)', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('creates a Lead linked to an existing Client when clientId is provided', async () => {
+    (clientRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'existing-client',
+      contactName: 'Jane',
+      email: 'jane@example.com',
+    });
+    (leadRepository.create as jest.Mock).mockResolvedValue({
+      id: 'lead2',
+      leadNumber: 'L-00002',
+      email: 'jane@example.com',
+      clientId: 'existing-client',
+    });
+    (serviceRepository.findById as jest.Mock).mockImplementation((id: string) =>
+      Promise.resolve({ id, isActive: true, name: 'Some Service' })
+    );
+    (leadServiceRepository.createMany as jest.Mock).mockResolvedValue([
+      { id: 'ls1', serviceId: 'svc-interior' },
+    ]);
+
+    const result = await leadService.createLead({
+      contactName: 'Jane Doe',
+      phone: '9999999999',
+      email: 'jane@example.com',
+      clientId: 'existing-client',
+      services: [{ serviceId: 'svc-interior' }],
+    });
+
+    expect(result.lead.id).toBe('lead2');
+    expect(leadRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({ clientId: 'existing-client' }),
+      expect.anything()
+    );
+    // No Client should be created — existing one is reused
+    expect(clientRepository.create).not.toHaveBeenCalled();
+    expect(clientRepository.generateClientNumber).not.toHaveBeenCalled();
+  });
+
+  it('rejects when clientId references a non-existent Client', async () => {
+    (clientRepository.findById as jest.Mock).mockResolvedValue(null);
+
+    await expect(
+      leadService.createLead({
+        contactName: 'Jane Doe',
+        phone: '9999999999',
+        email: 'jane@example.com',
+        clientId: 'non-existent-client',
+        services: [{ serviceId: 'svc-interior' }],
+      })
+    ).rejects.toThrow('Referenced client account not found');
+  });
+
+  it('creates Lead with clientId and does not create a new Client even when password is provided', async () => {
+    (clientRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'existing-client',
+      contactName: 'Jane',
+      email: 'jane@example.com',
+    });
+    (leadRepository.create as jest.Mock).mockResolvedValue({
+      id: 'lead3',
+      leadNumber: 'L-00003',
+      email: 'jane@example.com',
+      clientId: 'existing-client',
+    });
+    (serviceRepository.findById as jest.Mock).mockImplementation((id: string) =>
+      Promise.resolve({ id, isActive: true, name: 'Some Service' })
+    );
+    (leadServiceRepository.createMany as jest.Mock).mockResolvedValue([
+      { id: 'ls1', serviceId: 'svc-interior' },
+    ]);
+
+    const result = await leadService.createLead({
+      contactName: 'Jane Doe',
+      phone: '9999999999',
+      email: 'jane@example.com',
+      clientId: 'existing-client',
+      password: 'securepass123',
+      services: [{ serviceId: 'svc-interior' }],
+    });
+
+    expect(result.lead.id).toBe('lead3');
+    // clientId takes precedence — no new Client created
+    expect(clientRepository.create).not.toHaveBeenCalled();
   });
 });

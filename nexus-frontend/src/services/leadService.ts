@@ -14,6 +14,7 @@ export interface CreateLeadInput {
   source?: string;
   services: CreateLeadServiceInput[];
   password?: string;
+  clientId?: string;
 }
 
 export interface UpdateLeadInput {

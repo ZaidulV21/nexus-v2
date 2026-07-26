@@ -119,12 +119,14 @@ export interface Lead {
   email?: string | null;
   companyName?: string | null;
   source: string;
+  clientId?: string | null;
   convertedAt?: string | null;
   archivedAt?: string | null;
   archivedById?: string | null;
   archiveReason?: string | null;
   createdAt: string;
   leadServices?: LeadService[];
+  sourceClient?: Client | null;
 }
 
 export interface Client {

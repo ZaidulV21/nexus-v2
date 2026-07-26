@@ -836,7 +836,7 @@ Enhanced the Invoice & Payment module with professional payment management featu
 
 ### Backend (8 files)
 1. `prisma/schema.prisma` — Added `transactionReference` to Payment
-2. `src/modules/invoice/invoice.types.ts` — Added `transactionReference` to input
+2. `src/modules/invoice/invoice.types.ts` — Added `transactionReference` to input 
 3. `src/modules/invoice/invoice.validation.ts` — Enhanced payment validation
 4. `src/modules/invoice/invoice.repository.ts` — Added sorting + duplicate check
 5. `src/modules/invoice/invoice.service.ts` — Status calculation, business rules, listPayments
@@ -1815,3 +1815,139 @@ StepLogin → "Forgot Password?" → /forgot-password?returnTo=get-quote
 | No CRM/Lead/Client workflow changes | ✅ |
 | No backend changes | ✅ |
 | No database schema changes | ✅ |
+
+---
+
+# Phase 11 — Repeat Client Enquiries (Existing Client Detection)
+
+**Date**: 2026-07-26  
+**Status**: ✅ IMPLEMENTATION COMPLETE
+
+## Summary
+
+Support repeat enquiries from existing clients without creating duplicate client accounts. When an authenticated existing client submits a new enquiry via the Quote Wizard, the Lead is linked to their existing Client record via a new `clientId` foreign key. Admin conversion reuses the linked Client — no duplicate accounts, no "already exists" errors.
+
+## Problem
+
+Previously, when an existing client logged in during the Quote Wizard and submitted a new enquiry:
+1. The Lead was created without any link to the existing Client
+2. Admin conversion would fail with `ConflictError('A client account already exists for this email address')`
+3. The admin could not convert the Lead — workflow blocked
+
+## Solution
+
+### Database Schema
+
+Added `clientId` foreign key to the `Lead` model:
+
+```prisma
+model Lead {
+  clientId      String?
+  client        Client?  @relation("SourceLead")             // reverse of Client.sourceLeadId (unchanged semantics)
+  sourceClient  Client?  @relation("ExistingClient", fields: [clientId], references: [id])
+}
+
+model Client {
+  sourceLead    Lead     @relation("SourceLead", fields: [sourceLeadId], references: [id])  // explicit name required for disambiguation
+  existingLeads Lead[]   @relation("ExistingClient")  // reverse of Lead.clientId
+}
+```
+
+**Note**: Both relations required explicit Prisma relation names (`SourceLead`, `ExistingClient`) because two relations exist between the same models. The `SourceLead` name disambiguates the original `Client.sourceLeadId` relation; `ExistingClient` names the new repeat-enquiry FK.
+
+**Migration**: `20260726000000_add_lead_client_id` — `ALTER TABLE "leads" ADD COLUMN "clientId" TEXT` (TEXT to match `clients.id` TEXT PK, not UUID)
+
+### Backend Changes
+
+#### Lead Module
+- **`lead.types.ts`** — Added `clientId?: string` to `CreateLeadInput`
+- **`lead.validation.ts`** — Added `clientId: z.string().uuid().optional()` to `createLeadSchema`
+- **`lead.repository.ts`** — `create()` accepts optional `clientId`; `findById()` includes `sourceClient` relation
+- **`lead.service.ts`** — When `clientId` is provided: validates Client exists, creates Lead with `clientId` set, skips Client creation (even if password is provided)
+
+#### Client Module
+- **`client.service.ts`** — `convertLeadToClient()` checks `lead.clientId` FIRST (before `findBySourceLeadId`). If set, reuses that Client with full timeline/audit/notification workflow.
+
+### Frontend Changes
+
+- **`types/index.ts`** — Added `clientId?: string | null` and `sourceClient?: Client | null` to `Lead` interface
+- **`services/leadService.ts`** — Added `clientId?: string` to `CreateLeadInput`
+- **`GetQuotePage.tsx`** — `buildLeadInput()` accepts `clientId` parameter; passes `actor.id` when logged-in user is a CLIENT
+
+### Flow Diagrams
+
+#### Existing Client Submits New Enquiry
+```
+Existing Client logs in via StepLogin
+  → AuthContext stores actor: { id: "client-uuid", type: "CLIENT" }
+  → Submit: buildLeadInput(isLoggedIn=true, clientId=actor.id)
+  → POST /api/leads { ..., clientId: "client-uuid" }
+  → Backend creates Lead with clientId set (no new Client)
+```
+
+#### Admin Converts Lead with clientId
+```
+Admin clicks "Convert to Client"
+  → clientService.convertLeadToClient(leadId)
+  → lead.clientId is set → lookup Client by clientId
+  → REUSE existing Client (no duplicate)
+  → Migrate quotations, record timeline/audit, emit notifications
+```
+
+#### New Visitor (Unchanged)
+```
+New visitor creates account + OTP verification
+  → POST /api/leads { password: "..." }
+  → Backend creates Lead + Client atomically (existing flow)
+  → Admin conversion: findBySourceLeadId → reuse wizard Client (existing flow)
+```
+
+## What Was NOT Modified
+
+- Quotation workflow
+- Project creation
+- Invoice workflow
+- Status Engine
+- Timeline event types
+- Audit log structure
+- Email notifications
+- OTP flow
+- Authentication architecture
+- Admin Panel / Client Portal pages
+
+## Verification
+
+| Check | Result |
+|-------|--------|
+| Backend Tests (217/217) | ✅ |
+| Backend TypeScript | ✅ 0 errors |
+| Frontend TypeScript | ✅ 0 errors |
+| Frontend Build | ✅ Clean |
+| New visitor creates Lead + Client normally | ✅ |
+| Existing client creates Lead linked to existing Client | ✅ |
+| Admin converts Lead with clientId (reuses Client) | ✅ |
+| Admin converts Lead without clientId (creates Client) | ✅ |
+| Admin converts Lead with wizard Client (reuses) | ✅ |
+| No duplicate Clients created | ✅ |
+| Timeline events preserved | ✅ |
+| Audit logs preserved | ✅ |
+| Notifications preserved | ✅ |
+| Quotation migration preserved | ✅ |
+
+## Files Modified
+
+### Backend (7 files)
+1. `prisma/schema.prisma` — Added `clientId` to Lead, `sourceClient` relation, `existingLeads` reverse relation, explicit relation names on both pairs
+2. `prisma/migrations/20260726000000_add_lead_client_id/migration.sql` — DDL: `ALTER TABLE "leads" ADD COLUMN "clientId" TEXT` + FK constraint (TEXT to match `clients.id` TEXT PK)
+3. `src/modules/lead/lead.types.ts` — Added `clientId` to `CreateLeadInput`
+4. `src/modules/lead/lead.validation.ts` — Added `clientId` to schema
+5. `src/modules/lead/lead.repository.ts` — Accept `clientId` in create, include `sourceClient` in findById
+6. `src/modules/lead/lead.service.ts` — Handle `clientId` in createLead, validate existing Client
+7. `src/modules/client/client.service.ts` — Check `lead.clientId` first in conversion
+8. `src/modules/lead/tests/lead.service.test.ts` — 3 new tests for clientId flow
+9. `src/modules/client/tests/client.service.test.ts` — 1 new test for clientId conversion
+
+### Frontend (3 files)
+1. `src/types/index.ts` — Added `clientId` and `sourceClient` to Lead type
+2. `src/services/leadService.ts` — Added `clientId` to CreateLeadInput
+3. `src/public-site/pages/GetQuotePage.tsx` — Pass clientId from auth actor

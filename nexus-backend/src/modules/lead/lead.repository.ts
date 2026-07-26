@@ -11,6 +11,7 @@ export const leadRepository = {
       email?: string;
       companyName?: string;
       source?: string;
+      clientId?: string;
     },
     tx: Prisma.TransactionClient
   ) {
@@ -20,7 +21,7 @@ export const leadRepository = {
   findById(id: string) {
     return prisma.lead.findFirst({
       where: { id, deletedAt: null },
-      include: { leadServices: { include: { service: true } } },
+      include: { leadServices: { include: { service: true } }, sourceClient: true },
     });
   },
 

@@ -131,4 +131,30 @@ describe('clientService.convertLeadToClient', () => {
       })
     );
   });
+
+  it('reuses the linked Client when Lead.clientId is set (repeat enquiry)', async () => {
+    (leadRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'lead2',
+      leadNumber: 'L-00002',
+      email: 'jane@example.com',
+      clientId: 'existing-client',
+    });
+    (clientRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'existing-client',
+      contactName: 'Jane',
+      email: 'jane@example.com',
+      clientNumber: 'C-00002',
+    });
+    (leadServiceRepository.listForLead as jest.Mock).mockResolvedValue([{ status: 'QUOTE PREPARING' }]);
+    (quotationRepository.migrateLeadQuotationsToClient as jest.Mock).mockResolvedValue({ count: 1 });
+
+    const result = await clientService.convertLeadToClient('lead2', 'admin1');
+    expect(result.id).toBe('existing-client');
+    expect(leadRepository.markConverted).toHaveBeenCalledWith('lead2');
+    // No new Client created — the linked one is reused
+    expect(clientRepository.create).not.toHaveBeenCalled();
+    expect(clientRepository.generateClientNumber).not.toHaveBeenCalled();
+    // findBySourceLeadId is NOT called when clientId is set (early return)
+    expect(clientRepository.findBySourceLeadId).not.toHaveBeenCalled();
+  });
 });

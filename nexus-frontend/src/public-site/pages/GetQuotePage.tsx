@@ -26,7 +26,7 @@ import type { CreateLeadInput } from '@/services/leadService';
 // Step order: 0=Services, 1=Questions, 2=Uploads, 3=Contact, 4=Review, 5=Account/Login, 6=OTP, 7=Submit
 const BASE_STEP_LABELS = ['Services', 'Details', 'Files', 'Contact', 'Review', 'Account', 'Verify', 'Submit'];
 
-function buildLeadInput(wizard: ReturnType<typeof useWizardState>, isLoggedIn: boolean): CreateLeadInput {
+function buildLeadInput(wizard: ReturnType<typeof useWizardState>, isLoggedIn: boolean, clientId?: string): CreateLeadInput {
   const { selectedServices, answers, contact, account } = wizard.state;
 
   return {
@@ -40,6 +40,7 @@ function buildLeadInput(wizard: ReturnType<typeof useWizardState>, isLoggedIn: b
       questionnaireAnswers: answers[serviceId] || {},
     })),
     password: isLoggedIn ? undefined : (account.password || undefined),
+    clientId: isLoggedIn ? clientId : undefined,
   };
 }
 
@@ -69,7 +70,7 @@ function validateRequiredQuestions(
 export function GetQuotePage() {
   const wizard = useWizardState();
   const { state } = wizard;
-  const { login: authLogin } = useAuth();
+  const { login: authLogin, actor } = useAuth();
   const { data: services = [] } = usePublicServices();
   const [searchParams] = useSearchParams();
 
@@ -207,7 +208,7 @@ export function GetQuotePage() {
     setIsSubmitting(true);
     setSubmitError(null);
     try {
-      const input = buildLeadInput(wizard, state.emailExists === true);
+      const input = buildLeadInput(wizard, state.emailExists === true, actor?.type === 'CLIENT' ? actor.id : undefined);
       await createLeadMutation.mutateAsync(input);
       setIsSuccess(true);
       wizard.reset();

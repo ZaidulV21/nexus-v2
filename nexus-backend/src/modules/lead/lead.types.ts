@@ -12,6 +12,8 @@ export interface CreateLeadInput {
   services: CreateLeadServiceInput[];
   /** When provided, a Client portal account is created alongside the Lead */
   password?: string;
+  /** When provided, links this Lead to an existing Client (repeat enquiry) */
+  clientId?: string;
 }
 
 export interface AddServiceToLeadInput {

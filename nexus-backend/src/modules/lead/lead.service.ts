@@ -28,6 +28,15 @@ export const leadService = {
       }
     }
 
+    // When clientId is provided, verify the existing Client exists
+    let existingClient = null;
+    if (input.clientId) {
+      existingClient = await clientRepository.findById(input.clientId);
+      if (!existingClient) {
+        throw new ValidationError('Referenced client account not found');
+      }
+    }
+
     const result = await runInTransaction(async (tx) => {
       const leadNumber = await leadRepository.generateLeadNumber(tx);
 
@@ -39,6 +48,7 @@ export const leadService = {
           email: input.email,
           companyName: input.companyName,
           source: input.source || 'WEBSITE',
+          clientId: input.clientId || undefined,
         },
         tx
       );
@@ -59,12 +69,14 @@ export const leadService = {
 
       const leadServices = await leadServiceRepository.createMany(lead.id, serviceRecords, tx);
 
-      // When password is provided (wizard flow), create a Client portal
-      // account linked to this Lead in the same transaction.
-      let client = null;
-      if (input.password && input.email) {
-        const existingClient = await clientRepository.findByEmail(input.email);
-        if (existingClient) {
+      // When clientId is provided (repeat enquiry from existing client), link
+      // the Lead to the existing Client. No new Client account is created.
+      // When password is provided without clientId (new user wizard flow),
+      // create a Client portal account linked to this Lead.
+      let client = existingClient;
+      if (!input.clientId && input.password && input.email) {
+        const duplicateClient = await clientRepository.findByEmail(input.email);
+        if (duplicateClient) {
           throw new ValidationError('An account already exists for this email address');
         }
 

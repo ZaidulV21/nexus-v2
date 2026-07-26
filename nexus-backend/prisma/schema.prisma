@@ -162,7 +162,6 @@ model Service {
   name              String
   description       String?
   icon              String?
-  imageUrl          String?
   basePrice         Decimal?               @db.Decimal(12, 2)
   requiresSiteVisit SiteVisitRequirement   @default(OPTIONAL)
   isActive          Boolean                @default(true)
@@ -170,6 +169,7 @@ model Service {
   updatedAt         DateTime               @updatedAt
   archivedAt        DateTime?
   estimatedDuration String?
+  imageUrl          String?
   leadServices      LeadService[]
   projectServices   ProjectService[]
   questionnaires    ServiceQuestionnaire[]
@@ -201,13 +201,15 @@ model Lead {
   companyName   String?
   source        String             @default("WEBSITE")
   convertedAt   DateTime?
+  clientId      String?
   createdAt     DateTime           @default(now())
   updatedAt     DateTime           @updatedAt
   deletedAt     DateTime?
   archivedAt    DateTime?
   archivedById  String?
   archiveReason String?
-  client        Client?
+  client        Client?            @relation("SourceLead")
+  sourceClient  Client?            @relation("ExistingClient", fields: [clientId], references: [id])
   activityNotes LeadActivityNote[]
   leadServices  LeadService[]
   projects      Project[]
@@ -260,7 +262,8 @@ model Client {
   deletedAt     DateTime?
   clientNumber  String         @unique
   gstin         String?
-  sourceLead    Lead           @relation(fields: [sourceLeadId], references: [id])
+  sourceLead    Lead           @relation("SourceLead", fields: [sourceLeadId], references: [id])
+  existingLeads Lead[]         @relation("ExistingClient")
   conversations Conversation[]
   documents     Document[]
   invoices      Invoice[]
@@ -416,22 +419,22 @@ model InvoiceItem {
 }
 
 model Payment {
-  id                  String    @id @default(uuid())
-  invoiceId           String
-  amount              Decimal   @db.Decimal(12, 2)
-  method              String
+  id                   String    @id @default(uuid())
+  invoiceId            String
+  amount               Decimal   @db.Decimal(12, 2)
+  method               String
+  referenceNote        String?
+  recordedByUserId     String
+  paidAt               DateTime  @default(now())
   transactionReference String?
-  referenceNote       String?
-  recordedByUserId    String
-  paidAt              DateTime  @default(now())
-  receiptUrl          String?
-  receiptGeneratedAt  DateTime?
+  gatewayMetadata      Json?
+  gatewayPaidAt        DateTime?
+  gatewayPaymentUrl    String?
+  gatewayStatus        String?
   gatewayTransactionId String?
-  gatewayStatus       String?
-  gatewayPaymentUrl   String?
-  gatewayMetadata     Json?
-  gatewayPaidAt       DateTime?
-  invoice             Invoice   @relation(fields: [invoiceId], references: [id])
+  receiptGeneratedAt   DateTime?
+  receiptUrl           String?
+  invoice              Invoice   @relation(fields: [invoiceId], references: [id])
 
   @@map("payments")
 }
@@ -544,6 +547,30 @@ model CompanySetting {
   @@map("company_settings")
 }
 
+model OtpVerification {
+  id         String    @id @default(uuid())
+  email      String    @unique
+  hashedOtp  String
+  expiresAt  DateTime
+  verifiedAt DateTime?
+  attempts   Int       @default(0)
+  createdAt  DateTime  @default(now())
+
+  @@map("otp_verifications")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  email     String
+  tokenHash String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([email])
+  @@map("password_reset_tokens")
+}
+
 enum SiteVisitRequirement {
   YES
   NO
@@ -564,30 +591,6 @@ enum ApprovalMethod {
   WHATSAPP
   EMAIL
   IN_PERSON
-}
-
-model OtpVerification {
-  id         String    @id @default(uuid())
-  email      String
-  hashedOtp  String
-  expiresAt  DateTime
-  verifiedAt DateTime?
-  attempts   Int       @default(0)
-  createdAt  DateTime  @default(now())
-
-  @@unique([email])
-  @@map("otp_verifications")
-}
-
-model PasswordResetToken {
-  id        String    @id @default(uuid())
-  email     String
-  tokenHash String
-  expiresAt DateTime
-  usedAt    DateTime?
-  createdAt DateTime  @default(now())
-
-  @@map("password_reset_tokens")
 }
 
 enum InvoiceStatus {

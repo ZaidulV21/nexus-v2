@@ -484,7 +484,7 @@ There are no unfinished tasks for the core single-workflow implementation. All b
 ---
 
 **STATUS: ✅ IMPLEMENTATION COMPLETE**
-**BACKEND: Build ✓ | 195 Tests ✓**
+**BACKEND: Build ✓ | 217 Tests ✓**
 **FRONTEND: Build ✓ | tsc ✓**
 **ALL WORKFLOW PATHS VERIFIED**
 
@@ -926,3 +926,103 @@ Replaced the fake client-side OTP placeholder with real backend-driven email ver
 | Light mode readable | ✅ |
 | Dark mode readable | ✅ |
 | No other changes | ✅ |
+
+---
+
+# Phase 11 — Repeat Client Enquiries (Schema Fix)
+
+**Date**: 2026-07-26  
+**Status**: ✅ PHASE 11 SCHEMA FIX COMPLETE
+
+## Problem
+
+The Prisma schema was missing the `clientId` field, `sourceClient` relation, and `existingLeads` reverse relation that the application code expected. Additionally, the migration SQL used `UUID` for `clientId` but the project uses `TEXT` primary keys. Both issues were fixed: the schema was updated to include the missing fields/relations, the migration SQL was corrected to `TEXT`, and the failed migration was resolved via `prisma migrate resolve --rolled-back` then re-applied.
+
+## What Was Changed
+
+### schema.prisma — Lead Model
+- Added `clientId String?` field (matches migration DDL)
+- Added `sourceClient Client? @relation("ExistingClient", fields: [clientId], references: [id])` — the new repeat-enquiry FK
+- Added `@relation("SourceLead")` to the existing `client Client?` field (required for Prisma disambiguation when two relations exist between the same models)
+
+### schema.prisma — Client Model
+- Added `@relation("SourceLead", fields: [sourceLeadId], references: [id])` to existing `sourceLead` field (explicit name required)
+- Added `existingLeads Lead[] @relation("ExistingClient")` — reverse of `Lead.clientId`
+
+### Final Lead Model
+```prisma
+model Lead {
+  id            String             @id @default(uuid())
+  leadNumber    String             @unique
+  contactName   String
+  phone         String
+  email         String?
+  companyName   String?
+  source        String             @default("WEBSITE")
+  convertedAt   DateTime?
+  clientId      String?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  deletedAt     DateTime?
+  archivedAt    DateTime?
+  archivedById  String?
+  archiveReason String?
+  client        Client?            @relation("SourceLead")
+  sourceClient  Client?            @relation("ExistingClient", fields: [clientId], references: [id])
+  activityNotes LeadActivityNote[]
+  leadServices  LeadService[]
+  projects      Project[]
+  quotations    Quotation[]
+
+  @@map("leads")
+}
+```
+
+### Final Client Model
+```prisma
+model Client {
+  id            String         @id @default(uuid())
+  companyName   String?
+  contactName   String
+  phone         String
+  email         String         @unique
+  passwordHash  String
+  sourceLeadId  String         @unique
+  isActive      Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  deletedAt     DateTime?
+  clientNumber  String         @unique
+  gstin         String?
+  sourceLead    Lead           @relation("SourceLead", fields: [sourceLeadId], references: [id])
+  existingLeads Lead[]         @relation("ExistingClient")
+  conversations Conversation[]
+  documents     Document[]
+  invoices      Invoice[]
+  projects      Project[]
+  quotations    Quotation[]
+
+  @@map("clients")
+}
+```
+
+### No Other Files Changed
+- lead.repository.ts — `include: { sourceClient: true }` was already correct (field name matches schema)
+- client.service.ts — `lead.clientId` references were already correct
+- lead.types.ts, lead.validation.ts — `clientId` references were already correct
+- Migration SQL corrected from `UUID` to `TEXT` to match project's TEXT primary keys; resolved via `prisma migrate resolve --rolled-back` then re-applied
+- Frontend types — `sourceClient` was already correct
+
+## Verification
+
+| Check | Result |
+|-------|--------|
+| `npx prisma migrate status` | ✅ Database schema is up to date |
+| `npx prisma generate` | ✅ |
+| `npx tsc -p tsconfig.json --noEmit` | ✅ 0 errors |
+| `npm run build` | ✅ Clean |
+| `npm test` | ✅ 217/217 passing |
+| `nexus-frontend tsc --noEmit` | ✅ 0 errors |
+| DB column `leads.clientId` type | ✅ `text` (matches `clients.id`) |
+| DB FK constraint exists | ✅ `leads_clientId_fkey` |
+| `nexus-frontend vite build` | ✅ Clean |

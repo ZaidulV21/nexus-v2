@@ -44,6 +44,64 @@ export const clientService = {
       throw new ValidationError('Lead must have an email address on file to create a Client login');
     }
 
+    // Check if this Lead is linked to an existing Client (repeat enquiry).
+    // This is checked first — a Lead with clientId was created by an existing
+    // client submitting a new enquiry via the Quote Wizard.
+    if (lead.clientId) {
+      const linkedClient = await clientRepository.findById(lead.clientId);
+      if (linkedClient) {
+        const migration = await quotationRepository.migrateLeadQuotationsToClient(lead.id, linkedClient.id, prisma);
+
+        if (!lead.convertedAt) {
+          await leadRepository.markConverted(lead.id);
+        }
+
+        await timelineService.recordEvent({
+          entityType: 'LEAD',
+          entityId: lead.id,
+          eventType: 'CLIENT_ACCOUNT_CREATED',
+          description: `Existing Client account reused for ${linkedClient.contactName}`,
+          actorUserId,
+        });
+
+        await timelineService.recordEvent({
+          entityType: 'CLIENT',
+          entityId: linkedClient.id,
+          eventType: 'QUOTATIONS_MIGRATED',
+          description: `${migration.count} quotation(s) migrated from Lead ${lead.leadNumber} to Client ${linkedClient.clientNumber}`,
+          actorUserId,
+          metadata: { sourceLeadId: lead.id, sourceLeadNumber: lead.leadNumber, migratedQuotations: migration.count },
+        });
+
+        await auditService.recordAudit({
+          entityType: 'CLIENT',
+          entityId: linkedClient.id,
+          action: 'CREATE',
+          afterState: { clientId: linkedClient.id, sourceLeadId: lead.id, reused: true },
+          actorUserId,
+        });
+
+        await auditService.recordAudit({
+          entityType: 'CLIENT',
+          entityId: linkedClient.id,
+          action: 'QUOTATIONS_MIGRATED',
+          beforeState: { leadId: lead.id, leadNumber: lead.leadNumber },
+          afterState: { clientId: linkedClient.id, clientNumber: linkedClient.clientNumber, migratedQuotations: migration.count },
+          actorUserId,
+        });
+
+        await notificationsService.emitEvent({
+          eventType: 'client.account.created',
+          entityType: 'CLIENT',
+          entityId: linkedClient.id,
+          recipient: linkedClient.email,
+          payload: { clientName: linkedClient.contactName, loginEmail: linkedClient.email, clientId: linkedClient.id },
+        });
+
+        return linkedClient;
+      }
+    }
+
     // Check if a Client portal account was already created during the quote wizard.
     const existingClient = await clientRepository.findBySourceLeadId(leadId);
     if (existingClient) {
