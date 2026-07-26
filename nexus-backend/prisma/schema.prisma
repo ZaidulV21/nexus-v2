@@ -277,8 +277,8 @@ model Client {
 model Quotation {
   id                 String             @id @default(uuid())
   quotationNumber    String             @unique
-  leadId             String?
-  clientId           String?
+  leadId             String
+  clientId           String
   status             QuotationStatus    @default(DRAFT)
   activeVersionId    String?
   createdAt          DateTime           @default(now())
@@ -290,8 +290,8 @@ model Quotation {
   termsAndConditions String?
   paymentTerms       String?
   versions           QuotationVersion[]
-  client             Client?            @relation(fields: [clientId], references: [id])
-  lead               Lead?              @relation(fields: [leadId], references: [id])
+  client             Client             @relation(fields: [clientId], references: [id])
+  lead               Lead               @relation(fields: [leadId], references: [id])
 
   @@map("quotations")
 }

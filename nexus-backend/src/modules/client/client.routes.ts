@@ -15,6 +15,7 @@ router.post('/:id/reset-password', authenticate, authorize('client.edit'), clien
 router.post('/:id/send-welcome', authenticate, authorize('client.edit'), clientController.sendWelcomeEmail);
 router.patch('/:id/active', authenticate, authorize('client.edit'), clientController.toggleActive);
 router.get('/:id/summary', authenticate, authorize('client.view'), clientController.getSummary);
+router.get('/:id/leads', authenticate, authorize('client.view'), clientController.listLeads);
 router.get('/:id', authenticate, authorize('client.view'), clientController.getById);
 router.patch('/:id', authenticate, authorize('client.edit'), clientController.update);
 

@@ -138,7 +138,7 @@ export const quotationService = {
         : false;
       const quotationNumber = await quotationRepository.generateQuotationNumber(tx);
       const quotation = await quotationRepository.create(
-        { quotationNumber, leadId: null, clientId: input.clientId },
+        { quotationNumber, leadId: input.leadId, clientId: input.clientId },
         tx
       );
 
@@ -458,12 +458,17 @@ export const quotationService = {
       clientId
     );
 
+    // Use the quotation's own leadId for project creation (the specific
+    // Lead the quotation was associated with when created). Fall back to
+    // resolveSourceLeadId for legacy quotations that have no leadId.
+    const projectLeadId = quotation.leadId ?? sourceLeadId;
+
     // Project creation and the quotation status flip are one atomic unit:
     // the status update runs inside project.create's transaction, so if
     // either write fails, neither is persisted.
     const project = await projectService.create(
       {
-        leadId: sourceLeadId,
+        leadId: projectLeadId,
         clientId,
         quotationVersionId: activeVersion.id,
       },

@@ -26,6 +26,14 @@ export function useClientSummary(id: string | undefined) {
   });
 }
 
+export function useClientLeads(clientId: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.clients.leads(clientId ?? ''),
+    queryFn: () => clientService.getLeads(clientId as string),
+    enabled: !!clientId,
+  });
+}
+
 export function useUpdateClient(clientId: string) {
   const queryClient = useQueryClient();
   return useMutation({

@@ -1367,3 +1367,60 @@ Fixed the project creation workflow so that each accepted quotation creates its 
 | Backend TypeScript: 0 errors | ✅ |
 | Frontend build: clean | ✅ |
 | No regressions to existing workflow | ✅ |
+
+---
+
+# Phase Z — Option B: Quotation leadId for Accurate Project Tracking
+
+**Date**: 2026-07-26  
+**Status**: ✅ PHASE Z COMPLETE
+
+## Summary
+
+Fixed the root cause where Service History showed "—" for repeat-client leads. Quotations now carry the specific `leadId` they were created for, and this propagates to projects on acceptance.
+
+## Root Cause
+
+Quotations were created with `leadId: null`. On acceptance, `resolveSourceLeadId()` always returned `client.sourceLeadId`, so ALL projects carried the wrong `leadId`.
+
+## Changes Made
+
+### Backend Files Modified (7 files)
+
+1. **`src/modules/quotation/quotation.types.ts`** — Added `leadId?: string | null` to `CreateQuotationInput`
+2. **`src/modules/quotation/quotation.validation.ts`** — Added optional `leadId` UUID to `createQuotationSchema`
+3. **`src/modules/quotation/quotation.service.ts`** — `create()` stores `input.leadId`; `accept()` uses `quotation.leadId ?? sourceLeadId` for project creation
+4. **`src/modules/client/client.repository.ts`** — Added `listLeads()` method
+5. **`src/modules/client/client.service.ts`** — Added `listLeads()` method
+6. **`src/modules/client/client.controller.ts`** — Added `listLeads` controller
+7. **`src/modules/client/client.routes.ts`** — Added `GET /:id/leads` route
+
+### Frontend Files Modified (4 files)
+
+8. **`src/services/clientService.ts`** — Added `getLeads()` API method
+9. **`src/queries/keys.ts`** — Added `clients.leads` query key
+10. **`src/queries/useClients.ts`** — Added `useClientLeads()` hook
+11. **`src/pages/quotations/components/QuotationFormDrawer.tsx`** — Lead selection dropdown
+
+### Migration (1 file)
+
+12. **`prisma/migrations/20260726140000_backfill_quotation_lead_id/migration.sql`** — Backfills existing quotations
+
+### Tests (1 file)
+
+13. **`src/modules/quotation/tests/quotation.service.test.ts`** — 1 new test, 5 updated
+
+## Verification
+
+| Check | Result |
+|-------|--------|
+| Backend tests: 228/228 | ✅ |
+| Frontend TypeScript: 0 errors | ✅ |
+| Backend TypeScript: 0 errors | ✅ |
+| Frontend build: clean | ✅ |
+| quotation.leadId stored on creation | ✅ |
+| Project carries correct leadId | ✅ |
+| Service History shows correct status | ✅ |
+| Lead dropdown in quotation form | ✅ |
+| Backfill migration for existing data | ✅ |
+| No regressions to existing workflow | ✅ |

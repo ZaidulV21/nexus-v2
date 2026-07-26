@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/Input';
 import { FormField } from '@/components/ui/FormField';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/Select';
 import { Skeleton } from '@/components/ui/Skeleton';
-import { useClientsList } from '@/queries/useClients';
+import { useClientsList, useClientLeads } from '@/queries/useClients';
 import { useActiveServices } from '@/queries/useLeads';
 import { useCreateQuotation, useReviseQuotation } from '@/queries/useQuotations';
 import { useToast } from '@/hooks/useToast';
@@ -27,6 +27,7 @@ const itemSchema = z.object({
 
 const createSchema = z.object({
   clientId: z.string().min(1, 'Select a Client'),
+  leadId: z.string().min(1, 'Select a Lead'),
   discount: z.string().optional(),
   transportation: z.string().optional(),
   installation: z.string().optional(),
@@ -35,6 +36,7 @@ const createSchema = z.object({
 
 const reviseSchema = z.object({
   clientId: z.string().optional(),
+  leadId: z.string().optional(),
   discount: z.string().optional(),
   transportation: z.string().optional(),
   installation: z.string().optional(),
@@ -43,6 +45,7 @@ const reviseSchema = z.object({
 
 type QuotationFormValues = {
   clientId?: string;
+  leadId?: string;
   discount?: string;
   transportation?: string;
   installation?: string;
@@ -78,11 +81,14 @@ export function QuotationFormDrawer({
     control,
     handleSubmit,
     reset,
+    setValue,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<QuotationFormValues>({
     resolver: zodResolver(schema as z.ZodTypeAny),
     defaultValues: {
       clientId: '',
+      leadId: '',
       discount: '0',
       transportation: '0',
       installation: '0',
@@ -90,12 +96,16 @@ export function QuotationFormDrawer({
     },
   });
 
+  const selectedClientId = watch('clientId');
+  const { data: clientLeads, isLoading: leadsLoading } = useClientLeads(selectedClientId || undefined);
+
   const { fields, append, remove } = useFieldArray({ control, name: 'items' });
 
   useEffect(() => {
     if (!open) {
       reset({
         clientId: '',
+        leadId: '',
         discount: '0',
         transportation: '0',
         installation: '0',
@@ -136,8 +146,12 @@ export function QuotationFormDrawer({
         if (!values.clientId) {
           throw new Error('Client selection is required');
         }
+        if (!values.leadId) {
+          throw new Error('Lead selection is required');
+        }
         const payload: CreateQuotationInput = {
           clientId: values.clientId,
+          leadId: values.leadId,
           discount: Number(values.discount || 0),
           transportation: Number(values.transportation || 0),
           installation: Number(values.installation || 0),
@@ -179,7 +193,7 @@ export function QuotationFormDrawer({
                   control={control}
                   name="clientId"
                   render={({ field }) => (
-                    <Select value={field.value} onValueChange={field.onChange}>
+                    <Select value={field.value} onValueChange={(val) => { field.onChange(val); setValue('leadId', ''); }}>
                       <SelectTrigger>
                         <SelectValue placeholder="Select a client" />
                       </SelectTrigger>
@@ -187,6 +201,33 @@ export function QuotationFormDrawer({
                         {clients?.items.map((client) => (
                           <SelectItem key={client.id} value={client.id}>
                             {client.clientNumber} — {client.contactName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+              )}
+            </FormField>
+          )}
+
+          {mode === 'create' && selectedClientId && (
+            <FormField label="Lead" htmlFor="leadId" hint="Select the Lead this quotation is for." error={errors.leadId?.message}>
+              {leadsLoading ? (
+                <Skeleton className="h-9 w-full" />
+              ) : (
+                <Controller
+                  control={control}
+                  name="leadId"
+                  render={({ field }) => (
+                    <Select value={field.value || ''} onValueChange={field.onChange}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a lead" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(clientLeads ?? []).map((lead) => (
+                          <SelectItem key={lead.id} value={lead.id}>
+                            {lead.leadNumber} — {lead.contactName}
                           </SelectItem>
                         ))}
                       </SelectContent>

@@ -56,7 +56,7 @@ const CLIENT_SUMMARY_SELECT = {
 } as const;
 
 export const quotationRepository = {
-  create(data: { quotationNumber: string; leadId?: string | null; clientId?: string | null }, tx: Prisma.TransactionClient) {
+  create(data: { quotationNumber: string; leadId: string; clientId: string }, tx: Prisma.TransactionClient) {
     return tx.quotation.create({ data });
   },
 
@@ -72,12 +72,13 @@ export const quotationRepository = {
     return client.quotation.update({ where: { id }, data: { status } });
   },
 
-  // Lead→Client conversion: migrate all quotations from leadId to clientId.
+  // Lead→Client conversion: link all quotations from the Lead to the Client.
   // Runs inside the conversion transaction so the link is never broken.
+  // leadId is preserved — quotations always carry both identifiers.
   async migrateLeadQuotationsToClient(leadId: string, clientId: string, tx: Prisma.TransactionClient) {
     return tx.quotation.updateMany({
-      where: { leadId },
-      data: { leadId: null, clientId },
+      where: { leadId, NOT: { clientId } },
+      data: { clientId },
     });
   },
 

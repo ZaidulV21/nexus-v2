@@ -9,6 +9,7 @@ export interface QuotationItemInput {
 
 export interface CreateQuotationInput {
   clientId: string; // REQUIRED - quotations must be created for Clients only
+  leadId: string; // REQUIRED - the specific Lead this quotation is associated with
   discount?: number;
   transportation?: number;
   installation?: number;

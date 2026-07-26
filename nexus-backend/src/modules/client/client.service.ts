@@ -318,6 +318,12 @@ export const clientService = {
     return updated;
   },
 
+  async listLeads(id: string) {
+    const client = await clientRepository.findById(id);
+    if (!client) throw new NotFoundError('Client not found');
+    return clientRepository.listLeads(id);
+  },
+
   async list(pagination: any) {
     return clientRepository.list(pagination);
   },

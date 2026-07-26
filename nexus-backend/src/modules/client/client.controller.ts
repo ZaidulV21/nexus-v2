@@ -83,6 +83,15 @@ export const clientController = {
     }
   },
 
+  async listLeads(req: Request, res: Response, next: NextFunction) {
+    try {
+      const leads = await clientService.listLeads(req.params.id);
+      return ok(res, leads);
+    } catch (err) {
+      next(err);
+    }
+  },
+
   async list(req: Request, res: Response, next: NextFunction) {
     try {
       const pagination = parsePagination(req);

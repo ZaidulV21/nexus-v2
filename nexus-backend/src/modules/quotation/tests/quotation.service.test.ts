@@ -70,6 +70,7 @@ describe('quotationService.create - Client-only workflow', () => {
     await quotationService.create(
       {
         clientId: 'client1',
+        leadId: 'lead1',
         items: [
           { serviceId: 'svc1', description: 'Interior', quantity: 1, unitPrice: 1000, taxRate: 18 },
           { serviceId: 'svc2', description: 'Electrical', quantity: 1, unitPrice: 500, taxRate: 18 },
@@ -96,6 +97,7 @@ describe('quotationService.create - Client-only workflow', () => {
     await quotationService.create(
       {
         clientId: 'client1',
+        leadId: 'lead1',
         items: [{ serviceId: 'svc1', description: 'Interior', quantity: 1, unitPrice: 1000, taxRate: 18 }],
       },
       'admin1'
@@ -123,6 +125,7 @@ describe('quotationService.create - Client-only workflow', () => {
     await quotationService.create(
       {
         clientId: 'client1',
+        leadId: 'lead1',
         items: [{ serviceId: 'svc1', description: 'Interior', quantity: 1, unitPrice: 1000, taxRate: 18 }],
       },
       'admin1'
@@ -136,6 +139,7 @@ describe('quotationService.create - Client-only workflow', () => {
       quotationService.create(
         {
           clientId: '', // Invalid
+          leadId: 'lead1',
           items: [{ serviceId: 'svc1', description: 'Interior', quantity: 1, unitPrice: 1000, taxRate: 18 }],
         } as any,
         'admin1'
@@ -226,14 +230,12 @@ describe('quotationService.send and accept', () => {
       quotationNumber: 'Q-00001',
       status: 'SENT',
       lead: { client: { id: 'client1' }, email: 'lead@example.com' },
-      client: { email: 'client@example.com' },
+      client: { email: 'client@example.com', sourceLeadId: 'lead1' },
       activeVersionId: 'ver1',
       versions: [{ id: 'ver1', approvals: [{ id: 'ap1' }] }],
     });
     (projectService.create as jest.Mock).mockImplementation(
       async (_input: unknown, _actor: string, inSameTransaction?: (tx: object) => Promise<void>) => {
-        // Mirror the real implementation: the callback runs inside the
-        // project-creation transaction, flipping the quotation status.
         if (inSameTransaction) await inSameTransaction({});
         return { id: 'proj1' };
       }
@@ -245,13 +247,14 @@ describe('quotationService.send and accept', () => {
       quotationNumber: 'Q-00001',
       status: 'SENT',
       lead: { client: { id: 'client1' }, email: 'lead@example.com' },
-      client: { email: 'client@example.com' },
+      client: { email: 'client@example.com', sourceLeadId: 'lead1' },
       activeVersionId: 'ver1',
       versions: [{ id: 'ver1', approvals: [{ id: 'ap1' }] }],
     });
 
     await quotationService.accept('quo1', 'client1');
 
+    // quotation.leadId is set → use it for project creation
     expect(projectService.create).toHaveBeenCalledWith(
       { leadId: 'lead1', clientId: 'client1', quotationVersionId: 'ver1' },
       'client1',
@@ -260,9 +263,42 @@ describe('quotationService.send and accept', () => {
     expect(quotationRepository.updateStatus).toHaveBeenCalledWith('quo1', 'ACCEPTED', expect.anything());
   });
 
+  it('uses quotation.leadId for project creation when set (repeat-client scenario)', async () => {
+    const { clientRepository } = jest.requireMock('../../client/client.repository');
+    (clientRepository.findById as jest.Mock).mockResolvedValue({ id: 'client1', sourceLeadId: 'L-00015' });
+    (quotationRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'quo2',
+      leadId: 'L-00027',
+      clientId: 'client1',
+      quotationNumber: 'Q-00002',
+      status: 'SENT',
+      lead: null,
+      client: { id: 'client1', email: 'client@example.com', sourceLeadId: 'L-00015' },
+      activeVersionId: 'ver1',
+      versions: [{ id: 'ver1', approvals: [{ id: 'ap1' }], items: [{ serviceId: 'svc1' }] }],
+    });
+    (projectService.create as jest.Mock).mockImplementation(
+      async (_input: unknown, _actor: string, inSameTransaction?: (tx: object) => Promise<void>) => {
+        if (inSameTransaction) await inSameTransaction({});
+        return { id: 'proj1' };
+      }
+    );
+
+    await quotationService.accept('quo2', 'client1');
+
+    // Lead workflow automation applies to the quotation's lead (L-00027)
+    expect(leadService.applyQuotationWorkflowStatus).toHaveBeenCalledWith('L-00027', ['svc1'], 'APPROVED', 'client1');
+    // Project creation also uses quotation.leadId (L-00027)
+    expect(projectService.create).toHaveBeenCalledWith(
+      { leadId: 'L-00027', clientId: 'client1', quotationVersionId: 'ver1' },
+      'client1',
+      expect.any(Function)
+    );
+  });
+
   it('accepts a Client-owned quotation with no direct leadId', async () => {
     const { clientRepository } = jest.requireMock('../../client/client.repository');
-    (clientRepository.findById as jest.Mock).mockResolvedValue({ id: 'client1', sourceLeadId: 'lead1' });
+    (clientRepository.findById as jest.Mock).mockResolvedValue({ id: 'client1', sourceLeadId: 'source-lead1' });
     (quotationRepository.findById as jest.Mock).mockResolvedValue({
       id: 'quo1',
       leadId: null,
@@ -270,7 +306,7 @@ describe('quotationService.send and accept', () => {
       quotationNumber: 'Q-00001',
       status: 'SENT',
       lead: null,
-      client: { id: 'client1', email: 'client@example.com' },
+      client: { id: 'client1', email: 'client@example.com', sourceLeadId: 'source-lead1' },
       activeVersionId: 'ver1',
       versions: [{ id: 'ver1', approvals: [{ id: 'ap1' }], items: [{ serviceId: 'svc1' }] }],
     });
@@ -283,9 +319,10 @@ describe('quotationService.send and accept', () => {
 
     await quotationService.accept('quo1', 'client1');
 
-    expect(leadService.applyQuotationWorkflowStatus).toHaveBeenCalledWith('lead1', ['svc1'], 'APPROVED', 'client1');
+    expect(leadService.applyQuotationWorkflowStatus).toHaveBeenCalledWith('source-lead1', ['svc1'], 'APPROVED', 'client1');
+    // quotation.leadId is null → falls back to resolveSourceLeadId (source-lead1)
     expect(projectService.create).toHaveBeenCalledWith(
-      { leadId: 'lead1', clientId: 'client1', quotationVersionId: 'ver1' },
+      { leadId: 'source-lead1', clientId: 'client1', quotationVersionId: 'ver1' },
       'client1',
       expect.any(Function)
     );
@@ -301,7 +338,7 @@ describe('quotationService.send and accept', () => {
       quotationNumber: 'Q-00001',
       status: 'SENT',
       lead: null,
-      client: { id: 'client1', email: 'client@example.com' },
+      client: { id: 'client1', email: 'client@example.com', sourceLeadId: 'lead1' },
       activeVersionId: 'ver1',
       versions: [{ id: 'ver1', items: [{ serviceId: 'svc1' }] }],
     });
@@ -322,7 +359,7 @@ describe('quotationService.send and accept', () => {
       quotationNumber: 'Q-00001',
       status: 'SENT',
       lead: null,
-      client: { id: 'client1', email: 'client@example.com' },
+      client: { id: 'client1', email: 'client@example.com', sourceLeadId: 'lead1' },
       activeVersionId: 'ver1',
       versions: [{ id: 'ver1', items: [{ serviceId: 'svc1' }] }],
     });
@@ -341,7 +378,7 @@ describe('quotationService.send and accept', () => {
       quotationNumber: 'Q-00001',
       status: 'SENT',
       lead: { client: { id: 'client1' }, email: 'lead@example.com' },
-      client: { email: 'client@example.com' },
+      client: { email: 'client@example.com', sourceLeadId: 'lead1' },
       activeVersionId: 'ver1',
       versions: [{ id: 'ver1', approvals: [{ id: 'ap1' }] }],
     });

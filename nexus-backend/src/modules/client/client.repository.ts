@@ -1,6 +1,7 @@
 import { prisma } from '../../config/database';
 import { Prisma } from '@prisma/client';
 import { PaginationParams } from '../../core/utils/pagination';
+import { computeAggregateStatus } from '../project/project.aggregateStatus';
 
 export const clientRepository = {
   create(
@@ -45,7 +46,7 @@ export const clientRepository = {
 
     const [leads, projects, quotations, invoices] = await Promise.all([
       prisma.lead.findMany({
-        where: { OR: [{ clientId: id }, { sourceClient: { id } }], deletedAt: null },
+        where: { OR: [{ clientId: id }, { id: client.sourceLeadId }], deletedAt: null },
         include: { leadServices: { include: { service: true } } },
         orderBy: { createdAt: 'desc' },
       }),
@@ -90,13 +91,8 @@ export const clientRepository = {
     const serviceHistory = leads.map((lead) => {
       const relatedProject = projects.find((p) => p.leadId === lead.id);
       const projectStatus = relatedProject
-        ? relatedProject.projectServices.every((ps) => ps.status === 'COMPLETED')
-          ? 'COMPLETED'
-          : relatedProject.projectServices.some((ps) => ps.status === 'CANCELLED')
-            ? 'CANCELLED'
-            : 'IN PROGRESS'
+        ? computeAggregateStatus(relatedProject.projectServices)
         : null;
-      const managerId = relatedProject?.projectServices[0]?.assignedQuotationVersion?.quotation?.leadId ?? null;
 
       return {
         id: lead.id,
@@ -128,6 +124,17 @@ export const clientRepository = {
       },
       serviceHistory,
     };
+  },
+
+  async listLeads(clientId: string) {
+    return prisma.lead.findMany({
+      where: {
+        OR: [{ clientId }, { id: { equals: (await prisma.client.findFirst({ where: { id: clientId }, select: { sourceLeadId: true } }))?.sourceLeadId ?? '__none__' } }],
+        deletedAt: null,
+      },
+      select: { id: true, leadNumber: true, contactName: true, companyName: true, createdAt: true },
+      orderBy: { createdAt: 'desc' },
+    });
   },
 
   async list(pagination: PaginationParams) {

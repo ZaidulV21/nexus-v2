@@ -10,6 +10,7 @@ const itemSchema = z.object({
 
 const quotationPayloadSchema = z.object({
   clientId: z.string().uuid('Client ID is required'), // REQUIRED - quotations are Client-only
+  leadId: z.string().uuid('Lead ID is required'), // REQUIRED - quotations track the originating Lead
   discount: z.number().nonnegative().optional(),
   transportation: z.number().nonnegative().optional(),
   installation: z.number().nonnegative().optional(),
@@ -18,8 +19,8 @@ const quotationPayloadSchema = z.object({
 
 export const createQuotationSchema = quotationPayloadSchema;
 
-// Omit ownership field (clientId) from revision schema - quotations already have ownership
-export const reviseQuotationSchema = quotationPayloadSchema.omit({ clientId: true });
+// Omit ownership fields (clientId, leadId) from revision schema - quotations already have ownership
+export const reviseQuotationSchema = quotationPayloadSchema.omit({ clientId: true, leadId: true });
 
 export const approveQuotationSchema = z.object({
   approvalMethod: z.enum(['PHONE', 'WHATSAPP', 'EMAIL', 'IN_PERSON']),

@@ -63,4 +63,5 @@ export const clientService = {
   sendWelcomeEmail: (id: string) => api.post<{ success: boolean }>(`/clients/${id}/send-welcome`),
   toggleActive: (id: string, isActive: boolean) => api.patch<Client>(`/clients/${id}/active`, { isActive }),
   getSummary: (id: string) => api.get<ClientSummaryData>(`/clients/${id}/summary`),
+  getLeads: (id: string) => api.get<Array<{ id: string; leadNumber: string; contactName: string; companyName: string | null; createdAt: string }>>(`/clients/${id}/leads`),
 };
