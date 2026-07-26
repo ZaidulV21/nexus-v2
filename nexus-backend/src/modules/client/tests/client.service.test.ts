@@ -11,6 +11,7 @@ jest.mock('../client.repository', () => ({
     update: jest.fn(),
     updateAccountStatus: jest.fn(),
     list: jest.fn(),
+    getSummary: jest.fn(),
   },
 }));
 jest.mock('../../lead/lead.repository', () => ({
@@ -278,5 +279,47 @@ describe('clientService.toggleActive', () => {
     (clientRepository.findById as jest.Mock).mockResolvedValue(null);
 
     await expect(clientService.toggleActive('nonexistent', false)).rejects.toThrow('Client not found');
+  });
+});
+
+describe('clientService.getSummary', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('returns aggregated KPIs and service history for a client', async () => {
+    (clientRepository.getSummary as jest.Mock).mockResolvedValue({
+      client: { id: 'client1', contactName: 'John' },
+      kpis: {
+        totalServiceRequests: 3,
+        activeProjects: 1,
+        completedProjects: 1,
+        pendingQuotations: 1,
+        totalInvoices: 2,
+        lifetimeRevenue: 5000,
+      },
+      serviceHistory: [
+        {
+          id: 'lead1',
+          leadNumber: 'L-00001',
+          services: [{ name: 'Interior Design', status: 'QUOTE SENT' }],
+          currentStatus: 'QUOTE SENT',
+          relatedProjectNumber: 'P-00001',
+          projectStatus: 'IN PROGRESS',
+        },
+      ],
+    });
+
+    const result = await clientService.getSummary('client1');
+    expect(result.kpis.totalServiceRequests).toBe(3);
+    expect(result.kpis.lifetimeRevenue).toBe(5000);
+    expect(result.serviceHistory).toHaveLength(1);
+    expect(result.serviceHistory[0].leadNumber).toBe('L-00001');
+  });
+
+  it('throws NotFoundError for non-existent client', async () => {
+    (clientRepository.getSummary as jest.Mock).mockResolvedValue(null);
+
+    await expect(clientService.getSummary('nonexistent')).rejects.toThrow('Client not found');
   });
 });

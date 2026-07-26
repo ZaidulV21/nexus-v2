@@ -1234,6 +1234,136 @@ Added an Account tab to the Client Detail page for managing client portal accoun
 | Idempotency check works | ✅ |
 | Timeline events recorded | ✅ |
 | Audit log entries created | ✅ |
-| Backend tests: 225/225 | ✅ |
+| Backend tests: 227/227 | ✅ |
 | Frontend TypeScript: 0 errors | ✅ |
 | Backend TypeScript: 0 errors | ✅ |
+
+---
+
+# Phase X — 360° Client Profile Enhancement
+
+**Date**: 2026-07-26  
+**Status**: ✅ PHASE X COMPLETE
+
+## Summary
+
+Enhanced the Client Detail page into a 360° client profile with KPI cards on Overview, a Service History tab showing all leads (regardless of source), and a new `GET /clients/:id/summary` aggregation endpoint.
+
+## Changes Made
+
+### Backend Files Modified (5 files)
+
+1. **`src/modules/client/client.repository.ts`**
+   - Added `getSummary(id)` — aggregates leads (by `clientId` OR `sourceClient.id`), projects, quotations, invoices; computes 6 KPI totals + service history rows
+
+2. **`src/modules/client/client.service.ts`**
+   - Added `getSummary(id)` — wraps repository, throws `NotFoundError` for invalid IDs
+
+3. **`src/modules/client/client.controller.ts`**
+   - Added `getSummary` handler
+
+4. **`src/modules/client/client.routes.ts`**
+   - Added `GET /:id/summary` with `authorize('client.view')` (placed before `/:id` GET to avoid route conflicts)
+
+5. **`src/modules/client/tests/client.service.test.ts`**
+   - Added 2 new tests: aggregation success + not-found
+   - Total: 227 tests passing (20 suites)
+
+### Frontend Files Modified (3 files)
+
+1. **`src/services/clientService.ts`**
+   - Added `ClientSummaryData` interface (KPIs + serviceHistory + client)
+   - Added `ClientServiceHistoryItem` interface
+   - Added `getSummary(id)` API method
+
+2. **`src/queries/useClients.ts`**
+   - Added `useClientSummary(id)` hook (React Query)
+
+3. **`src/queries/keys.ts`**
+   - Added `clients.summary(id)` key
+
+### Frontend Files Created (2 files)
+
+1. **`src/pages/clients/components/ClientOverviewKPI.tsx`**
+   - 6 KPI cards using existing `StatCard`: Service Requests, Active Projects, Completed Projects, Pending Quotations, Total Invoices, Lifetime Revenue
+   - Responsive grid: 6 columns on xl, 3 on lg, 2 on sm
+
+2. **`src/pages/clients/components/ClientServiceHistoryTab.tsx`**
+   - `DataTable` with columns: Lead (mono), Date, Requested Services (chips), Current Status (badge), Related Project (mono), Project Status (badge), Last Updated (relative time)
+   - Clicking a row navigates to `/leads/:id`
+
+### Client Detail (`ClientDetailPage.tsx`)
+   - Tab order: Overview → Account → **Service History** → Timeline → Audit Log
+   - Overview tab shows KPI cards above the profile form
+   - Fetches summary data via `useClientSummary(id)`
+
+## Verification
+
+| Check | Result |
+|-------|--------|
+| GET /clients/:id/summary returns KPIs + history | ✅ |
+| KPI cards render on Overview tab | ✅ |
+| Service History tab shows all leads | ✅ |
+| Clicking lead row navigates to lead detail | ✅ |
+| Empty state for new clients | ✅ |
+| Loading/error states handled | ✅ |
+| Backend tests: 227/227 | ✅ |
+| Frontend TypeScript: 0 errors | ✅ |
+| Backend TypeScript: 0 errors | ✅ |
+| No CRM workflow changes | ✅ |
+
+---
+
+# Phase Y — Fix Project Creation for Existing Clients
+
+**Date**: 2026-07-26  
+**Status**: ✅ PHASE Y COMPLETE
+
+## Summary
+
+Fixed the project creation workflow so that each accepted quotation creates its own project, even when the quotation belongs to an existing client with multiple leads. Previously the system incorrectly blocked project creation with "A Project already exists for this Lead and Client".
+
+## Business Rule (NEW)
+
+- One Client → many Leads ✅
+- One Lead → one accepted quotation → one Project ✅
+- Same Client may have unlimited Projects over time ✅
+
+## Changes Made
+
+### Backend Files Modified (1 file)
+
+1. **`src/modules/project/project.service.ts`**
+
+   **Fix 1 — Remove incorrect duplicate check:**
+   Removed the `findByLeadAndClient` validation that blocked repeat client project creation.
+
+   **Fix 2 — Fix client-lead ownership validation:**
+   Replaced the one-directional check (`client.sourceLeadId !== input.leadId`) with bidirectional validation:
+   ```typescript
+   // Before (broken for repeat clients):
+   if (!client || client.sourceLeadId !== input.leadId) {
+     throw new ValidationError('Client does not belong to this Lead');
+   }
+
+   // After (handles both directions):
+   if (client.sourceLeadId !== input.leadId) {
+     const lead = await leadRepository.findById(input.leadId);
+     if (!lead || lead.clientId !== input.clientId) {
+       throw new ValidationError('Client does not belong to this Lead');
+     }
+   }
+   ```
+
+## Verification
+
+| Check | Result |
+|-------|--------|
+| Same client can own unlimited projects | ✅ |
+| Every accepted quotation creates exactly one project | ✅ |
+| Duplicate acceptance of same quotation blocked | ✅ |
+| Backend tests: 227/227 | ✅ |
+| Frontend TypeScript: 0 errors | ✅ |
+| Backend TypeScript: 0 errors | ✅ |
+| Frontend build: clean | ✅ |
+| No regressions to existing workflow | ✅ |

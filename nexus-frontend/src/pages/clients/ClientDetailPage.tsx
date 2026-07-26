@@ -7,13 +7,16 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { EntityTimeline } from '@/components/common/EntityTimeline';
 import { EntityAuditLog } from '@/components/common/EntityAuditLog';
-import { useClient } from '@/queries/useClients';
+import { useClient, useClientSummary } from '@/queries/useClients';
 import { ClientOverviewPanel } from './components/ClientOverviewPanel';
 import { ClientAccountPanel } from './components/ClientAccountPanel';
+import { ClientOverviewKPI } from './components/ClientOverviewKPI';
+import { ClientServiceHistoryTab } from './components/ClientServiceHistoryTab';
 
 export function ClientDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { data: client, isLoading, isError, refetch } = useClient(id);
+  const { data: summary, isLoading: summaryLoading, isError: summaryError, refetch: summaryRefetch } = useClientSummary(id);
 
   if (isLoading) {
     return (
@@ -42,15 +45,25 @@ export function ClientDetailPage() {
             <TabsList>
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="account">Account</TabsTrigger>
+              <TabsTrigger value="service-history">Service History</TabsTrigger>
               <TabsTrigger value="timeline">Timeline</TabsTrigger>
               <TabsTrigger value="audit">Audit Log</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="overview" className="pt-5">
+            <TabsContent value="overview" className="pt-5 space-y-5">
+              {summary?.kpis && <ClientOverviewKPI kpis={summary.kpis} />}
               <ClientOverviewPanel client={client} />
             </TabsContent>
             <TabsContent value="account" className="pt-5">
               <ClientAccountPanel client={client} />
+            </TabsContent>
+            <TabsContent value="service-history" className="pt-5">
+              <ClientServiceHistoryTab
+                data={summary?.serviceHistory ?? []}
+                isLoading={summaryLoading}
+                isError={summaryError}
+                onRetry={summaryRefetch}
+              />
             </TabsContent>
             <TabsContent value="timeline" className="pt-5">
               <EntityTimeline entityType="CLIENT" entityId={client.id} />

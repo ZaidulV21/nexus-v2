@@ -24,6 +24,15 @@ export const clientController = {
     }
   },
 
+  async getSummary(req: Request, res: Response, next: NextFunction) {
+    try {
+      const summary = await clientService.getSummary(req.params.id);
+      return ok(res, summary);
+    } catch (err) {
+      next(err);
+    }
+  },
+
   async me(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.user || req.user.type !== 'CLIENT') throw new UnauthorizedError();

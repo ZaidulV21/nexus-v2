@@ -18,6 +18,14 @@ export function useClient(id: string | undefined) {
   });
 }
 
+export function useClientSummary(id: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.clients.summary(id ?? ''),
+    queryFn: () => clientService.getSummary(id as string),
+    enabled: !!id,
+  });
+}
+
 export function useUpdateClient(clientId: string) {
   const queryClient = useQueryClient();
   return useMutation({

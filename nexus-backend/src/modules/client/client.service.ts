@@ -296,6 +296,12 @@ export const clientService = {
     return client;
   },
 
+  async getSummary(id: string) {
+    const summary = await clientRepository.getSummary(id);
+    if (!summary) throw new NotFoundError('Client not found');
+    return summary;
+  },
+
   async update(id: string, data: Partial<{ companyName: string; contactName: string; phone: string }>, actorUserId?: string) {
     const existing = await clientRepository.findById(id);
     if (!existing) throw new NotFoundError('Client not found');

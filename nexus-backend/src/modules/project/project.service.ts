@@ -102,8 +102,17 @@ export const projectService = {
     if (!lead) throw new NotFoundError('Lead not found');
 
     const client = await clientRepository.findById(input.clientId);
-    if (!client || client.sourceLeadId !== input.leadId) {
-      throw new ValidationError('Client does not belong to this Lead');
+    if (!client) {
+      throw new NotFoundError('Client not found');
+    }
+    // Verify the Lead belongs to this Client. Two valid relationships:
+    // 1. Client was created from this Lead (client.sourceLeadId === leadId)
+    // 2. This Lead was created by an existing Client (lead.clientId === clientId)
+    if (client.sourceLeadId !== input.leadId) {
+      const lead = await leadRepository.findById(input.leadId);
+      if (!lead || lead.clientId !== input.clientId) {
+        throw new ValidationError('Client does not belong to this Lead');
+      }
     }
 
     const quotationVersion = await quotationVersionRepository.findById(input.quotationVersionId);
@@ -132,11 +141,6 @@ export const projectService = {
     const existingProject = await projectRepository.findByQuotationVersionId(input.quotationVersionId);
     if (existingProject) {
       throw new ConflictError('A Project already exists for this quotation version');
-    }
-
-    const existingProjectForLeadAndClient = await projectRepository.findByLeadAndClient(input.leadId, input.clientId);
-    if (existingProjectForLeadAndClient) {
-      throw new ConflictError('A Project already exists for this Lead and Client');
     }
 
     const projectServicesFromQuotation = uniqueServiceRecordsFromQuotationVersion(quotationVersion);

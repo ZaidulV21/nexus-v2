@@ -39,6 +39,97 @@ export const clientRepository = {
     return prisma.client.update({ where: { id }, data: { lastLoginAt: new Date() } });
   },
 
+  async getSummary(id: string) {
+    const client = await prisma.client.findFirst({ where: { id, deletedAt: null } });
+    if (!client) return null;
+
+    const [leads, projects, quotations, invoices] = await Promise.all([
+      prisma.lead.findMany({
+        where: { OR: [{ clientId: id }, { sourceClient: { id } }], deletedAt: null },
+        include: { leadServices: { include: { service: true } } },
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.project.findMany({
+        where: { clientId: id, deletedAt: null },
+        include: {
+          projectServices: {
+            include: {
+              service: true,
+              assignedQuotationVersion: { include: { quotation: true } },
+            },
+          },
+          lead: true,
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.quotation.findMany({
+        where: { clientId: id },
+        include: { versions: true, lead: true },
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.invoice.findMany({
+        where: { clientId: id },
+        include: { items: true, project: true },
+        orderBy: { issuedAt: 'desc' },
+      }),
+    ]);
+
+    const activeProjects = projects.filter((p) =>
+      p.projectServices.some((ps) => ps.status !== 'COMPLETED' && ps.status !== 'CANCELLED')
+    );
+    const completedProjects = projects.filter((p) =>
+      p.projectServices.length > 0 && p.projectServices.every((ps) => ps.status === 'COMPLETED')
+    );
+    const pendingQuotations = quotations.filter((q) =>
+      ['DRAFT', 'SENT', 'NEGOTIATION'].includes(q.status)
+    );
+    const lifetimeRevenue = invoices
+      .filter((i) => i.status === 'ISSUED')
+      .reduce((sum, i) => sum + Number(i.grandTotal), 0);
+
+    const serviceHistory = leads.map((lead) => {
+      const relatedProject = projects.find((p) => p.leadId === lead.id);
+      const projectStatus = relatedProject
+        ? relatedProject.projectServices.every((ps) => ps.status === 'COMPLETED')
+          ? 'COMPLETED'
+          : relatedProject.projectServices.some((ps) => ps.status === 'CANCELLED')
+            ? 'CANCELLED'
+            : 'IN PROGRESS'
+        : null;
+      const managerId = relatedProject?.projectServices[0]?.assignedQuotationVersion?.quotation?.leadId ?? null;
+
+      return {
+        id: lead.id,
+        leadNumber: lead.leadNumber,
+        contactName: lead.contactName,
+        createdAt: lead.createdAt,
+        updatedAt: lead.updatedAt,
+        services: lead.leadServices.map((ls) => ({
+          name: ls.service?.name ?? 'Unknown',
+          status: ls.status,
+        })),
+        currentStatus: lead.leadServices[0]?.status ?? 'NEW',
+        relatedProjectId: relatedProject?.id ?? null,
+        relatedProjectNumber: relatedProject?.projectNumber ?? null,
+        projectStatus,
+        lastUpdated: relatedProject?.updatedAt ?? lead.updatedAt,
+      };
+    });
+
+    return {
+      client,
+      kpis: {
+        totalServiceRequests: leads.length,
+        activeProjects: activeProjects.length,
+        completedProjects: completedProjects.length,
+        pendingQuotations: pendingQuotations.length,
+        totalInvoices: invoices.length,
+        lifetimeRevenue,
+      },
+      serviceHistory,
+    };
+  },
+
   async list(pagination: PaginationParams) {
     const where: any = { deletedAt: null };
     if (pagination.search) {
