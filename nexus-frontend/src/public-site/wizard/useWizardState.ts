@@ -1,45 +1,11 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import type { WizardState, WizardFileEntry, WizardContactInfo } from './types';
 import { INITIAL_WIZARD_STATE } from './types';
 
-const STORAGE_KEY = 'nexus-quote-wizard';
 const STEP_LABELS = ['Services', 'Questions', 'Contact', 'Review', 'Account', 'Verify', 'Submit'];
 
-function loadState(): WizardState {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as Partial<WizardState>;
-      return {
-        ...INITIAL_WIZARD_STATE,
-        currentStep: parsed.currentStep ?? 0,
-        selectedServices: parsed.selectedServices ?? [],
-        answers: parsed.answers ?? {},
-        contact: { ...INITIAL_WIZARD_STATE.contact, ...parsed.contact },
-        account: INITIAL_WIZARD_STATE.account,
-        otpVerified: false,
-        emailExists: parsed.emailExists ?? null,
-      };
-    }
-  } catch { /* ignore */ }
-  return INITIAL_WIZARD_STATE;
-}
-
-function saveState(state: WizardState) {
-  try {
-    // Don't persist files (they contain blob URLs)
-    const { files, ...rest } = state;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(rest));
-  } catch { /* ignore */ }
-}
-
 export function useWizardState() {
-  const [state, setState] = useState<WizardState>(loadState);
-
-  // Persist on every change
-  useEffect(() => {
-    saveState(state);
-  }, [state]);
+  const [state, setState] = useState<WizardState>(INITIAL_WIZARD_STATE);
 
   const goTo = useCallback((step: number) => {
     setState((s) => ({ ...s, currentStep: Math.max(0, Math.min(step, STEP_LABELS.length - 1)) }));
@@ -114,7 +80,6 @@ export function useWizardState() {
   }, []);
 
   const reset = useCallback(() => {
-    localStorage.removeItem(STORAGE_KEY);
     setState(INITIAL_WIZARD_STATE);
   }, []);
 

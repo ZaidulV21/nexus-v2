@@ -88,7 +88,6 @@ export function GetQuotePage() {
   useEffect(() => {
     if (returnedFromReset && state.currentStep === 4 && state.emailExists === true) {
       // User returned from password reset — show login step with preserved data
-      // The wizard state is already restored from localStorage
     }
   }, [returnedFromReset, state.currentStep, state.emailExists]);
 
