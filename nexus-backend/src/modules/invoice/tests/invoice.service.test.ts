@@ -7,6 +7,7 @@ jest.mock('../invoice.repository', () => ({
     createItems: jest.fn(),
     findById: jest.fn(),
     cancel: jest.fn(),
+    markSent: jest.fn(),
     list: jest.fn(),
     listForProject: jest.fn(),
     listForClient: jest.fn(),
@@ -300,6 +301,142 @@ describe('invoiceService.getClientInvoiceSummary', () => {
     expect(summary.totalPaid).toBe(0);
     expect(summary.outstanding).toBe(0);
     expect(summary.invoiceCount).toBe(0);
+  });
+});
+
+describe('invoiceService.send - DRAFT to ISSUED workflow', () => {
+  const draftInvoice = {
+    id: 'inv1',
+    status: 'DRAFT',
+    invoiceNumber: 'INV/2026-27/00001',
+    grandTotal: 50000,
+    clientId: 'client1',
+    client: { email: 'client@test.com' },
+  };
+
+  const issuedInvoice = {
+    ...draftInvoice,
+    status: 'ISSUED',
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('transitions DRAFT to ISSUED on first send', async () => {
+    (invoiceRepository.findById as jest.Mock).mockResolvedValue(draftInvoice);
+    (invoiceRepository.markSent as jest.Mock).mockResolvedValue({ ...draftInvoice, status: 'ISSUED' });
+
+    await invoiceService.send('inv1', 'admin1', false);
+
+    expect(invoiceRepository.markSent).toHaveBeenCalledWith('inv1');
+  });
+
+  it('sends email and records timeline on first send', async () => {
+    (invoiceRepository.findById as jest.Mock).mockResolvedValue(draftInvoice);
+    (invoiceRepository.markSent as jest.Mock).mockResolvedValue({ ...draftInvoice, status: 'ISSUED' });
+    const { timelineService } = require('../../timeline/timeline.service');
+    const { notificationsService } = require('../../notifications/notifications.service');
+
+    await invoiceService.send('inv1', 'admin1', false);
+
+    expect(timelineService.recordEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ eventType: 'INVOICE_SENT' })
+    );
+    expect(notificationsService.emitEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ eventType: 'invoice.issued' })
+    );
+  });
+
+  it('rejects double-send without resend flag', async () => {
+    (invoiceRepository.findById as jest.Mock).mockResolvedValue(issuedInvoice);
+
+    await expect(invoiceService.send('inv1', 'admin1', false)).rejects.toThrow('already been sent');
+    expect(invoiceRepository.markSent).not.toHaveBeenCalled();
+  });
+
+  it('allows resend on ISSUED invoice', async () => {
+    (invoiceRepository.findById as jest.Mock).mockResolvedValue(issuedInvoice);
+    const { timelineService } = require('../../timeline/timeline.service');
+
+    await invoiceService.send('inv1', 'admin1', true);
+
+    expect(timelineService.recordEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ eventType: 'INVOICE_RESENT' })
+    );
+    expect(invoiceRepository.markSent).not.toHaveBeenCalled();
+  });
+
+  it('rejects send on cancelled invoice', async () => {
+    (invoiceRepository.findById as jest.Mock).mockResolvedValue({ ...draftInvoice, status: 'CANCELLED' });
+
+    await expect(invoiceService.send('inv1', 'admin1', false)).rejects.toThrow('cancelled');
+  });
+
+  it('rejects send when client has no email', async () => {
+    (invoiceRepository.findById as jest.Mock).mockResolvedValue({ ...draftInvoice, client: null });
+
+    await expect(invoiceService.send('inv1', 'admin1', false)).rejects.toThrow('email');
+  });
+});
+
+describe('invoiceService.getForClient - DRAFT visibility', () => {
+  it('rejects access to DRAFT invoice', async () => {
+    (invoiceRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'inv1',
+      status: 'DRAFT',
+      clientId: 'client1',
+    });
+
+    await expect(invoiceService.getForClient('inv1', 'client1')).rejects.toThrow('not found');
+  });
+
+  it('allows access to ISSUED invoice', async () => {
+    (invoiceRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'inv1',
+      status: 'ISSUED',
+      clientId: 'client1',
+      grandTotal: 10000,
+      payments: [],
+    });
+
+    const result = await invoiceService.getForClient('inv1', 'client1');
+    expect(result.status).toBe('ISSUED');
+  });
+});
+
+describe('invoiceService.create - DRAFT status', () => {
+  it('creates invoice with DRAFT status and does not notify client', async () => {
+    (projectRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'proj1',
+      clientId: 'client1',
+      projectServices: [{ assignedQuotationVersion: { quotation: { status: 'APPROVED' }, approvals: [] } }],
+    });
+    (invoiceRepository.create as jest.Mock).mockResolvedValue({ id: 'inv1', invoiceNumber: 'INV/2026-27/00001' });
+    (invoiceRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'inv1',
+      status: 'DRAFT',
+      invoiceNumber: 'INV/2026-27/00001',
+      grandTotal: 17400,
+      payments: [],
+    });
+    const { timelineService } = require('../../timeline/timeline.service');
+    const { notificationsService } = require('../../notifications/notifications.service');
+
+    await invoiceService.create(
+      {
+        projectId: 'proj1',
+        clientId: 'client1',
+        label: 'Advance',
+        items: [
+          { description: 'Interior labour', quantity: 1, unitPrice: 10000, hsnSacCode: '9954', taxRate: 18 },
+        ],
+      },
+      'admin1'
+    );
+
+    expect(timelineService.recordEvent).not.toHaveBeenCalled();
+    expect(notificationsService.emitEvent).not.toHaveBeenCalled();
   });
 });
 

@@ -387,7 +387,7 @@ model Invoice {
   projectId       String
   clientId        String
   label           String
-  status          InvoiceStatus @default(ISSUED)
+  status          InvoiceStatus @default(DRAFT)
   cancelReason    String?
   subtotal        Decimal       @db.Decimal(12, 2)
   gstAmount       Decimal       @default(0) @db.Decimal(12, 2)
@@ -595,6 +595,7 @@ enum ApprovalMethod {
 }
 
 enum InvoiceStatus {
+  DRAFT
   ISSUED
   CANCELLED
 }

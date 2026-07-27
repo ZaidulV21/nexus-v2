@@ -52,6 +52,10 @@ export const invoiceRepository = {
     return prisma.invoice.update({ where: { id }, data: { status: 'CANCELLED', cancelReason: reason } });
   },
 
+  markSent(id: string) {
+    return prisma.invoice.update({ where: { id }, data: { status: 'ISSUED' } });
+  },
+
   async list(pagination: PaginationParams) {
     const where: any = {};
     if (pagination.search) {
@@ -115,7 +119,7 @@ export const invoiceRepository = {
 
   listForClient(clientId: string) {
     return prisma.invoice.findMany({
-      where: { clientId },
+      where: { clientId, status: { not: 'DRAFT' } },
       include: { items: true, payments: true, client: true, project: true },
     });
   },

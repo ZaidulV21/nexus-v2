@@ -49,6 +49,8 @@ function enrichInvoice(invoice: any) {
   let displayStatus: string;
   if (invoice.status === 'CANCELLED') {
     displayStatus = 'CANCELLED';
+  } else if (invoice.status === 'DRAFT') {
+    displayStatus = 'DRAFT';
   } else if (outstandingAmount <= 0) {
     displayStatus = 'PAID';
   } else if (paidAmount > 0) {
@@ -111,32 +113,12 @@ export const invoiceService = {
       return created;
     });
 
-    await timelineService.recordEvent({
-      entityType: 'INVOICE',
-      entityId: invoice.id,
-      eventType: 'INVOICE_ISSUED',
-      description: `Invoice ${invoice.invoiceNumber} ("${input.label}") issued for ${grandTotal}`,
-      actorUserId,
-    });
-
     await auditService.recordAudit({
       entityType: 'INVOICE',
       entityId: invoice.id,
       action: 'CREATE',
       afterState: { invoiceId: invoice.id, invoiceNumber: invoice.invoiceNumber, grandTotal },
       actorUserId,
-    });
-
-    await notificationsService.emitEvent({
-      eventType: 'invoice.issued',
-      entityType: 'INVOICE',
-      entityId: invoice.id,
-      recipient: 'client-on-file',
-      payload: { invoiceNumber: invoice.invoiceNumber, grandTotal, clientId: input.clientId },
-    });
-
-    import('../pdf/pdf.service').then(({ pdfService }) => {
-      pdfService.generate('INVOICE', invoice.id, actorUserId).catch(() => {});
     });
 
     return this.getById(invoice.id);
@@ -146,9 +128,14 @@ export const invoiceService = {
     const invoice = await invoiceRepository.findById(id);
     if (!invoice) throw new NotFoundError('Invoice not found');
     if (invoice.status === 'CANCELLED') throw new ValidationError('Cannot send a cancelled invoice');
+    if (invoice.status === 'ISSUED' && !resend) throw new ValidationError('Invoice has already been sent');
 
     const recipient = invoice.client?.email;
     if (!recipient) throw new ValidationError('Invoice client does not have an email address');
+
+    if (invoice.status === 'DRAFT') {
+      await invoiceRepository.markSent(id);
+    }
 
     await timelineService.recordEvent({
       entityType: 'INVOICE',
@@ -385,6 +372,9 @@ export const invoiceService = {
     const invoice = await invoiceRepository.findById(id);
     if (!invoice) throw new NotFoundError('Invoice not found');
     if (invoice.clientId !== clientId) {
+      throw new NotFoundError('Invoice not found');
+    }
+    if (invoice.status === 'DRAFT') {
       throw new NotFoundError('Invoice not found');
     }
     return enrichInvoice(invoice);
