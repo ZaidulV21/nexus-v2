@@ -90,6 +90,16 @@ export const invoiceController = {
     }
   },
 
+  async clientInvoiceSummary(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.user || req.user.type !== 'CLIENT') throw new UnauthorizedError();
+      const summary = await invoiceService.getClientInvoiceSummary(req.user.id);
+      return ok(res, summary);
+    } catch (err) {
+      next(err);
+    }
+  },
+
   async getForClient(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.user || req.user.type !== 'CLIENT') throw new UnauthorizedError();

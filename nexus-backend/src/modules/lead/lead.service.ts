@@ -9,8 +9,13 @@ import { auditService } from '../audit/audit.service';
 import { notificationsService } from '../notifications/notifications.service';
 import { statusEngineService } from '../status-engine/statusEngine.service';
 import { CreateLeadInput, AddServiceToLeadInput, UpdateLeadServiceStatusInput, ArchiveLeadInput } from './lead.types';
+import { computeLeadAggregateStatus, LeadServiceLike } from './lead.aggregateStatus';
 import { NotFoundError, ValidationError } from '../../core/errors/AppError';
 import { env } from '../../config/env';
+
+function attachLeadAggregateStatus<T extends { leadServices: LeadServiceLike[] }>(entity: T): T & { aggregateStatus: string } {
+  return { ...entity, aggregateStatus: computeLeadAggregateStatus(entity.leadServices) };
+}
 
 export const leadService = {
   // Atomic multi-service intake: either the whole enquiry is recorded, or
@@ -130,7 +135,7 @@ export const leadService = {
   async getById(id: string) {
     const lead = await leadRepository.findById(id);
     if (!lead) throw new NotFoundError('Lead not found');
-    return lead;
+    return attachLeadAggregateStatus(lead);
   },
 
   async update(id: string, data: Partial<{ contactName: string; phone: string; email: string; companyName: string }>, actorUserId?: string) {
@@ -150,7 +155,11 @@ export const leadService = {
   },
 
   async list(pagination: any) {
-    return leadRepository.list(pagination);
+    const result = await leadRepository.list(pagination);
+    return {
+      ...result,
+      items: result.items.map(attachLeadAggregateStatus),
+    };
   },
 
   // Admin-only: add a service to a Lead that has not yet converted.
@@ -187,16 +196,11 @@ export const leadService = {
     const leadServiceRecord = await leadServiceRepository.findById(leadServiceId);
     if (!leadServiceRecord) throw new NotFoundError('Lead Service not found');
 
-    // Once the Lead has converted, its services are a read-only sales
-    // record - manual status changes are blocked, but automatic updates
-    // from quotation/project workflow events continue to keep the historical
-    // record synchronized.
-    const lead = await leadRepository.findById(leadServiceRecord.leadId);
-    if (lead?.convertedAt) {
-      throw new ValidationError(
-        'This Lead has been converted - Lead Services are read-only. Status updates happen automatically from quotation and project events.'
-      );
-    }
+    // Each LeadService is independent. A service that has been handed off
+    // to project execution (PROJECT CREATED) is read-only - its status is
+    // managed by the Project workflow. Other services on the same Lead
+    // remain fully editable regardless of whether the Lead has a Client
+    // account (convertedAt) or other services have been converted.
     if (leadServiceRecord.status === 'PROJECT CREATED') {
       throw new ValidationError(
         'This service has moved to project execution - update its Project Service instead.'

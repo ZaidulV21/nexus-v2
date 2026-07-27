@@ -119,36 +119,33 @@ describe('leadService.addServiceToLead', () => {
   });
 });
 
-describe('leadService.updateLeadServiceStatus - read-only after conversion', () => {
+describe('leadService.updateLeadServiceStatus - per-service independence after conversion', () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it('rejects manual status updates once the Lead has converted', async () => {
+  it('allows manual status updates on remaining services after Lead conversion', async () => {
+    // Interior Design was converted but Solar is still editable
     (leadServiceRepository.findById as jest.Mock).mockResolvedValue({
-      id: 'ls1',
+      id: 'ls-solar',
       leadId: 'lead1',
-      status: 'APPROVED',
-    });
-    (leadRepository.findById as jest.Mock).mockResolvedValue({
-      id: 'lead1',
-      convertedAt: new Date(),
+      status: 'NEW',
     });
 
-    await expect(
-      leadService.updateLeadServiceStatus('ls1', { toStatus: 'NEGOTIATION' }, 'admin1')
-    ).rejects.toThrow('read-only');
-    expect(statusEngineService.transition).not.toHaveBeenCalled();
+    await leadService.updateLeadServiceStatus('ls-solar', { toStatus: 'CONTACTED' }, 'admin1');
+
+    expect(statusEngineService.transition).toHaveBeenCalledWith(
+      expect.objectContaining({ entityId: 'ls-solar', toStatus: 'CONTACTED' })
+    );
   });
 
   it('rejects manual updates to a service already handed off to a Project', async () => {
     (leadServiceRepository.findById as jest.Mock).mockResolvedValue({
-      id: 'ls1',
+      id: 'ls-interior',
       leadId: 'lead1',
       status: 'PROJECT CREATED',
     });
-    (leadRepository.findById as jest.Mock).mockResolvedValue({ id: 'lead1', convertedAt: null });
 
     await expect(
-      leadService.updateLeadServiceStatus('ls1', { toStatus: 'APPROVED' }, 'admin1')
+      leadService.updateLeadServiceStatus('ls-interior', { toStatus: 'APPROVED' }, 'admin1')
     ).rejects.toThrow('Project Service instead');
     expect(statusEngineService.transition).not.toHaveBeenCalled();
   });
@@ -159,7 +156,6 @@ describe('leadService.updateLeadServiceStatus - read-only after conversion', () 
       leadId: 'lead1',
       status: 'NEW',
     });
-    (leadRepository.findById as jest.Mock).mockResolvedValue({ id: 'lead1', convertedAt: null });
 
     await leadService.updateLeadServiceStatus('ls1', { toStatus: 'CONTACTED' }, 'admin1');
 

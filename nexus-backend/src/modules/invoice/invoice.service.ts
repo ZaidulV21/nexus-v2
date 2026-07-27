@@ -363,6 +363,24 @@ export const invoiceService = {
     return invoices.map(enrichInvoice);
   },
 
+  async getClientInvoiceSummary(clientId: string) {
+    const invoices = await invoiceRepository.listForClient(clientId);
+    const activeInvoices = invoices.filter((inv) => inv.status !== 'CANCELLED');
+
+    const totalInvoiced = activeInvoices.reduce((sum, inv) => sum + Number(inv.grandTotal), 0);
+    const totalPaid = activeInvoices.reduce(
+      (sum, inv) => sum + inv.payments.reduce((s, p) => s + Number(p.amount), 0),
+      0
+    );
+
+    return {
+      totalInvoiced,
+      totalPaid,
+      outstanding: totalInvoiced - totalPaid,
+      invoiceCount: activeInvoices.length,
+    };
+  },
+
   async getForClient(id: string, clientId: string) {
     const invoice = await invoiceRepository.findById(id);
     if (!invoice) throw new NotFoundError('Invoice not found');

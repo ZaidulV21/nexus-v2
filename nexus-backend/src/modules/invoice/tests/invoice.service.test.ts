@@ -264,6 +264,45 @@ describe('invoiceService.getProjectFinancialSummary', () => {
   });
 });
 
+describe('invoiceService.getClientInvoiceSummary', () => {
+  it('excludes cancelled invoices from totals', async () => {
+    (invoiceRepository.listForClient as jest.Mock).mockResolvedValue([
+      { grandTotal: 80000, status: 'ISSUED', payments: [{ amount: 30000 }] },
+      { grandTotal: 20000, status: 'CANCELLED', payments: [] },
+      { grandTotal: 50000, status: 'ISSUED', payments: [{ amount: 50000 }] },
+    ]);
+
+    const summary = await invoiceService.getClientInvoiceSummary('client1');
+    expect(summary.totalInvoiced).toBe(130000);
+    expect(summary.totalPaid).toBe(80000);
+    expect(summary.outstanding).toBe(50000);
+    expect(summary.invoiceCount).toBe(2);
+  });
+
+  it('returns zeros when all invoices are cancelled', async () => {
+    (invoiceRepository.listForClient as jest.Mock).mockResolvedValue([
+      { grandTotal: 50000, status: 'CANCELLED', payments: [] },
+      { grandTotal: 30000, status: 'CANCELLED', payments: [] },
+    ]);
+
+    const summary = await invoiceService.getClientInvoiceSummary('client1');
+    expect(summary.totalInvoiced).toBe(0);
+    expect(summary.totalPaid).toBe(0);
+    expect(summary.outstanding).toBe(0);
+    expect(summary.invoiceCount).toBe(0);
+  });
+
+  it('returns zeros when no invoices exist', async () => {
+    (invoiceRepository.listForClient as jest.Mock).mockResolvedValue([]);
+
+    const summary = await invoiceService.getClientInvoiceSummary('client1');
+    expect(summary.totalInvoiced).toBe(0);
+    expect(summary.totalPaid).toBe(0);
+    expect(summary.outstanding).toBe(0);
+    expect(summary.invoiceCount).toBe(0);
+  });
+});
+
 describe('enrichInvoice - displayStatus calculation', () => {
   it('returns DRAFT for ISSUED invoice with no payments', async () => {
     (invoiceRepository.findById as jest.Mock).mockResolvedValue({

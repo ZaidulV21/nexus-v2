@@ -24,7 +24,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { useApiQuery } from '@/hooks/useApiQuery';
 import { useToast } from '@/hooks/useToast';
 import { useClientQuotationsList } from '@/queries/useQuotations';
-import { useMyInvoices } from '@/queries/useInvoices';
+import { useMyInvoices, useMyInvoiceSummary } from '@/queries/useInvoices';
 import { useMyDocuments } from '@/queries/useDocuments';
 import { useMessageThread } from '@/queries/useMessages';
 import { documentService } from '@/services/documentService';
@@ -70,6 +70,7 @@ export function PortalDashboardPage() {
 
   const quotationsQuery = useClientQuotationsList(actor?.id, { page: 1, pageSize: 50 });
   const invoicesQuery = useMyInvoices();
+  const invoiceSummaryQuery = useMyInvoiceSummary();
   const documentsQuery = useMyDocuments();
   const messagesQuery = useMessageThread(actor?.id, { pageSize: 100 });
 
@@ -85,10 +86,7 @@ export function PortalDashboardPage() {
       ),
     [invoicesQuery.data]
   );
-  const totalOutstanding = useMemo(
-    () => outstandingInvoices.reduce((sum, invoice) => sum + (invoice.outstandingAmount ?? 0), 0),
-    [outstandingInvoices]
-  );
+  const totalOutstanding = invoiceSummaryQuery.data?.outstanding ?? outstandingInvoices.reduce((sum, invoice) => sum + (invoice.outstandingAmount ?? 0), 0);
 
   const recentDocuments = useMemo(() => (documentsQuery.data ?? []).slice(0, 5), [documentsQuery.data]);
   const recentMessages = useMemo(() => (messagesQuery.data?.items ?? []).slice(-3).reverse(), [messagesQuery.data]);

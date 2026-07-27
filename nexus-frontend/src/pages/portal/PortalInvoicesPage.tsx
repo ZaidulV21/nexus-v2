@@ -7,7 +7,7 @@ import { DataTable } from '@/components/ui/DataTable';
 import { SearchInput } from '@/components/ui/SearchInput';
 import { StatCard } from '@/components/ui/StatCard';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { useMyInvoices } from '@/queries/useInvoices';
+import { useMyInvoices, useMyInvoiceSummary } from '@/queries/useInvoices';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { ROUTES } from '@/routes/routes';
 import type { Invoice } from '@/types';
@@ -16,6 +16,7 @@ export function PortalInvoicesPage() {
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const { data, isLoading, isError, refetch } = useMyInvoices();
+  const { data: summary } = useMyInvoiceSummary();
 
   const invoices = useMemo(() => {
     const items = data ?? [];
@@ -30,11 +31,18 @@ export function PortalInvoicesPage() {
   }, [data, search]);
 
   const totals = useMemo(() => {
+    if (summary) {
+      return {
+        invoiced: summary.totalInvoiced,
+        paid: summary.totalPaid,
+        outstanding: summary.outstanding,
+      };
+    }
     const active = (data ?? []).filter((invoice) => invoice.status !== 'CANCELLED');
     const invoiced = active.reduce((sum, invoice) => sum + Number(invoice.grandTotal), 0);
     const paid = active.reduce((sum, invoice) => sum + (invoice.paidAmount ?? 0), 0);
     return { invoiced, paid, outstanding: invoiced - paid };
-  }, [data]);
+  }, [summary, data]);
 
   const columns = useMemo<ColumnDef<Invoice, any>[]>(
     () => [

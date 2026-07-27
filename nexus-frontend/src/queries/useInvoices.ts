@@ -31,6 +31,14 @@ export function useMyInvoices() {
   });
 }
 
+/** Client-portal: summary totals (excludes cancelled invoices). */
+export function useMyInvoiceSummary() {
+  return useQuery({
+    queryKey: queryKeys.invoices.clientSummary,
+    queryFn: () => invoiceService.getMineSummary(),
+  });
+}
+
 export function useMyInvoice(id: string | undefined) {
   return useQuery({
     queryKey: queryKeys.invoices.clientDetail(id ?? ''),
@@ -71,6 +79,7 @@ export function useCancelInvoice(invoiceId: string) {
     onSuccess: (invoice) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.invoices.detail(invoiceId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.invoices.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.invoices.clientSummary });
       queryClient.invalidateQueries({ queryKey: queryKeys.projects.invoices(invoice.projectId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.timeline('INVOICE', invoiceId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.auditLogs('INVOICE', invoiceId) });

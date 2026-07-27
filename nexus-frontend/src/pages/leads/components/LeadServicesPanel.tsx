@@ -29,12 +29,11 @@ export function LeadServicesPanel({ lead }: { lead: Lead }) {
       ) : (
         <ul className="divide-y divide-border rounded-lg border border-border">
           {services.map((ls) => {
-            // A service's status is locked when (a) it sits at a
-            // workflow-controlled stage (QUOTE SENT / PROJECT CREATED), or
-            // (b) the whole Lead has converted - from then on Lead Services
-            // become read-only and continue auto-updating from quotation/project events.
+            // Each LeadService is independent. A service is locked only
+            // when its status is backend-controlled (QUOTE SENT, PROJECT
+            // CREATED). Converting one service never locks the others.
             const isBackendControlled = !(MANUAL_LEAD_SERVICE_STATUSES as readonly string[]).includes(ls.status);
-            const isLocked = isBackendControlled || !!lead.convertedAt;
+            const isLocked = isBackendControlled;
             return (
               <li key={ls.id} className="flex items-center justify-between px-4 py-3">
                 <div className="flex items-center gap-3">
@@ -48,13 +47,9 @@ export function LeadServicesPanel({ lead }: { lead: Lead }) {
                   {isLocked ? (
                     <span
                       className="flex items-center gap-1 text-xs text-ink-faint"
-                      title={
-                        lead.convertedAt
-                          ? 'This Lead has converted - Lead Services are read-only. Status updates automatically from quotation and project events.'
-                          : 'This status is updated automatically by the quotation/project workflow'
-                      }
+                      title="This status is updated automatically by the quotation/project workflow"
                     >
-                      <Lock className="h-3 w-3" /> {lead.convertedAt ? 'Read-Only (Auto-Sync)' : 'Auto'}
+                      <Lock className="h-3 w-3" /> Auto
                     </span>
                   ) : (
                     <button

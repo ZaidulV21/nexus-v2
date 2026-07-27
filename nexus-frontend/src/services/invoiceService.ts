@@ -29,6 +29,13 @@ export interface CreateInvoiceInput {
   }>;
 }
 
+export interface ClientInvoiceSummary {
+  totalInvoiced: number;
+  totalPaid: number;
+  outstanding: number;
+  invoiceCount: number;
+}
+
 export const invoiceService = {
   create: (input: CreateInvoiceInput) => api.post<Invoice>('/invoices', input),
 
@@ -45,6 +52,9 @@ export const invoiceService = {
 
   /** Client-portal: only the authenticated client's own invoices. */
   listMine: () => api.get<Invoice[]>('/invoices/me'),
+
+  /** Client-portal: summary totals (excludes cancelled invoices). */
+  getMineSummary: () => api.get<ClientInvoiceSummary>('/invoices/me/summary'),
 
   getMine: (id: string) => api.get<Invoice>(`/invoices/me/${id}`),
 
