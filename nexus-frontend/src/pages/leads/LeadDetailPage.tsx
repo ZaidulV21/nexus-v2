@@ -17,6 +17,7 @@ import { ApiError } from '@/lib/api';
 import { LeadOverviewPanel } from './components/LeadOverviewPanel';
 import { LeadServicesPanel } from './components/LeadServicesPanel';
 import { LeadNotesPanel } from './components/LeadNotesPanel';
+import { LeadRequirementsPanel } from './components/LeadRequirementsPanel';
 
 export function LeadDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -129,6 +130,7 @@ export function LeadDetailPage() {
             <TabsList>
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="services">Services</TabsTrigger>
+              <TabsTrigger value="requirements">Requirements</TabsTrigger>
               <TabsTrigger value="notes">Notes</TabsTrigger>
               <TabsTrigger value="timeline">Timeline</TabsTrigger>
               <TabsTrigger value="audit">Audit Log</TabsTrigger>
@@ -139,6 +141,9 @@ export function LeadDetailPage() {
             </TabsContent>
             <TabsContent value="services" className="pt-5">
               <LeadServicesPanel lead={lead} />
+            </TabsContent>
+            <TabsContent value="requirements" className="pt-5">
+              <LeadRequirementsPanel lead={lead} />
             </TabsContent>
             <TabsContent value="notes" className="pt-5">
               <LeadNotesPanel leadId={lead.id} />
