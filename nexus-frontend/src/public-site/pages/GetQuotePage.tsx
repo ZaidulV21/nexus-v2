@@ -79,6 +79,9 @@ export function GetQuotePage() {
   const [loginError, setLoginError] = useState<string | null>(null);
   const [loginSuccess, setLoginSuccess] = useState(false);
   const [showContactErrors, setShowContactErrors] = useState(false);
+  const [showServicesError, setShowServicesError] = useState(false);
+  const [showQuestionsError, setShowQuestionsError] = useState(false);
+  const [showAccountErrors, setShowAccountErrors] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const createLeadMutation = useCreateLead();
 
@@ -140,18 +143,29 @@ export function GetQuotePage() {
     }
   }, [state, services, loginSuccess]);
 
-  // Reset showContactErrors when leaving contact step
+  // Reset validation flags when leaving a step
   useEffect(() => {
-    if (state.currentStep !== 2) {
-      setShowContactErrors(false);
-    }
+    if (state.currentStep !== 0) setShowServicesError(false);
+    if (state.currentStep !== 1) setShowQuestionsError(false);
+    if (state.currentStep !== 2) setShowContactErrors(false);
+    if (state.currentStep !== 4) setShowAccountErrors(false);
   }, [state.currentStep]);
 
   const handleNext = useCallback(async () => {
     if (!canProceedCurrentStep) {
-      // Show inline validation on Contact step
-      if (state.currentStep === 2) {
-        setShowContactErrors(true);
+      switch (state.currentStep) {
+        case 0:
+          setShowServicesError(true);
+          break;
+        case 1:
+          setShowQuestionsError(true);
+          break;
+        case 2:
+          setShowContactErrors(true);
+          break;
+        case 4:
+          setShowAccountErrors(true);
+          break;
       }
       return;
     }
@@ -408,6 +422,7 @@ export function GetQuotePage() {
                     <StepServices
                       selectedServices={state.selectedServices}
                       onToggle={wizard.toggleService}
+                      showError={showServicesError}
                     />
                   )}
                   {state.currentStep === 1 && (
@@ -415,6 +430,7 @@ export function GetQuotePage() {
                       selectedServices={state.selectedServices}
                       answers={state.answers}
                       onAnswer={wizard.setAnswer}
+                      showErrors={showQuestionsError}
                     />
                   )}
                   {state.currentStep === 2 && (
@@ -432,6 +448,7 @@ export function GetQuotePage() {
                       contact={state.contact}
                       account={state.account}
                       onUpdate={wizard.updateAccount}
+                      showErrors={showAccountErrors}
                     />
                   )}
                   {state.currentStep === 4 && state.emailExists === true && !loginSuccess && (

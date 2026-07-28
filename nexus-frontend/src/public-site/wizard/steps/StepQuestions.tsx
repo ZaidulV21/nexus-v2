@@ -1,4 +1,6 @@
+import { useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
+import { AlertCircle } from 'lucide-react';
 import { usePublicServices } from '@/queries/usePublicServices';
 import { getQuestionsForService } from '../serviceQuestions';
 import { QuestionRenderer } from '../QuestionRenderer';
@@ -7,11 +9,22 @@ interface StepQuestionsProps {
   selectedServices: string[];
   answers: Record<string, Record<string, string | string[]>>;
   onAnswer: (serviceId: string, questionId: string, value: string | string[]) => void;
+  showErrors?: boolean;
 }
 
-export function StepQuestions({ selectedServices, answers, onAnswer }: StepQuestionsProps) {
+export function StepQuestions({ selectedServices, answers, onAnswer, showErrors }: StepQuestionsProps) {
   const { data: services = [] } = usePublicServices();
   const selectedServiceData = services.filter((s) => selectedServices.includes(s.id));
+  const firstInvalidRef = useRef<HTMLDivElement | null>(null);
+  const firstInvalidIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (showErrors && firstInvalidRef.current) {
+      firstInvalidRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const firstInput = firstInvalidRef.current.querySelector('input, textarea, select, button');
+      (firstInput as HTMLElement)?.focus();
+    }
+  }, [showErrors]);
 
   if (selectedServiceData.length === 0) {
     return (
@@ -20,6 +33,21 @@ export function StepQuestions({ selectedServices, answers, onAnswer }: StepQuest
       </div>
     );
   }
+
+  const allFirstInvalid = (() => {
+    for (const service of selectedServiceData) {
+      const config = getQuestionsForService(service.slug);
+      if (!config) continue;
+      const serviceAnswers = answers[service.id] || {};
+      for (const q of config.questions) {
+        if (!q.required) continue;
+        const val = serviceAnswers[q.id];
+        const isEmpty = val === undefined || val === '' || (Array.isArray(val) && val.length === 0);
+        if (isEmpty) return `${service.id}::${q.id}`;
+      }
+    }
+    return null;
+  })();
 
   return (
     <div className="p-6 sm:p-8">
@@ -45,22 +73,42 @@ export function StepQuestions({ selectedServices, answers, onAnswer }: StepQuest
 
               {config ? (
                 <div className="mt-5 space-y-5">
-                  {config.questions.map((q) => (
-                    <div key={q.id}>
-                      <label className="mb-1.5 block text-sm font-medium text-ink">
-                        {q.label}
-                        {q.required && <span className="ml-1 text-accent">*</span>}
-                      </label>
-                      <QuestionRenderer
-                        question={q}
-                        value={serviceAnswers[q.id]}
-                        onChange={(val) => onAnswer(service.id, q.id, val)}
-                      />
-                      {q.helpText && (
-                        <p className="mt-1 text-xs text-ink-faint">{q.helpText}</p>
-                      )}
-                    </div>
-                  ))}
+                  {config.questions.map((q) => {
+                    const val = serviceAnswers[q.id];
+                    const isEmpty = val === undefined || val === '' || (Array.isArray(val) && val.length === 0);
+                    const showFieldError = showErrors && q.required && isEmpty;
+                    const fieldId = `${service.id}::${q.id}`;
+                    const isFirst = fieldId === allFirstInvalid;
+
+                    if (isFirst) firstInvalidIdRef.current = fieldId;
+
+                    return (
+                      <div
+                        key={q.id}
+                        ref={isFirst ? firstInvalidRef : undefined}
+                      >
+                        <label className="mb-1.5 block text-sm font-medium text-ink">
+                          {q.label}
+                          {q.required && <span className="ml-1 text-accent">*</span>}
+                        </label>
+                        <div className={showFieldError ? 'rounded-xl ring-2 ring-red-400' : ''}>
+                          <QuestionRenderer
+                            question={q}
+                            value={val}
+                            onChange={(v) => onAnswer(service.id, q.id, v)}
+                          />
+                        </div>
+                        {showFieldError && (
+                          <p className="mt-1 flex items-center gap-1 text-xs text-red-500">
+                            <AlertCircle className="h-3 w-3" /> This field is required
+                          </p>
+                        )}
+                        {q.helpText && !showFieldError && (
+                          <p className="mt-1 text-xs text-ink-faint">{q.helpText}</p>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="mt-4">

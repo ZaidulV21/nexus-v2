@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Lock, Eye, EyeOff } from 'lucide-react';
 import { useState } from 'react';
@@ -7,19 +8,40 @@ interface StepAccountProps {
   contact: WizardContactInfo;
   account: WizardAccountInfo;
   onUpdate: (partial: Partial<WizardAccountInfo>) => void;
+  showErrors?: boolean;
 }
 
-export function StepAccount({ contact, account, onUpdate }: StepAccountProps) {
+export function StepAccount({ contact, account, onUpdate, showErrors }: StepAccountProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const passwordRef = useRef<HTMLDivElement>(null);
+  const confirmRef = useRef<HTMLDivElement>(null);
 
-  const passwordError = account.password && account.password.length < 8
+  const passwordMissing = showErrors && !account.password;
+  const passwordShort = !passwordMissing && account.password.length > 0 && account.password.length < 8;
+  const confirmMissing = showErrors && !account.confirmPassword;
+  const confirmMismatch = !confirmMissing && account.confirmPassword.length > 0 && account.password !== account.confirmPassword;
+
+  const passwordError = passwordMissing
+    ? 'Password is required'
+    : passwordShort
     ? 'Password must be at least 8 characters'
     : '';
 
-  const confirmError = account.confirmPassword && account.password !== account.confirmPassword
+  const confirmError = confirmMissing
+    ? 'Please confirm your password'
+    : confirmMismatch
     ? 'Passwords do not match'
     : '';
+
+  useEffect(() => {
+    if (showErrors) {
+      const target = passwordMissing || passwordShort ? passwordRef : confirmMissing || confirmMismatch ? confirmRef : null;
+      target?.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const input = target?.current?.querySelector('input');
+      (input as HTMLElement)?.focus();
+    }
+  }, [showErrors]);
 
   return (
     <div className="p-6 sm:p-8">
@@ -55,7 +77,7 @@ export function StepAccount({ contact, account, onUpdate }: StepAccountProps) {
               />
             </div>
 
-            <div>
+            <div ref={passwordRef}>
               <label className="block text-xs font-medium text-ink-muted mb-1">Password</label>
               <div className="relative">
                 <input
@@ -80,7 +102,7 @@ export function StepAccount({ contact, account, onUpdate }: StepAccountProps) {
               )}
             </div>
 
-            <div>
+            <div ref={confirmRef}>
               <label className="block text-xs font-medium text-ink-muted mb-1">Confirm Password</label>
               <div className="relative">
                 <input

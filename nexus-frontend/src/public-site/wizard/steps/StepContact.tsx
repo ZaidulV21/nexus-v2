@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import type { WizardContactInfo } from '../types';
 
@@ -8,9 +9,21 @@ interface StepContactProps {
 }
 
 export function StepContact({ contact, onUpdate, showErrors }: StepContactProps) {
+  const nameRef = useRef<HTMLDivElement>(null);
+  const emailRef = useRef<HTMLDivElement>(null);
+  const phoneRef = useRef<HTMLDivElement>(null);
   const nameEmpty = showErrors && !contact.name.trim();
   const emailEmpty = showErrors && !contact.email.trim();
   const phoneEmpty = showErrors && !contact.phone.trim();
+
+  useEffect(() => {
+    if (showErrors) {
+      const target = nameEmpty ? nameRef : emailEmpty ? emailRef : phoneEmpty ? phoneRef : null;
+      target?.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const input = target?.current?.querySelector('input');
+      (input as HTMLElement)?.focus();
+    }
+  }, [showErrors]);
 
   return (
     <div className="p-6 sm:p-8">
@@ -25,7 +38,7 @@ export function StepContact({ contact, onUpdate, showErrors }: StepContactProps)
         className="mt-6 space-y-4"
       >
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
+          <div ref={nameRef}>
             <label className="mb-1.5 block text-sm font-medium text-ink">Full Name *</label>
             <input
               type="text"
@@ -38,7 +51,7 @@ export function StepContact({ contact, onUpdate, showErrors }: StepContactProps)
             />
             {nameEmpty && <p className="mt-1 text-xs text-red-500">Name is required</p>}
           </div>
-          <div>
+          <div ref={emailRef}>
             <label className="mb-1.5 block text-sm font-medium text-ink">Email *</label>
             <input
               type="email"
@@ -51,7 +64,7 @@ export function StepContact({ contact, onUpdate, showErrors }: StepContactProps)
             />
             {emailEmpty && <p className="mt-1 text-xs text-red-500">Email is required</p>}
           </div>
-          <div>
+          <div ref={phoneRef}>
             <label className="mb-1.5 block text-sm font-medium text-ink">Phone *</label>
             <input
               type="tel"

@@ -10,6 +10,7 @@ import { useCreateLead } from '@/queries/useLeads';
 import { clientService } from '@/services/clientService';
 import { StepServices } from '@/public-site/wizard/steps/StepServices';
 import { StepQuestions } from '@/public-site/wizard/steps/StepQuestions';
+import { getQuestionsForService } from '@/public-site/wizard/serviceQuestions';
 import { ROUTES } from '@/routes/routes';
 
 
@@ -24,6 +25,8 @@ export function PortalServiceRequestPage() {
   const [selectedServices, setSelectedServices] = useState<string[]>([]);
   const [answers, setAnswers] = useState<Record<string, Record<string, string | string[]>>>({});
   const [submitted, setSubmitted] = useState(false);
+  const [showServicesError, setShowServicesError] = useState(false);
+  const [showQuestionsError, setShowQuestionsError] = useState(false);
 
   const toggleService = useCallback((serviceId: string) => {
     setSelectedServices((prev) => {
@@ -43,7 +46,38 @@ export function PortalServiceRequestPage() {
     }));
   }, []);
 
-  const canProceed = step === 0 ? selectedServices.length > 0 : true;
+  function handleNext() {
+    if (step === 0 && selectedServices.length === 0) {
+      setShowServicesError(true);
+      return;
+    }
+    if (step === 1) {
+      let invalid = false;
+      for (const serviceId of selectedServices) {
+        const service = services.find((s) => s.id === serviceId);
+        if (!service) continue;
+        const config = getQuestionsForService(service.slug);
+        if (!config) continue;
+        const serviceAnswers = answers[serviceId] || {};
+        for (const q of config.questions) {
+          if (!q.required) continue;
+          const val = serviceAnswers[q.id];
+          if (val === undefined || val === '' || (Array.isArray(val) && val.length === 0)) {
+            invalid = true;
+            break;
+          }
+        }
+        if (invalid) break;
+      }
+      if (invalid) {
+        setShowQuestionsError(true);
+        return;
+      }
+    }
+    setShowServicesError(false);
+    setShowQuestionsError(false);
+    setStep((s) => s + 1);
+  }
 
   async function handleSubmit() {
     if (!actor) return;
@@ -125,8 +159,8 @@ export function PortalServiceRequestPage() {
       {/* Step content */}
       <Card>
         <CardContent className="p-0">
-          {step === 0 && <StepServices selectedServices={selectedServices} onToggle={toggleService} />}
-          {step === 1 && <StepQuestions selectedServices={selectedServices} answers={answers} onAnswer={setAnswer} />}
+          {step === 0 && <StepServices selectedServices={selectedServices} onToggle={toggleService} showError={showServicesError} />}
+          {step === 1 && <StepQuestions selectedServices={selectedServices} answers={answers} onAnswer={setAnswer} showErrors={showQuestionsError} />}
           {step === 2 && (
             <div className="p-6 sm:p-8">
               <h2 className="text-xl font-bold text-ink">Review your request</h2>
@@ -178,7 +212,7 @@ export function PortalServiceRequestPage() {
           <ArrowLeft className="h-3.5 w-3.5" /> Back
         </Button>
         {step < STEP_LABELS.length - 1 ? (
-          <Button onClick={() => setStep((s) => s + 1)} disabled={!canProceed}>
+          <Button onClick={handleNext}>
             Next <ArrowRight className="h-3.5 w-3.5" />
           </Button>
         ) : (

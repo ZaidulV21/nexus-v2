@@ -49,8 +49,7 @@ export function WizardNavigation({
         <button
           type="button"
           onClick={onNext}
-          disabled={!canProceed}
-          className="flex items-center gap-2 rounded-xl bg-accent px-6 py-2.5 text-sm font-semibold text-white hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="flex items-center gap-2 rounded-xl bg-accent px-6 py-2.5 text-sm font-semibold text-white hover:bg-accent-hover transition-colors"
         >
           Next
           <ArrowRight className="h-4 w-4" />

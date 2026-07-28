@@ -1,5 +1,6 @@
+import { useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { Check, Palette, Sun, Zap, Camera, Monitor, Globe, ShoppingCart, ShieldCheck } from 'lucide-react';
+import { AlertCircle, Check, Palette, Sun, Zap, Camera, Monitor, Globe, ShoppingCart, ShieldCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePublicServices } from '@/queries/usePublicServices';
 
@@ -10,9 +11,17 @@ const iconMap: Record<string, React.ElementType> = {
 interface StepServicesProps {
   selectedServices: string[];
   onToggle: (serviceId: string) => void;
+  showError?: boolean;
 }
 
-export function StepServices({ selectedServices, onToggle }: StepServicesProps) {
+export function StepServices({ selectedServices, onToggle, showError }: StepServicesProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (showError && selectedServices.length === 0) {
+      containerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [showError, selectedServices]);
   const { data: services = [], isLoading } = usePublicServices();
 
   return (
@@ -78,6 +87,17 @@ export function StepServices({ selectedServices, onToggle }: StepServicesProps) 
         <p className="mt-4 text-xs text-ink-faint">
           {selectedServices.length} service{selectedServices.length !== 1 ? 's' : ''} selected
         </p>
+      )}
+      {showError && selectedServices.length === 0 && (
+        <motion.div
+          ref={containerRef}
+          initial={{ opacity: 0, y: -4 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mt-4 flex items-center gap-2 rounded-xl bg-red-50 border border-red-200 px-4 py-3"
+        >
+          <AlertCircle className="h-4 w-4 text-red-500 shrink-0" />
+          <p className="text-sm text-red-600">Please select at least one service to continue.</p>
+        </motion.div>
       )}
     </div>
   );
