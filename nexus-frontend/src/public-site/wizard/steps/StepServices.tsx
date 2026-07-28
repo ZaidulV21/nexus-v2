@@ -1,12 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { AlertCircle, Check, Palette, Sun, Zap, Camera, Monitor, Globe, ShoppingCart, ShieldCheck } from 'lucide-react';
+import { AlertCircle, Check, ImageIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePublicServices } from '@/queries/usePublicServices';
-
-const iconMap: Record<string, React.ElementType> = {
-  Palette, Sun, Zap, Camera, Monitor, Globe, ShoppingCart, ShieldCheck,
-};
 
 interface StepServicesProps {
   selectedServices: string[];
@@ -40,7 +36,6 @@ export function StepServices({ selectedServices, onToggle, showError }: StepServ
       ) : (
         <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
           {services.map((service, index) => {
-            const Icon = iconMap[service.icon] || Palette;
             const isSelected = selectedServices.includes(service.id);
             return (
               <motion.button
@@ -65,12 +60,18 @@ export function StepServices({ selectedServices, onToggle, showError }: StepServ
                   {isSelected && <Check className="h-3 w-3" />}
                 </div>
 
-                <div className={cn(
-                  'flex h-12 w-12 shrink-0 items-center justify-center rounded-xl transition-colors',
-                  isSelected ? 'bg-accent text-white' : 'bg-accent-subtle text-accent'
-                )}>
-                  <Icon className="h-5 w-5" />
-                </div>
+                {service.image ? (
+                  <div className="h-12 w-12 shrink-0 overflow-hidden rounded-xl">
+                    <img src={service.image} alt={service.name} className="h-full w-full object-cover" />
+                  </div>
+                ) : (
+                  <div className={cn(
+                    'flex h-12 w-12 shrink-0 items-center justify-center rounded-xl transition-colors',
+                    isSelected ? 'bg-accent text-white' : 'bg-accent-subtle text-accent'
+                  )}>
+                    <ImageIcon className="h-5 w-5" />
+                  </div>
+                )}
                 <div className="min-w-0 pr-6">
                   <p className="text-sm font-semibold text-ink">{service.name}</p>
                   <p className="mt-0.5 text-xs text-ink-muted line-clamp-2 leading-relaxed">

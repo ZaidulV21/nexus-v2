@@ -8,7 +8,6 @@ import { Card, CardContent } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { FormField } from '@/components/ui/FormField';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
 import { CompanyLogo, CompanyName } from '@/components/layout/CompanyLogo';
 import { useAuth } from '@/app/AuthContext';
 import { useToast } from '@/hooks/useToast';
@@ -18,7 +17,6 @@ import { ROUTES } from '@/routes/routes';
 const loginSchema = z.object({
   email: z.string().min(1, 'Email is required').email('Enter a valid email address'),
   password: z.string().min(1, 'Password is required'),
-  actorType: z.enum(['ADMIN', 'CLIENT']),
 });
 
 type LoginFormValues = z.infer<typeof loginSchema>;
@@ -32,15 +30,11 @@ export function LoginPage() {
 
   const {
     register,
-    watch,
-    setValue,
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
-    defaultValues: { actorType: 'ADMIN' },
   });
-  const actorType = watch('actorType');
 
   if (!isInitializing && isAuthenticated) {
     const stateFrom = (location.state as { from?: string } | null)?.from;
@@ -58,10 +52,12 @@ export function LoginPage() {
   async function onSubmit(values: LoginFormValues) {
     setServerError(null);
     try {
-      await login(values);
+      await login({ ...values, actorType: 'CLIENT' });
       toast({ title: 'Welcome back', variant: 'success' });
       const stateFrom = (location.state as { from?: string } | null)?.from;
-      const isClient = values.actorType === 'CLIENT';
+      const stored = localStorage.getItem('nexus.auth.actor');
+      const storedActor = stored ? JSON.parse(stored) : null;
+      const isClient = storedActor?.type === 'CLIENT';
       const fallback = isClient ? ROUTES.portal.dashboard : ROUTES.admin.dashboard;
       const fromIsCompatible = stateFrom
         ? isClient
@@ -96,20 +92,6 @@ export function LoginPage() {
         <Card>
           <CardContent className="pt-6">
             <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4" noValidate>
-              <FormField label="Login as" htmlFor="actorType" required error={errors.actorType?.message}>
-                <Select
-                  value={actorType}
-                  onValueChange={(value) => setValue('actorType', value as 'ADMIN' | 'CLIENT', { shouldValidate: true })}
-                >
-                  <SelectTrigger id="actorType">
-                    <SelectValue placeholder="Select account type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ADMIN">Admin</SelectItem>
-                    <SelectItem value="CLIENT">Client</SelectItem>
-                  </SelectContent>
-                </Select>
-              </FormField>
 
               <FormField label="Email" htmlFor="email" error={errors.email?.message} required>
                 <Input
@@ -146,7 +128,7 @@ export function LoginPage() {
               )}
 
               <Button type="submit" loading={isSubmitting} className="mt-1 w-full">
-                {actorType === 'CLIENT' ? 'Sign in to Client Portal' : 'Sign in to Admin'}
+                Sign In
               </Button>
             </form>
           </CardContent>
