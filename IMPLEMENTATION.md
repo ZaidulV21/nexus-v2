@@ -2533,3 +2533,63 @@ Admin creates quotation for Client → selects specific Lead (L-00027)
 | GET /clients/:id/leads endpoint | ✅ |
 | Backfill migration for existing data | ✅ |
 | No regressions to existing workflow | ✅ |
+
+---
+
+# Phase 14 — Client Portal Dashboard Enhancement
+
+**Date**: 2026-07-28  
+**Status**: ✅ IMPLEMENTATION COMPLETE
+
+## Summary
+
+Enhanced the Client Portal Dashboard with 5 new information cards: Personal Information, Quick Stats, Recent Activity (timeline), Notifications, and Upcoming Payments — all using existing backend APIs without any backend, schema, or business logic changes. No duplicate queries were created; all new data sources use existing query hooks.
+
+## Changes Made
+
+### Frontend (1 file modified)
+
+**`src/pages/portal/PortalDashboardPage.tsx`** — Added 5 new card sections:
+
+1. **Personal Information** — Displays client profile (name, email, phone, company, client ID, member since) fetched via `clientService.getCurrent()` (`GET /api/clients/me`). Includes loading skeleton, error state, and graceful handling of null fields (e.g. `companyName`).
+
+2. **Quick Stats** — Compact 2×2 grid showing invoice count, document count, total invoiced, and total paid — derived from existing `useMyInvoiceSummary` and `useMyDocuments` query hooks (no new API calls).
+
+3. **Upcoming Payments** — Lists outstanding invoices sorted by nearest `dueDate`, with clickable invoice number links and due date display. Derived from existing `useMyInvoices` query data, filtered and sorted client-side via `useMemo`.
+
+4. **Recent Activity** — Shows last 5 timeline events via `useTimeline('client', actor?.id)` (`GET /api/timeline/client/:id`). Displays event description, actor reference, and relative timestamp. Empty state and loading skeleton included.
+
+5. **Notifications** — Shows last 5 in-app notifications via `useNotifications(1, 5)`. Displays title, description, relative timestamp, and unread dot indicator. Empty state ("All caught up") and loading skeleton included.
+
+### Layout
+- New cards placed between existing stat cards row and existing 2-column sections
+- Grid: 2-column × 2 rows (Personal Info + Upcoming Payments, Quick Stats + Notifications), followed by full-width Recent Activity card
+- All existing dashboard content preserved (quotations, invoices, documents, messages, projects)
+
+### New Imports Added
+- `useTimeline` from `@/queries/useTimeline`
+- `useNotifications` from `@/queries/useNotifications`
+- `clientService` from `@/services/clientService`
+- `Activity`, `Bell`, `CalendarDays`, `TrendingUp`, `User` from `lucide-react`
+
+### What Was NOT Modified
+- Backend API, database schema, or business logic
+- Any other frontend page, component, hook, service, or route
+- Existing dashboard content (all sections preserved as-is)
+- No new query hooks or services created — reused existing hooks exclusively
+
+## Verification
+
+| Check | Result |
+|-------|--------|
+| Frontend TypeScript | ✅ 0 errors |
+| Frontend Production Build | ✅ Clean |
+| Personal Info card loads from API | ✅ |
+| Quick Stats derived from existing queries | ✅ |
+| Upcoming Payments sorted by nearest due date | ✅ |
+| Recent Activity shows timeline events | ✅ |
+| Notifications show unread dot indicator | ✅ |
+| Empty states render correctly for all cards | ✅ |
+| Loading skeletons render correctly | ✅ |
+| No backend changes required | ✅ |
+| No duplicate queries | ✅ |

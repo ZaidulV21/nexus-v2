@@ -1,7 +1,10 @@
 import { useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
+  Activity,
   ArrowRight,
+  Bell,
+  CalendarDays,
   CheckCircle2,
   Clock3,
   Download,
@@ -11,6 +14,8 @@ import {
   MessageSquare,
   PlusCircle,
   Receipt,
+  TrendingUp,
+  User,
 } from 'lucide-react';
 import { useAuth } from '@/app/AuthContext';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -27,6 +32,9 @@ import { useClientQuotationsList } from '@/queries/useQuotations';
 import { useMyInvoices, useMyInvoiceSummary } from '@/queries/useInvoices';
 import { useMyDocuments } from '@/queries/useDocuments';
 import { useMessageThread } from '@/queries/useMessages';
+import { useNotifications } from '@/queries/useNotifications';
+import { useTimeline } from '@/queries/useTimeline';
+import { clientService } from '@/services/clientService';
 import { documentService } from '@/services/documentService';
 import { ApiError } from '@/lib/api';
 import { formatCurrency, formatDate, formatNumber, formatRelativeTime } from '@/lib/format';
@@ -74,6 +82,10 @@ export function PortalDashboardPage() {
   const documentsQuery = useMyDocuments();
   const messagesQuery = useMessageThread(actor?.id, { pageSize: 100 });
 
+  const clientProfileQuery = useApiQuery(() => clientService.getCurrent(), [actor?.id]);
+  const timelineQuery = useTimeline('client', actor?.id);
+  const notificationsQuery = useNotifications(1, 5);
+
   const pendingQuotations = useMemo(
     () => (quotationsQuery.data?.items ?? []).filter((quotation) => AWAITING_DECISION_STATUSES.has(quotation.status)),
     [quotationsQuery.data]
@@ -90,6 +102,23 @@ export function PortalDashboardPage() {
 
   const recentDocuments = useMemo(() => (documentsQuery.data ?? []).slice(0, 5), [documentsQuery.data]);
   const recentMessages = useMemo(() => (messagesQuery.data?.items ?? []).slice(-3).reverse(), [messagesQuery.data]);
+
+  const upcomingPayments = useMemo(
+    () =>
+      outstandingInvoices
+        .filter((invoice) => invoice.dueDate)
+        .sort((a, b) => new Date(a.dueDate!).getTime() - new Date(b.dueDate!).getTime())
+        .slice(0, 5),
+    [outstandingInvoices]
+  );
+
+  const timelineEvents = useMemo(() => (timelineQuery.data ?? []).slice(0, 5), [timelineQuery.data]);
+  const recentNotifications = useMemo(() => (notificationsQuery.data?.items ?? []).slice(0, 5), [notificationsQuery.data]);
+
+  const totalInvoiced = invoiceSummaryQuery.data?.totalInvoiced ?? 0;
+  const totalPaid = invoiceSummaryQuery.data?.totalPaid ?? 0;
+  const totalInvoiceCount = invoiceSummaryQuery.data?.invoiceCount ?? 0;
+  const totalDocumentsCount = documentsQuery.data?.length ?? 0;
 
   async function handleDownload(document: NexusDocument) {
     try {
@@ -159,6 +188,211 @@ export function PortalDashboardPage() {
         <StatCard label="Outstanding" value={formatCurrency(totalOutstanding)} icon={Receipt} />
         <StatCard label="Completed Projects" value={formatNumber(completedProjects)} icon={CheckCircle2} />
       </div>
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <User className="h-4 w-4" /> Personal Information
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {clientProfileQuery.isLoading ? (
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-40" />
+                <Skeleton className="h-4 w-56" />
+                <Skeleton className="h-4 w-48" />
+                <Skeleton className="h-4 w-36" />
+              </div>
+            ) : clientProfileQuery.isError || !clientProfileQuery.data ? (
+              <p className="text-sm text-ink-muted">Could not load profile.</p>
+            ) : (
+              <dl className="space-y-1.5 text-sm">
+                <div className="flex justify-between gap-2">
+                  <dt className="text-ink-faint">Name</dt>
+                  <dd className="text-right text-ink">{clientProfileQuery.data.contactName}</dd>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <dt className="text-ink-faint">Email</dt>
+                  <dd className="text-right text-ink">{clientProfileQuery.data.email}</dd>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <dt className="text-ink-faint">Phone</dt>
+                  <dd className="text-right text-ink">{clientProfileQuery.data.phone}</dd>
+                </div>
+                {clientProfileQuery.data.companyName ? (
+                  <div className="flex justify-between gap-2">
+                    <dt className="text-ink-faint">Company</dt>
+                    <dd className="text-right text-ink">{clientProfileQuery.data.companyName}</dd>
+                  </div>
+                ) : null}
+                <div className="flex justify-between gap-2">
+                  <dt className="text-ink-faint">Client ID</dt>
+                  <dd className="font-mono text-right text-xs text-ink">{clientProfileQuery.data.clientNumber}</dd>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <dt className="text-ink-faint">Member since</dt>
+                  <dd className="text-right text-ink">{formatDate(clientProfileQuery.data.createdAt)}</dd>
+                </div>
+              </dl>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <CalendarDays className="h-4 w-4" /> Upcoming Payments
+            </CardTitle>
+            <CardDescription>Invoices with a balance and an upcoming due date.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {upcomingPayments.length === 0 ? (
+              <EmptyState
+                icon={CalendarDays}
+                title="No upcoming payments"
+                description="Outstanding invoices with due dates appear here."
+              />
+            ) : (
+              <ul className="divide-y divide-border rounded-lg border border-border">
+                {upcomingPayments.map((invoice) => (
+                  <li key={invoice.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                    <div>
+                      <Link
+                        to={ROUTES.portal.invoiceDetail(invoice.id)}
+                        className="font-mono text-sm font-medium text-ink hover:text-primary"
+                      >
+                        {invoice.invoiceNumber}
+                      </Link>
+                      <p className="text-xs text-ink-faint">
+                        Due {formatDate(invoice.dueDate!)} &middot; {invoice.label}
+                      </p>
+                    </div>
+                    <span className="text-sm font-medium text-ink">{formatCurrency(invoice.outstandingAmount ?? 0)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <TrendingUp className="h-4 w-4" /> Quick Stats
+                </CardTitle>
+                <CardDescription>Key metrics at a glance.</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-ink-faint">Invoices</p>
+                <p className="mt-0.5 text-lg font-semibold text-ink">{formatNumber(totalInvoiceCount)}</p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-wide text-ink-faint">Documents</p>
+                <p className="mt-0.5 text-lg font-semibold text-ink">{formatNumber(totalDocumentsCount)}</p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-wide text-ink-faint">Total invoiced</p>
+                <p className="mt-0.5 text-lg font-semibold text-ink">{formatCurrency(totalInvoiced)}</p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-wide text-ink-faint">Total paid</p>
+                <p className="mt-0.5 text-lg font-semibold text-ink">{formatCurrency(totalPaid)}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Bell className="h-4 w-4" /> Notifications
+                </CardTitle>
+                <CardDescription>Your latest updates and alerts.</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {notificationsQuery.isLoading ? (
+              <div className="space-y-3">
+                <Skeleton className="h-12 w-full" />
+                <Skeleton className="h-12 w-full" />
+                <Skeleton className="h-12 w-full" />
+              </div>
+            ) : recentNotifications.length === 0 ? (
+              <EmptyState
+                icon={Bell}
+                title="All caught up"
+                description="Notifications for updates and alerts will appear here."
+              />
+            ) : (
+              <ul className="divide-y divide-border rounded-lg border border-border">
+                {recentNotifications.map((notification) => (
+                  <li key={notification.id} className="px-4 py-2.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-medium text-ink">{notification.title}</p>
+                        <p className="text-xs text-ink-faint">{notification.description}</p>
+                      </div>
+                      {!notification.isRead && <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-blue-500" />}
+                    </div>
+                    <p className="mt-0.5 text-xs text-ink-faint">{formatRelativeTime(notification.createdAt)}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Activity className="h-4 w-4" /> Recent Activity
+          </CardTitle>
+          <CardDescription>The latest events on your account.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {timelineQuery.isLoading ? (
+            <div className="space-y-3">
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-12 w-full" />
+            </div>
+          ) : timelineEvents.length === 0 ? (
+            <EmptyState
+              icon={Activity}
+              title="No recent activity"
+              description="Events related to your account will show up here."
+            />
+          ) : (
+            <ul className="divide-y divide-border rounded-lg border border-border">
+              {timelineEvents.map((event) => (
+                <li key={event.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
+                  <div>
+                    <p className="text-sm text-ink">{event.description}</p>
+                    {event.actorRef ? (
+                      <p className="mt-0.5 text-xs text-ink-faint">
+                        {event.actorRef} &middot; {formatRelativeTime(event.createdAt)}
+                      </p>
+                    ) : (
+                      <p className="mt-0.5 text-xs text-ink-faint">{formatRelativeTime(event.createdAt)}</p>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 xl:grid-cols-2">
         <Card>

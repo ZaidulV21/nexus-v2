@@ -25,7 +25,7 @@ All business modules from the PRD are implemented and wired to the backend API:
 - **Documents** (`/admin/documents`) — Upload, list, download
 
 ### Client Portal (`/portal/*`)
-- **Dashboard** (`/portal/dashboard`) — Overview of projects, quotations, invoices
+- **Dashboard** (`/portal/dashboard`) — Personal info, quick stats, recent activity (timeline), notifications, upcoming payments, projects, quotations, invoices, documents, messages
 - **Quotation Detail** — PDF as source of truth, Accept/Reject/Revision workflow
 - **Invoice Detail** — PDF view, payment summary cards, payment history
 - **Projects**, **Documents**, **Notifications**
