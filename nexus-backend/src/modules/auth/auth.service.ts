@@ -20,12 +20,8 @@ const PASSWORD_RESET_EXPIRY_MINUTES = 60;
 
 export const authService = {
   async login(input: LoginInput) {
-    if (input.actorType === 'ADMIN') {
-      const user = await authRepository.findUserByEmail(input.email);
-      if (!user || !user.isActive) throw new UnauthorizedError('Invalid credentials');
-      const match = await bcrypt.compare(input.password, user.passwordHash);
-      if (!match) throw new UnauthorizedError('Invalid credentials');
-
+    const user = await authRepository.findUserByEmail(input.email);
+    if (user?.isActive && (await bcrypt.compare(input.password, user.passwordHash))) {
       const payload: AuthPayload = { id: user.id, type: 'ADMIN', email: user.email, roleId: user.roleId };
       return {
         token: signToken(payload),
@@ -34,12 +30,12 @@ export const authService = {
     }
 
     const client = await authRepository.findClientByEmail(input.email);
-    if (!client || !client.isActive) throw new UnauthorizedError('Invalid credentials');
-    const match = await bcrypt.compare(input.password, client.passwordHash);
-    if (!match) throw new UnauthorizedError('Invalid credentials');
+    if (client?.isActive && (await bcrypt.compare(input.password, client.passwordHash))) {
+      const payload: AuthPayload = { id: client.id, type: 'CLIENT', email: client.email };
+      return { token: signToken(payload), actor: { id: client.id, email: client.email, type: 'CLIENT' } };
+    }
 
-    const payload: AuthPayload = { id: client.id, type: 'CLIENT', email: client.email };
-    return { token: signToken(payload), actor: { id: client.id, email: client.email, type: 'CLIENT' } };
+    throw new UnauthorizedError('Invalid credentials');
   },
 
   async me(userId: string, type: 'ADMIN' | 'CLIENT') {

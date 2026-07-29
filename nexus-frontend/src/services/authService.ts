@@ -4,7 +4,6 @@ import type { AuthActor } from '@/types';
 export interface LoginInput {
   email: string;
   password: string;
-  actorType: 'ADMIN' | 'CLIENT';
 }
 
 export interface LoginResult {

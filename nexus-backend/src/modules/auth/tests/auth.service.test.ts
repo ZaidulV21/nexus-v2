@@ -18,10 +18,11 @@ import { authRepository } from '../auth.repository';
 import { authService } from '../auth.service';
 
 describe('authService.login', () => {
-  it('rejects login for a non-existent admin email', async () => {
+  it('rejects login for a non-existent email', async () => {
     (authRepository.findUserByEmail as jest.Mock).mockResolvedValue(null);
+    (authRepository.findClientByEmail as jest.Mock).mockResolvedValue(null);
     await expect(
-      authService.login({ email: 'nobody@nexus.test', password: 'x', actorType: 'ADMIN' })
+      authService.login({ email: 'nobody@nexus.test', password: 'x' })
     ).rejects.toThrow('Invalid credentials');
   });
 
@@ -36,7 +37,7 @@ describe('authService.login', () => {
       role: { id: 'role-admin', name: 'ADMIN' },
     });
     await expect(
-      authService.login({ email: 'admin@nexus.test', password: 'wrong-password', actorType: 'ADMIN' })
+      authService.login({ email: 'admin@nexus.test', password: 'wrong-password' })
     ).rejects.toThrow('Invalid credentials');
   });
 
@@ -53,7 +54,6 @@ describe('authService.login', () => {
     const result = await authService.login({
       email: 'admin@nexus.test',
       password: 'correct-password',
-      actorType: 'ADMIN',
     });
     expect(result.token).toBeDefined();
     expect(result.actor.type).toBe('ADMIN');
@@ -75,7 +75,33 @@ describe('authService.login', () => {
       role: { id: 'role-admin', name: 'ADMIN' },
     });
     await expect(
-      authService.login({ email: 'admin@nexus.test', password: 'x', actorType: 'ADMIN' })
+      authService.login({ email: 'admin@nexus.test', password: 'x' })
+    ).rejects.toThrow('Invalid credentials');
+  });
+
+  it('authenticates a client when the email is not found in users', async () => {
+    (authRepository.findUserByEmail as jest.Mock).mockResolvedValue(null);
+    const hash = await bcrypt.hash('client-password', 4);
+    (authRepository.findClientByEmail as jest.Mock).mockResolvedValue({
+      id: 'c1',
+      email: 'client@nexus.test',
+      passwordHash: hash,
+      isActive: true,
+    });
+    const result = await authService.login({ email: 'client@nexus.test', password: 'client-password' });
+    expect(result.actor.type).toBe('CLIENT');
+  });
+
+  it('rejects login for an inactive client', async () => {
+    (authRepository.findUserByEmail as jest.Mock).mockResolvedValue(null);
+    (authRepository.findClientByEmail as jest.Mock).mockResolvedValue({
+      id: 'c1',
+      email: 'client@nexus.test',
+      passwordHash: 'irrelevant',
+      isActive: false,
+    });
+    await expect(
+      authService.login({ email: 'client@nexus.test', password: 'x' })
     ).rejects.toThrow('Invalid credentials');
   });
 });

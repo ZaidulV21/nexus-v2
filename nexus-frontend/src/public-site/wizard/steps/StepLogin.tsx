@@ -29,7 +29,7 @@ export function StepLogin({ email, authLogin, onLoginSuccess, loginError, onClea
     onClearError();
 
     try {
-      await authLogin({ email, password, actorType: 'CLIENT' });
+      await authLogin({ email, password });
       onLoginSuccess();
     } catch (err: any) {
       setError(err.message || 'Invalid email or password');

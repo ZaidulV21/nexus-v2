@@ -52,7 +52,7 @@ export function LoginPage() {
   async function onSubmit(values: LoginFormValues) {
     setServerError(null);
     try {
-      await login({ ...values, actorType: 'CLIENT' });
+      await login(values);
       toast({ title: 'Welcome back', variant: 'success' });
       const stateFrom = (location.state as { from?: string } | null)?.from;
       const stored = localStorage.getItem('nexus.auth.actor');
