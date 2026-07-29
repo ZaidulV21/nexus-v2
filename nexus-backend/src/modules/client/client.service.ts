@@ -9,6 +9,7 @@ import { emailService } from '../email/email.service';
 import { companyService } from '../company/company.service';
 import { renderClientWelcomeEmail } from '../email/templates/client-welcome.template';
 import { renderPasswordResetEmail } from '../email/templates/password-reset.template';
+import { renderSetPasswordEmail } from '../email/templates/set-password.template';
 import type { EmailBranding } from '../email/templates/base-email.template';
 import { prisma } from '../../config/database';
 import { timelineService } from '../timeline/timeline.service';
@@ -202,14 +203,13 @@ export const clientService = {
       return existingClient;
     }
 
-    // No pre-existing Client — create a new account with a temporary password.
+    // No pre-existing Client — create a new account and send a "Set Your Password" link.
     const existingEmailClient = await clientRepository.findByEmail(lead.email);
     if (existingEmailClient) {
       throw new ConflictError('A client account already exists for this email address');
     }
 
-    const tempPassword = generateTempPassword();
-    const passwordHash = await bcrypt.hash(tempPassword, env.bcryptSaltRounds);
+    const passwordHash = await bcrypt.hash(randomBytes(12).toString('hex'), env.bcryptSaltRounds);
 
     let client;
     let migratedQuotations = 0;
@@ -279,12 +279,31 @@ export const clientService = {
       actorUserId,
     });
 
+    // Generate a password-setup token and send a "Set Your Password" email.
+    // The client was created without a known password — the user sets it via
+    // the existing reset-password page, reusing the forgot-password infrastructure.
+    const resetToken = await generateResetToken(client.email);
+    const branding = await getBranding();
+    const appUrl = env.appUrl || 'http://localhost:5173';
+    const setupUrl = `${appUrl}/reset-password?token=${resetToken}`;
+
+    const html = renderSetPasswordEmail(
+      { clientName: client.contactName, loginEmail: client.email, setupUrl, expiryMinutes: 60 },
+      branding
+    );
+    await emailService.send({
+      to: client.email,
+      subject: `Set your password for ${branding.companyName || 'Nexus'} Client Portal`,
+      html,
+      replyTo: branding.supportEmail || undefined,
+    });
+
     await notificationsService.emitEvent({
       eventType: 'client.account.created',
       entityType: 'CLIENT',
       entityId: client.id,
       recipient: client.email,
-      payload: { clientName: client.contactName, loginEmail: client.email, clientId: client.id },
+      payload: { clientName: client.contactName, loginEmail: client.email, clientId: client.id, tempPassword: true },
     });
 
     return client;
