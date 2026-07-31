@@ -15,6 +15,21 @@ export const timelineRepository = {
     });
   },
 
+  // Idempotency guard: identical business events (same entity + event type)
+  // recorded in a short window are treated as accidental duplicates and skipped.
+  findRecentDuplicate(
+    entityType: string,
+    entityId: string,
+    eventType: string,
+    withinMs: number
+  ) {
+    const since = new Date(Date.now() - withinMs);
+    return prisma.timelineEvent.findFirst({
+      where: { entityType, entityId, eventType, createdAt: { gte: since } },
+      orderBy: { createdAt: 'desc' },
+    });
+  },
+
   listForEntity(entityType: string, entityId: string) {
     return prisma.timelineEvent.findMany({
       where: { entityType, entityId },

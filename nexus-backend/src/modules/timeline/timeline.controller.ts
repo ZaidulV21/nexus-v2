@@ -8,7 +8,8 @@ export const timelineController = {
   async getForEntity(req: Request, res: Response, next: NextFunction) {
     try {
       const { entityType, entityId } = req.params;
-      const events = await timelineService.getTimelineFor(entityType.toUpperCase(), entityId);
+      const viewerType = req.user?.type === 'CLIENT' ? 'CLIENT' : 'ADMIN';
+      const events = await timelineService.getTimelineFor(entityType.toUpperCase(), entityId, { viewerType });
       return ok(res, await enrichWithRefs(events));
     } catch (err) {
       next(err);

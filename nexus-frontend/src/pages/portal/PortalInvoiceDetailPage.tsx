@@ -1,6 +1,6 @@
 import { useState, useCallback, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { CreditCard, Download, Globe, Loader2 } from 'lucide-react';
+import { CreditCard, Download, Eye, Globe, Loader2 } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
@@ -10,10 +10,17 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { EntityTimeline } from '@/components/common/EntityTimeline';
-import { useMyInvoice, usePaymentHistory, useCreateRazorpayOrder, useVerifyRazorpayPayment } from '@/queries/useInvoices';
+import {
+  useMyInvoice,
+  usePaymentHistory,
+  useCreateRazorpayOrder,
+  useVerifyRazorpayPayment,
+  useInvoicePdfUrl,
+  useReceiptUrl,
+} from '@/queries/useInvoices';
 import { formatCurrency, formatDateTime } from '@/lib/format';
 import { ROUTES } from '@/routes/routes';
-import type { Invoice } from '@/types';
+import type { Invoice, Payment } from '@/types';
 
 function Field({ label, value }: { label: string; value: ReactNode }) {
   return (
@@ -168,6 +175,37 @@ function InvoiceSummary({ invoice }: { invoice: Invoice }) {
   );
 }
 
+function PaymentRow({ payment }: { payment: Payment }) {
+  const { data: receiptData } = useReceiptUrl(payment.id);
+  const receiptUrl = receiptData?.pdfUrl ?? payment.receiptUrl ?? null;
+
+  return (
+    <li className="px-4 py-3">
+      <div className="grid gap-3 md:grid-cols-5">
+        <Field label="Date" value={formatDateTime(payment.paidAt)} />
+        <Field label="Amount" value={formatCurrency(payment.amount)} />
+        <Field label="Payment Method" value={payment.method} />
+        <Field label="Transaction Reference" value={payment.transactionReference ?? '-'} />
+        <Field label="Notes" value={payment.referenceNote ?? '-'} />
+      </div>
+      {receiptUrl && (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <Button asChild variant="secondary" size="sm">
+            <a href={receiptUrl} target="_blank" rel="noreferrer">
+              <Eye className="h-3.5 w-3.5" /> View Receipt
+            </a>
+          </Button>
+          <Button asChild variant="secondary" size="sm">
+            <a href={receiptUrl} download>
+              <Download className="h-3.5 w-3.5" /> Download Receipt
+            </a>
+          </Button>
+        </div>
+      )}
+    </li>
+  );
+}
+
 function PaymentHistory({ invoice }: { invoice: Invoice }) {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const { data: payments, isLoading } = usePaymentHistory(invoice.id, sortOrder);
@@ -203,13 +241,7 @@ function PaymentHistory({ invoice }: { invoice: Invoice }) {
       </div>
       <ul className="divide-y divide-border rounded-lg border border-border">
         {displayPayments.map((payment) => (
-          <li key={payment.id} className="grid gap-3 px-4 py-3 md:grid-cols-5">
-            <Field label="Date" value={formatDateTime(payment.paidAt)} />
-            <Field label="Amount" value={formatCurrency(payment.amount)} />
-            <Field label="Payment Method" value={payment.method} />
-            <Field label="Transaction Reference" value={payment.transactionReference ?? '-'} />
-            <Field label="Notes" value={payment.referenceNote ?? '-'} />
-          </li>
+          <PaymentRow key={payment.id} payment={payment} />
         ))}
       </ul>
     </div>
@@ -230,6 +262,7 @@ function loadRazorpayScript(): Promise<boolean> {
 export function PortalInvoiceDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { data: invoice, isLoading, isError, refetch } = useMyInvoice(id);
+  const { data: pdfData } = useInvoicePdfUrl(id);
   const { mutateAsync: createOrder, isPending: isCreatingOrder } = useCreateRazorpayOrder();
   const { mutateAsync: verifyPayment } = useVerifyRazorpayPayment();
   const [isPaying, setIsPaying] = useState(false);
@@ -293,6 +326,8 @@ export function PortalInvoiceDetailPage() {
     return <ErrorState description="Couldn't load this invoice." onRetry={refetch} />;
   }
 
+  const pdfUrl = pdfData?.pdfUrl ?? invoice.pdfUrl ?? null;
+
   return (
     <div>
       <PageHeader
@@ -301,9 +336,9 @@ export function PortalInvoiceDetailPage() {
           actions={
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge status={invoice.displayStatus ?? invoice.status} />
-            {invoice.pdfUrl && (
+            {pdfUrl && (
               <Button variant="secondary" size="sm" asChild>
-                <a href={invoice.pdfUrl} target="_blank" rel="noreferrer">
+                <a href={pdfUrl} target="_blank" rel="noreferrer">
                   <Download className="h-3.5 w-3.5" /> Download PDF
                 </a>
               </Button>

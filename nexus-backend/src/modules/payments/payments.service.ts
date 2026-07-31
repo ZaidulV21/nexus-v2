@@ -148,7 +148,14 @@ export async function verifyPayment(
     const newOutstanding = grandTotal - newPaidAmount;
     const displayStatus = computeDisplayStatus(invoice.status, newPaidAmount, newOutstanding);
 
-    fireTimelineAndNotifications(invoice, amount, newPaidAmount, newOutstanding, clientId);
+    fireTimelineAndNotifications(invoice, payment, newPaidAmount, newOutstanding, clientId);
+
+    // Payment captured -> receipt PDF generated + stored immediately, so the
+    // receipt is available to the client in the portal without waiting for an
+    // admin or for an on-demand render. Non-blocking by design.
+    import('../pdf/pdf.service').then(({ pdfService }) => {
+      pdfService.generateReceipt(payment.id).catch(() => {});
+    });
 
     return {
       payment: {
@@ -171,11 +178,14 @@ export async function verifyPayment(
 
 function fireTimelineAndNotifications(
   invoice: NonNullable<Awaited<ReturnType<typeof invoiceRepository.findById>>>,
-  amount: number,
+  payment: { id: string; amount: number | { toString(): string }; paidAt: Date | string },
   newPaidAmount: number,
   newOutstanding: number,
   clientId: string,
 ) {
+  const amount = Number(payment.amount);
+  const paidAt = payment.paidAt instanceof Date ? payment.paidAt : new Date(payment.paidAt);
+
   timelineService.recordEvent({
     entityType: 'INVOICE',
     entityId: invoice.id,
@@ -203,13 +213,34 @@ function fireTimelineAndNotifications(
   }
 
   const recipientEmail = invoice.client?.email;
-  if (recipientEmail) {
-    notificationsService.emitEvent({
-      eventType: 'payment.successful',
-      entityType: 'INVOICE',
-      entityId: invoice.id,
-      recipient: recipientEmail,
-      payload: { amount, invoiceNumber: invoice.invoiceNumber, clientId },
-    }).catch(() => {});
-  }
+  if (!recipientEmail) return;
+
+  const payload = {
+    amount,
+    invoiceNumber: invoice.invoiceNumber,
+    clientId,
+    invoiceId: invoice.id,
+    paymentId: payment.id,
+    paymentMethod: 'RAZORPAY',
+    paymentDate: paidAt.toISOString(),
+  };
+
+  notificationsService.emitEvent({
+    eventType: 'payment.successful',
+    entityType: 'INVOICE',
+    entityId: invoice.id,
+    recipient: recipientEmail,
+    payload,
+  }).catch(() => {});
+
+  // Client-facing notification that a receipt is available (idempotent via
+  // the receipt PDF itself); this is separate from the receipt EMAIL, which
+  // is only ever sent on-demand or via the sendReceipt flow.
+  notificationsService.emitEvent({
+    eventType: 'payment.receipt_available',
+    entityType: 'INVOICE',
+    entityId: invoice.id,
+    recipient: recipientEmail,
+    payload,
+  }).catch(() => {});
 }

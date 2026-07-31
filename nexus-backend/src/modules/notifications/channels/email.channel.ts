@@ -1,4 +1,4 @@
-import { NotificationChannel } from './channel.interface';
+import { NotificationChannel, ChannelSendResult } from './channel.interface';
 import { companyService } from '../../company/company.service';
 import { emailService } from '../../email/email.service';
 import { env } from '../../../config/env';
@@ -10,7 +10,7 @@ import type { EmailBranding } from '../../email/templates/base-email.template';
 
 export const emailChannel: NotificationChannel = {
   name: 'EMAIL',
-  async send(recipient: string, payload: Record<string, unknown>) {
+  async send(recipient: string, payload: Record<string, unknown>): Promise<ChannelSendResult> {
     let branding: EmailBranding = {};
     try {
       const settings = await companyService.get();
@@ -36,17 +36,25 @@ export const emailChannel: NotificationChannel = {
     const html = buildHtml(payload, branding, appUrl);
 
     if (!subject || !html) {
-      // eslint-disable-next-line no-console
-      console.warn(`[EMAIL] No template matched for payload keys: ${Object.keys(payload).join(', ')}`);
-      return;
+      return { status: 'SKIPPED', reason: `No email template matched for payload keys: ${Object.keys(payload).join(', ')}` };
     }
 
-    await emailService.send({
+    // emailService.send resolves to { id } only when the provider accepted the
+    // email; it resolves to null when delivery is unavailable (e.g. no API key
+    // configured). Surface that truthfully so the caller never records a false
+    // "Sent" for an email that was never sent.
+    const result = await emailService.send({
       to: recipient,
       subject,
       html,
       replyTo: branding.supportEmail || undefined,
     });
+
+    if (!result?.id) {
+      return { status: 'SKIPPED', reason: 'Email provider did not accept the message (no API key or send failed)' };
+    }
+
+    return { status: 'SENT', messageId: result.id };
   },
 };
 

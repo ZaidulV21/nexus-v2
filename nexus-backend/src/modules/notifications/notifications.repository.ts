@@ -6,6 +6,19 @@ export const notificationsRepository = {
     return prisma.notificationEvent.create({ data });
   },
 
+  findRecentEvent(eventType: string, entityType?: string, entityId?: string, withinMs = 60_000) {
+    const since = new Date(Date.now() - withinMs);
+    return prisma.notificationEvent.findFirst({
+      where: {
+        eventType,
+        entityType: entityType ?? undefined,
+        entityId: entityId ?? undefined,
+        createdAt: { gte: since },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  },
+
   createLog(data: {
     notificationEventId: string;
     channel: string;

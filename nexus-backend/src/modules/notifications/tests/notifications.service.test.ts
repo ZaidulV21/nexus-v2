@@ -1,7 +1,8 @@
 jest.mock('../notifications.repository', () => ({
   notificationsRepository: {
     createEvent: jest.fn().mockResolvedValue({ id: 'evt1' }),
-    createLog: jest.fn().mockResolvedValue({}),
+    findRecentEvent: jest.fn().mockResolvedValue(null),
+    createLog: jest.fn().mockResolvedValue({ id: 'log1' }),
     listLogs: jest.fn(),
     createInAppNotification: jest.fn().mockResolvedValue({ id: 'notif1' }),
     createManyInAppNotifications: jest.fn().mockResolvedValue({ count: 0 }),
@@ -23,8 +24,8 @@ import { notificationsService } from '../notifications.service';
 
 describe('notificationsService.emitEvent', () => {
   it('dispatches a known event and logs success', async () => {
-    (notificationsDispatcher.dispatch as jest.Mock).mockResolvedValue(undefined);
-    await notificationsService.emitEvent({
+    (notificationsDispatcher.dispatch as jest.Mock).mockResolvedValue({ status: 'SENT', messageId: 'msg1' });
+    const result = await notificationsService.emitEvent({
       eventType: 'quotation.sent',
       payload: { quotationId: 'q1' },
       recipient: 'client@nexus.test',
@@ -33,19 +34,38 @@ describe('notificationsService.emitEvent', () => {
     expect(notificationsRepository.createLog).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'SENT' })
     );
+    expect(result.emailStatus).toBe('SENT');
+    expect(result.notificationLogId).toBe('log1');
+    expect(result.deduplicated).toBe(false);
   });
 
   it('logs a failure without throwing when the channel fails', async () => {
     (notificationsDispatcher.dispatch as jest.Mock).mockRejectedValue(new Error('smtp down'));
-    await expect(
-      notificationsService.emitEvent({
-        eventType: 'quotation.sent',
-        payload: {},
-        recipient: 'client@nexus.test',
-      })
-    ).resolves.not.toThrow();
+    const result = await notificationsService.emitEvent({
+      eventType: 'quotation.sent',
+      payload: {},
+      recipient: 'client@nexus.test',
+    });
     expect(notificationsRepository.createLog).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'FAILED' })
+    );
+    expect(result.emailStatus).toBe('FAILED');
+    expect(result.emailErrorMessage).toBe('smtp down');
+  });
+
+  it('returns SKIPPED when the email channel declines to send', async () => {
+    (notificationsDispatcher.dispatch as jest.Mock).mockResolvedValue({
+      status: 'SKIPPED',
+      reason: 'No email template matched',
+    });
+    const result = await notificationsService.emitEvent({
+      eventType: 'quotation.sent',
+      payload: {},
+      recipient: 'client@nexus.test',
+    });
+    expect(result.emailStatus).toBe('SKIPPED');
+    expect(notificationsRepository.createLog).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'SKIPPED' })
     );
   });
 
@@ -58,12 +78,30 @@ describe('notificationsService.emitEvent', () => {
     });
     expect(notificationsDispatcher.dispatch).not.toHaveBeenCalled();
   });
+
+  it('deduplicates an identical recent event and does not re-send', async () => {
+    jest.clearAllMocks();
+    (notificationsDispatcher.dispatch as jest.Mock).mockClear();
+    (notificationsRepository.findRecentEvent as jest.Mock).mockResolvedValue({ id: 'evt-dupe' });
+    const result = await notificationsService.emitEvent({
+      eventType: 'payment.successful',
+      entityType: 'INVOICE',
+      entityId: 'inv-1',
+      payload: { amount: 100, invoiceNumber: 'INV/1' },
+      recipient: 'client@nexus.test',
+    });
+    expect(notificationsRepository.createEvent).not.toHaveBeenCalled();
+    expect(notificationsDispatcher.dispatch).not.toHaveBeenCalled();
+    expect(result.deduplicated).toBe(true);
+    expect(result.emailStatus).toBe('SKIPPED');
+  });
 });
 
 describe('notificationsService - in-app notifications', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    (notificationsDispatcher.dispatch as jest.Mock).mockResolvedValue(undefined);
+    (notificationsDispatcher.dispatch as jest.Mock).mockResolvedValue({ status: 'SENT', messageId: 'msg1' });
+    (notificationsRepository.findRecentEvent as jest.Mock).mockResolvedValue(null);
     (notificationsRepository.findAllAdminUserIds as jest.Mock).mockResolvedValue([
       { id: 'admin1' },
       { id: 'admin2' },

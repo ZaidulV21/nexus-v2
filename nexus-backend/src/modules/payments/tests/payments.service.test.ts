@@ -26,6 +26,13 @@ jest.mock('../../../core/utils/transaction', () => ({
   runInTransaction: jest.fn((fn) => fn({})),
 }));
 
+jest.mock('../../timeline/timeline.service', () => ({
+  timelineService: { recordEvent: jest.fn().mockResolvedValue({}) },
+}));
+jest.mock('../../notifications/notifications.service', () => ({
+  notificationsService: { emitEvent: jest.fn().mockResolvedValue({ emailStatus: 'SENT' }) },
+}));
+
 const mockOrdersFetch = jest.fn();
 const mockPaymentsFetch = jest.fn();
 const mockOrdersCreate = jest.fn();
@@ -59,6 +66,8 @@ jest.mock('../../invoice/invoice.repository', () => ({
 
 import { verifyPayment } from '../payments.service';
 import { AppError } from '../../../core/errors/AppError';
+import { timelineService } from '../../timeline/timeline.service';
+import { notificationsService } from '../../notifications/notifications.service';
 
 function generateSignature(orderId: string, paymentId: string): string {
   return crypto.createHmac('sha256', TEST_RAZORPAY_SECRET).update(`${orderId}|${paymentId}`).digest('hex');
@@ -72,6 +81,7 @@ describe('verifyPayment', () => {
     invoiceNumber: 'INV/2026-27/00001',
     clientId: 'client-1',
     projectId: 'proj-1',
+    client: { email: 'client@test.com' },
   };
 
   const orderId = 'order_Oq7aJfVX7ZyE1t';
@@ -189,6 +199,19 @@ describe('verifyPayment', () => {
         gatewayTransactionId: paymentId,
       }),
       expect.anything(),
+    );
+
+    expect(timelineService.recordEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ eventType: 'PAYMENT_SUCCESSFUL' })
+    );
+    expect(notificationsService.emitEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: 'payment.successful',
+        payload: expect.objectContaining({ paymentId: 'payment-1', invoiceId: 'inv-1', paymentMethod: 'RAZORPAY' }),
+      })
+    );
+    expect(notificationsService.emitEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ eventType: 'payment.receipt_available' })
     );
   });
 

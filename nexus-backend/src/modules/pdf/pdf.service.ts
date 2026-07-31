@@ -4,7 +4,6 @@ import { prisma } from '../../config/database';
 import { cloudinaryProvider } from '../../core/storage/cloudinary.provider';
 import { localStorageProvider } from '../../core/storage/localStorage.provider';
 import { env } from '../../config/env';
-import { timelineService } from '../timeline/timeline.service';
 import { auditService } from '../audit/audit.service';
 import { NotFoundError, ValidationError } from '../../core/errors/AppError';
 import {
@@ -339,15 +338,10 @@ export const pdfService = {
       });
     }
 
-    await timelineService.recordEvent({
-      entityType: documentType === 'RECEIPT' ? 'INVOICE' : documentType,
-      entityId: documentType === 'RECEIPT' ? (await prisma.payment.findUnique({ where: { id: documentId }, select: { invoiceId: true } }))?.invoiceId || documentId : documentId,
-      eventType: `${documentType}_PDF_GENERATED`,
-      description: `PDF generated for ${documentType.toLowerCase()} ${title}`,
-      actorUserId,
-      metadata: { pdfUrl, fileSize: buffer.length },
-    });
-
+    // PDF generation is a SYSTEM event (document rendering), not a business
+    // event: it is recorded in the audit log only and never cluttered the
+    // business timeline. Avoids duplicate "PDF generated / Receipt generated"
+    // entries caused by repeated generation, page loads, and re-renders.
     await auditService.recordAudit({
       entityType: documentType === 'RECEIPT' ? 'INVOICE' : documentType,
       entityId: documentType === 'RECEIPT' ? (await prisma.payment.findUnique({ where: { id: documentId }, select: { invoiceId: true } }))?.invoiceId || documentId : documentId,
@@ -403,6 +397,51 @@ export const pdfService = {
   async getReceiptUrl(paymentId: string): Promise<string | null> {
     const payment = await prisma.payment.findUnique({ where: { id: paymentId }, select: { receiptUrl: true } });
     return payment?.receiptUrl ?? null;
+  },
+
+  // Owner client for a document, or null when the document does not exist or
+  // has no client owner. Used to enforce client-scoped access to documents.
+  async getOwnerClientId(documentType: PdfDocumentType, documentId: string): Promise<string | null> {
+    if (documentType === 'QUOTATION') {
+      const q = await prisma.quotation.findFirst({
+        where: { id: documentId },
+        select: { clientId: true, lead: { select: { client: { select: { id: true } } } } },
+      });
+      return q?.clientId ?? q?.lead?.client?.id ?? null;
+    }
+    if (documentType === 'INVOICE') {
+      const invoice = await prisma.invoice.findFirst({
+        where: { id: documentId },
+        select: { clientId: true },
+      });
+      return invoice?.clientId ?? null;
+    }
+    if (documentType === 'RECEIPT') {
+      const payment = await prisma.payment.findFirst({
+        where: { id: documentId },
+        select: { clientId: true },
+      });
+      return payment?.clientId ?? null;
+    }
+    return null;
+  },
+
+  // Client-scoped document resolution. Clients may only access documents that
+  // belong to them; admins may access any document. Throws NotFoundError for
+  // non-owned documents so the existence of other clients' records is not
+  // revealed.
+  async resolvePdfForViewer(
+    documentType: PdfDocumentType,
+    documentId: string,
+    viewer: { type: 'ADMIN' | 'CLIENT'; id: string }
+  ): Promise<string> {
+    if (viewer.type === 'CLIENT') {
+      const ownerId = await this.getOwnerClientId(documentType, documentId);
+      if (!ownerId || ownerId !== viewer.id) {
+        throw new NotFoundError('Document not found');
+      }
+    }
+    return this.getOrCreate(documentType, documentId);
   },
 
   async generateReceipt(paymentId: string, actorUserId?: string): Promise<PdfGenerationResult> {

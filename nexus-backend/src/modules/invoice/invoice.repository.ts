@@ -206,6 +206,13 @@ export const paymentRepository = {
     return prisma.payment.findFirst({ where: { id } });
   },
 
+  markReceiptSent(id: string) {
+    return prisma.payment.update({
+      where: { id },
+      data: { receiptSentAt: new Date() },
+    });
+  },
+
   sumForInvoice(invoiceId: string, tx?: Prisma.TransactionClient) {
     const client = tx ?? prisma;
     return client.payment.aggregate({ where: { invoiceId }, _sum: { amount: true } });

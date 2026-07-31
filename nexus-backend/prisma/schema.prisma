@@ -64,7 +64,14 @@ model TimelineEvent {
   metadata    Json?
   createdAt   DateTime @default(now())
 
+  // Business vs system distinction is now enforced at the source (PDF/system
+  // events go to the Audit Log, not here). clientVisible defaults true; event
+  // types that must never reach the client portal are filtered by the service
+  // layer, so this column is retained for future per-event overrides.
+  clientVisible Boolean @default(true)
+
   @@index([entityType, entityId])
+  @@index([entityType, entityId, eventType])
   @@map("timeline_events")
 }
 
@@ -440,6 +447,7 @@ model Payment {
   gatewayTransactionId String?
   receiptGeneratedAt   DateTime?
   receiptUrl           String?
+  receiptSentAt        DateTime?
   invoice              Invoice       @relation(fields: [invoiceId], references: [id])
   client               Client        @relation(fields: [clientId], references: [id])
   project              Project       @relation(fields: [projectId], references: [id])

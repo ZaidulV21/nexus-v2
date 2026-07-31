@@ -6,7 +6,7 @@ import { timelineService } from '../timeline/timeline.service';
 import { auditService } from '../audit/audit.service';
 import { notificationsService } from '../notifications/notifications.service';
 import { CreateInvoiceInput, CancelInvoiceInput, RecordPaymentInput, InvoiceItemInput } from './invoice.types';
-import { NotFoundError, ValidationError } from '../../core/errors/AppError';
+import { AppError, NotFoundError, ValidationError } from '../../core/errors/AppError';
 
 function computeInvoiceTotals(items: InvoiceItemInput[]) {
   let subtotal = 0;
@@ -133,6 +133,14 @@ export const invoiceService = {
       actorUserId,
     });
 
+    await timelineService.recordEvent({
+      entityType: 'INVOICE',
+      entityId: invoice.id,
+      eventType: 'INVOICE_CREATED',
+      description: `Invoice ${invoice.invoiceNumber} created`,
+      actorUserId,
+    });
+
     return this.getById(invoice.id);
   },
 
@@ -238,9 +246,10 @@ export const invoiceService = {
     const clientId = invoice.clientId;
     const projectId = invoice.projectId;
 
+    let alreadyPaid = 0;
     const payment = await runInTransaction(async (tx) => {
       const paidSoFar = await paymentRepository.sumForInvoice(invoiceId, tx);
-      const alreadyPaid = Number(paidSoFar._sum.amount || 0);
+      alreadyPaid = Number(paidSoFar._sum.amount || 0);
       const outstanding = grandTotal - alreadyPaid;
 
       if (input.amount <= 0) {
@@ -278,6 +287,9 @@ export const invoiceService = {
       );
     });
 
+    const newPaidAmount = alreadyPaid + input.amount;
+    const newOutstanding = grandTotal - newPaidAmount;
+
     await timelineService.recordEvent({
       entityType: 'INVOICE',
       entityId: invoiceId,
@@ -285,6 +297,24 @@ export const invoiceService = {
       description: `Payment of ${input.amount} recorded via ${input.method}${input.transactionReference ? ` (Ref: ${input.transactionReference})` : ''}`,
       actorUserId,
     });
+
+    if (newOutstanding <= 0) {
+      await timelineService.recordEvent({
+        entityType: 'INVOICE',
+        entityId: invoiceId,
+        eventType: 'INVOICE_PAID',
+        description: `Invoice fully paid. Total paid: ${newPaidAmount}`,
+        actorUserId,
+      });
+    } else {
+      await timelineService.recordEvent({
+        entityType: 'INVOICE',
+        entityId: invoiceId,
+        eventType: 'PARTIAL_PAYMENT',
+        description: `Partial payment of ${input.amount} received. Outstanding: ${newOutstanding}`,
+        actorUserId,
+      });
+    }
 
     await auditService.recordAudit({
       entityType: 'INVOICE',
@@ -301,7 +331,15 @@ export const invoiceService = {
         entityType: 'INVOICE',
         entityId: invoiceId,
         recipient: recipientEmail,
-        payload: { amount: input.amount, invoiceNumber: invoice.invoiceNumber, clientId },
+        payload: {
+          amount: input.amount,
+          invoiceNumber: invoice.invoiceNumber,
+          clientId,
+          invoiceId,
+          paymentId: payment.id,
+          paymentMethod: input.method,
+          paymentDate: payment.paidAt ? new Date(payment.paidAt).toISOString() : new Date().toISOString(),
+        },
       });
     }
 
@@ -323,23 +361,19 @@ export const invoiceService = {
     const recipient = invoice.client?.email;
     if (!recipient) throw new ValidationError('Invoice client does not have an email address');
 
-    await timelineService.recordEvent({
-      entityType: 'INVOICE',
-      entityId: payment.invoiceId,
-      eventType: 'RECEIPT_SENT',
-      description: `Payment receipt sent to client for payment of ${payment.amount}`,
-      actorUserId,
-    });
+    // 1. Ensure the receipt PDF exists. PDF generation is a system event
+    //    (audit-only) and its failure must not block the email itself.
+    try {
+      const { pdfService } = await import('../pdf/pdf.service');
+      await pdfService.generateReceipt(paymentId, actorUserId);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error(`[invoice] Receipt PDF generation failed for ${paymentId}:`, err);
+    }
 
-    await auditService.recordAudit({
-      entityType: 'INVOICE',
-      entityId: payment.invoiceId,
-      action: 'RECEIPT_SENT',
-      afterState: { paymentId, recipient },
-      actorUserId,
-    });
-
-    await notificationsService.emitEvent({
+    // 2. Send the receipt email, create in-app notifications, and persist the
+    //    email delivery log. The result reflects the REAL email outcome.
+    const emailResult = await notificationsService.emitEvent({
       eventType: 'payment.receipt_sent',
       entityType: 'INVOICE',
       entityId: payment.invoiceId,
@@ -349,14 +383,51 @@ export const invoiceService = {
         amount: payment.amount,
         invoiceNumber: invoice.invoiceNumber,
         clientId: invoice.clientId,
+        invoiceId: invoice.id,
+        paymentMethod: payment.method,
+        paymentDate: payment.paidAt ? new Date(payment.paidAt).toISOString() : new Date().toISOString(),
       },
     });
 
-    import('../pdf/pdf.service').then(({ pdfService }) => {
-      pdfService.generateReceipt(paymentId, actorUserId).catch(() => {});
+    // 3. Audit + timeline record the real outcome - never a false "Receipt Sent".
+    if (emailResult?.emailStatus === 'SENT') {
+      await auditService.recordAudit({
+        entityType: 'INVOICE',
+        entityId: payment.invoiceId,
+        action: 'RECEIPT_SENT',
+        afterState: { paymentId, recipient, emailStatus: 'SENT', sentAt: new Date().toISOString() },
+        actorUserId,
+      });
+
+      await timelineService.recordEvent({
+        entityType: 'INVOICE',
+        entityId: payment.invoiceId,
+        eventType: 'RECEIPT_SENT',
+        description: `Payment receipt sent to client for payment of ${payment.amount}`,
+        actorUserId,
+      });
+
+      await paymentRepository.markReceiptSent(paymentId);
+      return payment;
+    }
+
+    await auditService.recordAudit({
+      entityType: 'INVOICE',
+      entityId: payment.invoiceId,
+      action: 'RECEIPT_SEND_FAILED',
+      afterState: { paymentId, recipient, emailStatus: emailResult?.emailStatus ?? 'FAILED' },
+      actorUserId,
     });
 
-    return payment;
+    await timelineService.recordEvent({
+      entityType: 'INVOICE',
+      entityId: payment.invoiceId,
+      eventType: 'RECEIPT_SENDING_FAILED',
+      description: `Receipt email could not be sent to the client for payment of ${payment.amount}`,
+      actorUserId,
+    });
+
+    throw new AppError('Receipt email could not be sent to the client', 502);
   },
 
   async resendReceipt(paymentId: string, actorUserId: string) {

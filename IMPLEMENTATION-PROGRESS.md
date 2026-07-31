@@ -1496,3 +1496,48 @@ Integrated the **Razorpay payment gateway**: Clients can pay invoice outstanding
 ## Audit Findings
 
 See `PAYMENTS.md` Â§12: (1) `payment.successful` email renders the invoice template (payload lacks `paymentId`); (2) no unique DB index on `gatewayTransactionId`; (3) no webhook reconciliation; (4) refunds enum-only; (5) `OVERDUE` reserved.
+
+---
+
+## EVENT-ARCHITECTURE HARDENING (2026-07-31) — COMPLETE
+
+Controlled fix to the event architecture around payments, receipts, timelines, notifications, and emails. Payment flow, webhook flow, payment verification, invoice calculations, and Razorpay integration are **unchanged**.
+
+### Timeline
+- TimelineEvent is now business-events-only. PDF generate/download/regenerate (system events) are removed from pdf.service.ts/pdf.controller.ts and live only in the Audit Log.
+- Dedupe guard: 	imelineRepository.findRecentDuplicate(entityType, entityId, eventType, 60s) — an identical business event raised again within 60s is skipped, so double-clicks/reloads/retries never duplicate a timeline entry.
+- Client visibility: 	imelineService.getTimelineFor(..., { viewerType: 'CLIENT' }) filters staff-only events (INVOICE_CREATED, INVOICE_RESENT) out of the portal. 	imeline.controller.ts passes the viewer type from eq.user.type.
+- INVOICE_CREATED recorded on invoice create; ecordPayment now also records INVOICE_PAID or PARTIAL_PAYMENT (in addition to PAYMENT_RECORDED).
+
+### Notifications & email
+- 
+otificationsService.emitEvent returns a result: { notificationEventId, emailStatus: SENT|SKIPPED|FAILED, emailErrorMessage, notificationLogId, deduplicated }.
+- Event dedupe: identical recent event (same type + entity, 60s) is skipped — one email + one in-app notification per business action.
+- emailChannel.send returns { status: 'SENT', messageId } | { status: 'SKIPPED', reason }; a 
+ull result from emailService.send (e.g. RESEND_API_KEY unset) is reported as not-sent instead of swallowed.
+- New event payment.receipt_available — client in-app notification that a receipt is downloadable (separate from the on-demand receipt *email*).
+
+### Receipt email pipeline
+- payment.successful and payment.recorded payloads now include paymentId, paymentMethod, paymentDate, invoiceId, so the automatic email renders payment-receipt.template instead of falling back to the invoice template.
+- sendReceipt/esendReceipt are honest: RECEIPT_SENT timeline/audit + payments.receiptSentAt are written **only** when the email channel reports SENT; otherwise RECEIPT_SENDING_FAILED/RECEIPT_SEND_FAILED are recorded and the endpoint throws 502.
+
+### Schema / migration
+- prisma/migrations/20260731220000_event_architecture_hardening/ — adds payments.receiptSentAt, 	imeline_events.clientVisible, indexes (entityType, entityId, eventType), deletes PDF lifecycle rows from 	imeline_events, deduplicates existing business events.
+- 
+px prisma generate re-run (client regenerated for eceiptSentAt).
+
+### Tests
+- 255/255 passing, 21 suites. 
+otifications.service.test.ts: +dedupe, +SKIPPED, +result-shape assertions. payments.service.test.ts: mocks timeline/notifications, asserts enriched payment.successful payload and payment.receipt_available. invoice.service.test.ts: INVOICE_CREATED assertion on create.
+- Backend 	sc --noEmit: 0 errors. Frontend production build: clean.
+
+### Docs
+- PAYMENTS.md §7.2/§8.1/§10.1/§12/§13 updated to match the new architecture.
+
+### Client portal receipt access (2026-07-31) - COMPLETE
+- Clients can now view and download their payment receipts in the Client Portal, without admin involvement.
+- pdf.service.ts adds getOwnerClientId() + resolvePdfForViewer(): GET /pdf/:documentType/:documentId is client-scoped - clients may only access QUOTATION/INVOICE/RECEIPT documents they own (404 otherwise, admin bypasses). pdf.controller.ts download routes through it.
+- verifyPayment now auto-generates + stores the receipt PDF on successful payment capture (non-blocking, fire-and-forget), so receipts exist before the client opens the portal.
+- Frontend PortalInvoiceDetailPage: each payment row shows [View Receipt] [Download Receipt] (useReceiptUrl per payment; on-demand render when no stored URL); invoice Download PDF now uses on-demand useInvoicePdfUrl.
+- Backend tsc --noEmit: 0 errors. Full suite 255/255 passing (run --runInBand; parallel jest workers are flaky on this Windows box). Frontend production build clean.
+- Reminder: restart backend dev server + npx prisma migrate deploy (20260731220000_event_architecture_hardening).

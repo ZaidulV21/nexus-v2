@@ -1,4 +1,4 @@
-import { NotificationChannel } from './channels/channel.interface';
+import { NotificationChannel, ChannelSendResult } from './channels/channel.interface';
 import { emailChannel } from './channels/email.channel';
 
 // Add new channels here only - e.g. channels.set('WHATSAPP', whatsappChannel).
@@ -6,11 +6,11 @@ import { emailChannel } from './channels/email.channel';
 const channels = new Map<string, NotificationChannel>([['EMAIL', emailChannel]]);
 
 export const notificationsDispatcher = {
-  async dispatch(channelName: string, recipient: string, payload: Record<string, unknown>) {
+  async dispatch(channelName: string, recipient: string, payload: Record<string, unknown>): Promise<ChannelSendResult> {
     const channel = channels.get(channelName);
     if (!channel) {
       throw new Error(`Unknown notification channel: ${channelName}`);
     }
-    await channel.send(recipient, payload);
+    return channel.send(recipient, payload);
   },
 };

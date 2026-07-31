@@ -302,7 +302,16 @@ cd nexus-backend
 npx prisma migrate deploy
 ```
 
-### 7.2 Current `Payment` model (`prisma/schema.prisma`)
+### 7.2 Migration `20260731220000_event_architecture_hardening`
+
+The event-architecture hardening migration:
+
+1. **`payments.receiptSentAt`** — `TIMESTAMP(3)` nullable. Set only when the receipt email is actually accepted by the provider; makes `sendReceipt`/`resendReceipt` idempotent and observable.
+2. **`timeline_events.clientVisible`** — `BOOLEAN NOT NULL DEFAULT true` (reserved for per-event overrides; the service layer currently filters staff-only event types at query time).
+3. **Index** `timeline_events(entityType, entityId, eventType)` — backs the dedupe/idempotency guard.
+4. **Backfill**: PDF lifecycle events (`*_PDF_GENERATED`, `*_PDF_DOWNLOADED`) are removed from `timeline_events` (system events, already in the Audit Log), and existing business events are deduplicated (earliest row per `(entityType, entityId, eventType)` kept).
+
+### 7.3 Current `Payment` model (`prisma/schema.prisma`)
 
 | Field | Type | Notes |
 |---|---|---|
@@ -338,7 +347,7 @@ npx prisma migrate deploy
    - `paymentRepository.sumForInvoice(invoiceId, tx)` — recompute paid-so-far **inside the transaction** (guards against concurrent over-payment).
    - Validate `amount > 0` and `amount ≤ grandTotal − paidSoFar`.
    - `paymentRepository.create({ ... }, tx)` — write the `SUCCESS` payment row.
-5. After commit, timeline events and the `payment.successful` notification are fired (fire-and-forget, `.catch(() => {})` — they never fail the payment).
+5. After commit, `fireTimelineAndNotifications` records timeline events (`PAYMENT_SUCCESSFUL` + `INVOICE_PAID`/`PARTIAL_PAYMENT`) and fires notifications. Payloads are enriched with `paymentId`, `paymentMethod`, `paymentDate`, `invoiceId` so the automatic email renders the **receipt** template. A client-facing `payment.receipt_available` in-app notification is also emitted. All are fire-and-forget (`.catch(() => {})`) — they never fail the payment. Timeline and notification events are **deduplicated** (same `eventType`+entity within 60s) so a business action never appears/sends twice.
 
 The offline `recordPayment` uses the same pattern and additionally rejects a duplicate `transactionReference` inside the transaction.
 
@@ -374,11 +383,11 @@ The offline `recordPayment` uses the same pattern and additionally rejects a dup
 
 ```bash
 cd nexus-backend
-npm test                       # 253 tests, 21 suites — includes payments.service.test.ts (8 tests)
+npm test                       # 255 tests, 21 suites — includes payments.service.test.ts (8 tests)
 npm run smoke-test             # end-to-end against a running server (real DB)
 ```
 
-`payments.service.test.ts` covers: invalid signature rejection, duplicate-payment rejection, missing `notes.invoiceId`, invoice-not-owned-by-client, amount-exceeds-outstanding, successful record with correct balances (`PARTIALLY PAID`), full payment (`PAID`), and payment against cancelled invoice.
+`payments.service.test.ts` covers: invalid signature rejection, duplicate-payment rejection, missing `notes.invoiceId`, invoice-not-owned-by-client, amount-exceeds-outstanding, successful record with correct balances (`PARTIALLY PAID`), full payment (`PAID`), and payment against cancelled invoice. Timeline/notification side-effects are mocked; the tests assert the enriched `payment.successful` payload (`paymentId`, `invoiceId`, `paymentMethod`) and the `payment.receipt_available` event.
 
 ### 10.2 Manual — online flow (Razorpay Test Mode)
 
@@ -449,16 +458,20 @@ npm run build                     # tsc --noEmit + Vite build
 
 These are the discrepancies/gaps surfaced during the audit. They are documented so the docs match the code exactly.
 
-1. **The receipt email template is only used by the `send-receipt`/`resend-receipt` flow.** The `payment.successful` (online) and `payment.recorded` (offline) event payloads are both `{ amount, invoiceNumber, clientId }` — neither includes `paymentId`. The email channel (`email.channel.ts`) only renders `payment-receipt.template` when `amount` **and** `paymentId` are present, so the automatic email sent after a payment renders the **invoice** template instead of the receipt template. In-app notifications are unaffected. Fix: include `paymentId` (and optionally `paymentMethod`, `paymentDate`) in both payloads. The explicit `sendReceipt`/`resendReceipt` flow (`payment.receipt_sent`) renders the receipt template correctly.
+1. ~~**The receipt email template is only used by the `send-receipt`/`resend-receipt` flow.**~~ **FIXED.** The `payment.successful` (online) and `payment.recorded` (offline) payloads now include `paymentId` (plus `paymentMethod`, `paymentDate`, `invoiceId`), so the automatic email after a payment renders `payment-receipt.template`. The explicit `sendReceipt`/`resendReceipt` flow (`payment.receipt_sent`) also renders it.
 2. **No unique DB constraint on `gatewayTransactionId`** (§8.2) — concurrent duplicate verifies could race past the pre-check.
 3. **No server-side payment reconciliation** (§5.1) — payments captured by Razorpay but never verified are not recorded.
 4. **Refunds are not implementable end-to-end** (§9) — `REFUNDED` is enum-only.
 5. **`OVERDUE` status** remains reserved (StatusBadge supports it) but is never produced by the backend.
+6. **Receipt "Sent" is now honest.** `sendReceipt`/`resendReceipt` only record `RECEIPT_SENT` on the timeline/audit and set `payments.receiptSentAt` when the email channel reports `SENT`; otherwise they record `RECEIPT_SENDING_FAILED`/`RECEIPT_SEND_FAILED` and throw `502`. The email channel treats a `null` result from `emailService.send` (e.g. `RESEND_API_KEY` unset) as not-sent.
+7. **System events are out of the business timeline.** PDF generate/download and PDF regenerate are recorded only in the Audit Log; the `TimelineEvent` table keeps business events only, deduplicated per `(entityType, entityId, eventType)`, and client viewers are filtered so staff-only events (`INVOICE_CREATED`, `INVOICE_RESENT`) never reach the portal.
+8. **Notification/email dedupe.** `notificationsService.emitEvent` skips an identical recent event (same `eventType`+entity within 60s) so each business action produces one email + one in-app notification, and returns the real email outcome (`SENT`/`SKIPPED`/`FAILED`).
+9. **Client-scoped document access.** `GET /pdf/:documentType/:documentId` is now client-scoped via `pdfService.resolvePdfForViewer`: a CLIENT can only fetch their own QUOTATION/INVOICE/RECEIPT (404 otherwise, existence hidden; admins bypass). Receipts are auto-generated on successful payment capture (`verifyPayment`) so they exist before the client opens the portal.
 
 ---
 
 ## 13. Related files
 
-- Backend: `nexus-backend/src/modules/payments/*`, `nexus-backend/src/modules/invoice/invoice.{routes,controller,service,repository}.ts`, `nexus-backend/src/modules/notifications/notifications.service.ts`, `nexus-backend/src/modules/notifications/channels/email.channel.ts`, `nexus-backend/src/modules/email/templates/payment-receipt.template.ts`, `nexus-backend/src/modules/pdf/{pdf.service.ts,templates/receipt.template.ts}`, `nexus-backend/prisma/schema.prisma`, `nexus-backend/prisma/migrations/20260731000000_add_payment_status_and_relations/migration.sql`, `nexus-backend/src/config/env.ts`, `nexus-backend/src/app.ts`.
+- Backend: `nexus-backend/src/modules/payments/*`, `nexus-backend/src/modules/invoice/invoice.{routes,controller,service,repository}.ts`, `nexus-backend/src/modules/notifications/notifications.service.ts`, `nexus-backend/src/modules/notifications/channels/email.channel.ts`, `nexus-backend/src/modules/notifications/channels/channel.interface.ts`, `nexus-backend/src/modules/email/templates/payment-receipt.template.ts`, `nexus-backend/src/modules/pdf/{pdf.service.ts,pdf.controller.ts,templates/receipt.template.ts}`, `nexus-backend/src/modules/timeline/{timeline.service.ts,timeline.repository.ts}`, `nexus-backend/prisma/schema.prisma`, `nexus-backend/prisma/migrations/20260731000000_add_payment_status_and_relations/migration.sql`, `nexus-backend/prisma/migrations/20260731220000_event_architecture_hardening/migration.sql`, `nexus-backend/src/config/env.ts`, `nexus-backend/src/app.ts`.
 - Frontend: `nexus-frontend/src/pages/portal/PortalInvoiceDetailPage.tsx`, `nexus-frontend/src/pages/payments/PaymentsPage.tsx`, `nexus-frontend/src/services/{paymentService,invoiceService}.ts`, `nexus-frontend/src/queries/{usePayments,useInvoices,keys}.ts`, `nexus-frontend/src/types/index.ts`.
 - Workflow: see `WORKFLOW.md` (Invoice Lifecycle) for the business-process view.

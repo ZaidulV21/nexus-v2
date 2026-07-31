@@ -3,7 +3,6 @@ import { pdfService } from './pdf.service';
 import { ok } from '../../core/utils/response';
 import { UnauthorizedError, ValidationError } from '../../core/errors/AppError';
 import { PdfDocumentType } from './pdf.types';
-import { timelineService } from '../timeline/timeline.service';
 
 const VALID_DOCUMENT_TYPES = new Set(['QUOTATION', 'INVOICE', 'RECEIPT']);
 
@@ -40,20 +39,18 @@ export const pdfController = {
         throw new ValidationError('documentType must be QUOTATION, INVOICE, or RECEIPT');
       }
 
-      const pdfUrl = await pdfService.getOrCreate(
+      // Clients may only access documents they own (their invoice, quotation,
+      // or payment receipt); admins may access any document. The ownership
+      // check hides the existence of other clients' records (404, not 403).
+      const pdfUrl = await pdfService.resolvePdfForViewer(
         documentType as PdfDocumentType,
-        documentId
+        documentId,
+        req.user
       );
 
-      if (documentType !== 'RECEIPT') {
-        await timelineService.recordEvent({
-          entityType: documentType as PdfDocumentType,
-          entityId: documentId,
-          eventType: `${documentType}_PDF_DOWNLOADED`,
-          description: `PDF downloaded for ${documentType.toLowerCase()} ${documentId}`,
-          actorUserId: req.user.id,
-        });
-      }
+      // PDF download is a SYSTEM event (viewing/rendering a document). It is
+      // deliberately NOT recorded in the business timeline; the audit log
+      // captures PDF_GENERATED when a document is produced on demand.
 
       return ok(res, { pdfUrl });
     } catch (err) {

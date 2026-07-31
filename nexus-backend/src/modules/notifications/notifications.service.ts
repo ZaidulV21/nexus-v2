@@ -6,6 +6,7 @@ import {
   ListNotificationsParams,
   EventNotificationMapping,
   NotificationRecipientType,
+  EmitEventResult,
 } from './notifications.types';
 
 const KNOWN_EVENT_TYPES = new Set([
@@ -21,6 +22,7 @@ const KNOWN_EVENT_TYPES = new Set([
   'invoice.cancelled',
   'payment.recorded',
   'payment.successful',
+  'payment.receipt_available',
   'project.completed',
   'message.received',
   'document.uploaded',
@@ -30,6 +32,12 @@ const KNOWN_EVENT_TYPES = new Set([
   'invoice.overdue',
   'payment.receipt_sent',
 ]);
+
+// Identical notification events raised within this window are treated as
+// accidental duplicates (double-click, page reload, retry, or two code paths
+// emitting the same business event) and skipped so each business action
+// produces exactly one notification + one email.
+const EVENT_DEDUPE_WINDOW_MS = 60_000;
 
 function resolve(
   value: string | ((payload: Record<string, unknown>) => string),
@@ -258,14 +266,44 @@ const EVENT_NOTIFICATION_MAP: Record<string, EventNotificationMapping> = {
     clientDescription: () => 'Payment received successfully.',
     clientActionUrl: (id) => `/portal/invoices/${id}`,
   },
+  'payment.receipt_available': {
+    title: 'Payment receipt available',
+    description: (p) => `A payment receipt is available for invoice ${p.invoiceNumber || ''}`,
+    type: 'SUCCESS',
+    priority: 'NORMAL',
+    relatedEntity: 'INVOICE',
+    adminTitle: 'Receipt generated',
+    adminDescription: (p) => `A payment receipt was generated for invoice ${p.invoiceNumber || ''}`,
+    adminActionUrl: (id) => `/invoices/${id}`,
+    clientTitle: 'Receipt available',
+    clientDescription: (p) => `Your payment receipt for invoice ${p.invoiceNumber || ''} is now available to download`,
+    clientActionUrl: (id) => `/portal/invoices/${id}`,
+  },
 };
 
 export const notificationsService = {
-  async emitEvent(input: EmitEventInput) {
+  async emitEvent(input: EmitEventInput): Promise<EmitEventResult> {
     if (!KNOWN_EVENT_TYPES.has(input.eventType)) {
       // eslint-disable-next-line no-console
       console.warn(`[notifications] Unknown event type ignored: ${input.eventType}`);
-      return;
+      return { notificationEventId: '', emailStatus: 'SKIPPED', deduplicated: false };
+    }
+
+    // Idempotency guard: the same business event (same type + entity) raised
+    // again within the dedupe window is an accidental duplicate and is skipped
+    // so notifications/emails are not sent twice.
+    const recent = await notificationsRepository.findRecentEvent(
+      input.eventType,
+      input.entityType,
+      input.entityId,
+      EVENT_DEDUPE_WINDOW_MS
+    );
+    if (recent) {
+      return {
+        notificationEventId: recent.id,
+        emailStatus: 'SKIPPED',
+        deduplicated: true,
+      };
     }
 
     const event = await notificationsRepository.createEvent({
@@ -278,24 +316,44 @@ export const notificationsService = {
     // In-App notifications (fire-and-forget, never block the business transaction)
     this.createInAppNotificationsFromEvent(input).catch(() => {});
 
+    // Email dispatch: the outcome reflects the REAL delivery result. Callers
+    // that need certainty (e.g. "Receipt Sent" timeline/audit entries) must
+    // check emailStatus === 'SENT'.
+    let emailStatus: 'SENT' | 'SKIPPED' | 'FAILED' = 'FAILED';
+    let emailErrorMessage: string | undefined;
+    let notificationLogId: string | undefined;
+
     try {
-      await notificationsDispatcher.dispatch('EMAIL', input.recipient, input.payload);
-      await notificationsRepository.createLog({
+      const dispatchResult = await notificationsDispatcher.dispatch('EMAIL', input.recipient, input.payload);
+      emailStatus = dispatchResult.status === 'SENT' ? 'SENT' : 'SKIPPED';
+      const log = await notificationsRepository.createLog({
         notificationEventId: event.id,
         channel: 'EMAIL',
         recipient: input.recipient,
-        status: 'SENT',
-        sentAt: new Date(),
+        status: emailStatus,
+        sentAt: emailStatus === 'SENT' ? new Date() : undefined,
       });
+      notificationLogId = log.id;
     } catch (err) {
-      await notificationsRepository.createLog({
+      emailStatus = 'FAILED';
+      emailErrorMessage = err instanceof Error ? err.message : 'Unknown error';
+      const log = await notificationsRepository.createLog({
         notificationEventId: event.id,
         channel: 'EMAIL',
         recipient: input.recipient,
         status: 'FAILED',
-        errorMessage: err instanceof Error ? err.message : 'Unknown error',
+        errorMessage: emailErrorMessage,
       });
+      notificationLogId = log.id;
     }
+
+    return {
+      notificationEventId: event.id,
+      emailStatus,
+      emailErrorMessage,
+      notificationLogId,
+      deduplicated: false,
+    };
   },
 
   async createInAppNotificationsFromEvent(input: EmitEventInput) {

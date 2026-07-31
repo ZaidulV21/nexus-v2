@@ -6,6 +6,16 @@ export interface EmitEventInput {
   recipient: string;
 }
 
+export type EmailStatus = 'SENT' | 'SKIPPED' | 'FAILED';
+
+export interface EmitEventResult {
+  notificationEventId: string;
+  emailStatus: EmailStatus;
+  emailErrorMessage?: string;
+  notificationLogId?: string;
+  deduplicated: boolean;
+}
+
 export type NotificationType = 'INFO' | 'SUCCESS' | 'WARNING' | 'ERROR';
 export type NotificationPriority = 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
 export type NotificationRecipientType = 'ADMIN' | 'CLIENT';

@@ -486,7 +486,9 @@ describe('invoiceService.create - DRAFT status', () => {
       'admin1'
     );
 
-    expect(timelineService.recordEvent).not.toHaveBeenCalled();
+    expect(timelineService.recordEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ eventType: 'INVOICE_CREATED' })
+    );
     expect(notificationsService.emitEvent).not.toHaveBeenCalled();
   });
 });

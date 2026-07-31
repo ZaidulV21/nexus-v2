@@ -294,6 +294,7 @@ export interface Payment {
   gatewayMetadata?: Record<string, any> | null;
   receiptUrl?: string | null;
   receiptGeneratedAt?: string | null;
+  receiptSentAt?: string | null;
   invoice?: { invoiceNumber: string; grandTotal: string; status: string } | null;
   client?: { contactName: string; companyName: string | null } | null;
   project?: { projectNumber: string } | null;
