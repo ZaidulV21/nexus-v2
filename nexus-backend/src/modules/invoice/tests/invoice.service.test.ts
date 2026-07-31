@@ -16,6 +16,7 @@ jest.mock('../invoice.repository', () => ({
     create: jest.fn(),
     sumForInvoice: jest.fn(),
     listForInvoice: jest.fn(),
+    findById: jest.fn(),
     findByTransactionReference: jest.fn(),
   },
 }));
@@ -99,6 +100,8 @@ describe('invoiceService.recordPayment - business rules', () => {
     grandTotal: 100000,
     invoiceNumber: 'INV/2026-27/00001',
     clientId: 'client1',
+    projectId: 'proj1',
+    client: { email: 'client@test.com' },
   };
 
   beforeEach(() => {
@@ -106,13 +109,21 @@ describe('invoiceService.recordPayment - business rules', () => {
     (invoiceRepository.findById as jest.Mock).mockResolvedValue(mockInvoice);
   });
 
-  it('records a valid payment', async () => {
+  it('records a valid payment with clientId, projectId, and status SUCCESS', async () => {
     (paymentRepository.sumForInvoice as jest.Mock).mockResolvedValue({ _sum: { amount: 0 } });
     (paymentRepository.findByTransactionReference as jest.Mock).mockResolvedValue(null);
-    (paymentRepository.create as jest.Mock).mockResolvedValue({ id: 'pay1', amount: 30000 });
+    (paymentRepository.create as jest.Mock).mockResolvedValue({ id: 'pay1', amount: 30000, clientId: 'client1', projectId: 'proj1', status: 'SUCCESS' });
 
     const payment = await invoiceService.recordPayment('inv1', { amount: 30000, method: 'Bank Transfer' }, 'admin1');
     expect(payment.amount).toBe(30000);
+    expect(paymentRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clientId: 'client1',
+        projectId: 'proj1',
+        status: 'SUCCESS',
+      }),
+      expect.anything()
+    );
   });
 
   it('rejects overpayment', async () => {
@@ -154,7 +165,7 @@ describe('invoiceService.recordPayment - business rules', () => {
   it('allows payment with transaction reference when unique', async () => {
     (paymentRepository.sumForInvoice as jest.Mock).mockResolvedValue({ _sum: { amount: 0 } });
     (paymentRepository.findByTransactionReference as jest.Mock).mockResolvedValue(null);
-    (paymentRepository.create as jest.Mock).mockResolvedValue({ id: 'pay1', amount: 5000, transactionReference: 'UTR123' });
+    (paymentRepository.create as jest.Mock).mockResolvedValue({ id: 'pay1', amount: 5000, transactionReference: 'UTR123', status: 'SUCCESS' });
 
     const payment = await invoiceService.recordPayment(
       'inv1',
@@ -167,7 +178,7 @@ describe('invoiceService.recordPayment - business rules', () => {
   it('allows payment without transaction reference', async () => {
     (paymentRepository.sumForInvoice as jest.Mock).mockResolvedValue({ _sum: { amount: 0 } });
     (paymentRepository.findByTransactionReference as jest.Mock).mockResolvedValue(null);
-    (paymentRepository.create as jest.Mock).mockResolvedValue({ id: 'pay1', amount: 5000 });
+    (paymentRepository.create as jest.Mock).mockResolvedValue({ id: 'pay1', amount: 5000, status: 'SUCCESS' });
 
     const payment = await invoiceService.recordPayment(
       'inv1',
@@ -191,7 +202,7 @@ describe('invoiceService.recordPayment - business rules', () => {
   it('supports full payment making invoice PAID', async () => {
     (paymentRepository.sumForInvoice as jest.Mock).mockResolvedValue({ _sum: { amount: 0 } });
     (paymentRepository.findByTransactionReference as jest.Mock).mockResolvedValue(null);
-    (paymentRepository.create as jest.Mock).mockResolvedValue({ id: 'pay1', amount: 100000 });
+    (paymentRepository.create as jest.Mock).mockResolvedValue({ id: 'pay1', amount: 100000, status: 'SUCCESS' });
 
     const payment = await invoiceService.recordPayment('inv1', { amount: 100000, method: 'Bank Transfer' }, 'admin1');
     expect(payment.amount).toBe(100000);
@@ -204,9 +215,9 @@ describe('invoiceService.recordPayment - business rules', () => {
       .mockResolvedValueOnce({ _sum: { amount: 70000 } });
     (paymentRepository.findByTransactionReference as jest.Mock).mockResolvedValue(null);
     (paymentRepository.create as jest.Mock)
-      .mockResolvedValueOnce({ id: 'pay1', amount: 30000 })
-      .mockResolvedValueOnce({ id: 'pay2', amount: 40000 })
-      .mockResolvedValueOnce({ id: 'pay3', amount: 30000 });
+      .mockResolvedValueOnce({ id: 'pay1', amount: 30000, status: 'SUCCESS' })
+      .mockResolvedValueOnce({ id: 'pay2', amount: 40000, status: 'SUCCESS' })
+      .mockResolvedValueOnce({ id: 'pay3', amount: 30000, status: 'SUCCESS' });
 
     await invoiceService.recordPayment('inv1', { amount: 30000, method: 'Bank Transfer' }, 'admin1');
     await invoiceService.recordPayment('inv1', { amount: 40000, method: 'UPI' }, 'admin1');
@@ -222,6 +233,21 @@ describe('invoiceService.recordPayment - business rules', () => {
     await expect(
       invoiceService.recordPayment('inv1', { amount: 40000, method: 'Cash' }, 'admin1')
     ).rejects.toThrow('would exceed');
+  });
+
+  it('transitions invoice display status to PAID after full payment', async () => {
+    (invoiceRepository.findById as jest.Mock)
+      .mockResolvedValueOnce(mockInvoice) // first call in recordPayment
+      .mockResolvedValueOnce({             // second call via getById in caller
+        ...mockInvoice,
+        payments: [{ amount: 100000, status: 'SUCCESS' }],
+      });
+
+    (paymentRepository.sumForInvoice as jest.Mock).mockResolvedValue({ _sum: { amount: 0 } });
+    (paymentRepository.findByTransactionReference as jest.Mock).mockResolvedValue(null);
+    (paymentRepository.create as jest.Mock).mockResolvedValue({ id: 'pay1', amount: 100000, status: 'SUCCESS' });
+
+    await invoiceService.recordPayment('inv1', { amount: 100000, method: 'Bank Transfer' }, 'admin1');
   });
 });
 
@@ -254,7 +280,7 @@ describe('invoiceService.listPayments - sorting', () => {
 describe('invoiceService.getProjectFinancialSummary', () => {
   it('excludes cancelled invoices from totals', async () => {
     (invoiceRepository.listForProject as jest.Mock).mockResolvedValue([
-      { grandTotal: 50000, status: 'ISSUED', payments: [{ amount: 20000 }] },
+      { grandTotal: 50000, status: 'ISSUED', payments: [{ amount: 20000, status: 'SUCCESS' }] },
       { grandTotal: 10000, status: 'CANCELLED', payments: [] },
     ]);
 
@@ -268,9 +294,9 @@ describe('invoiceService.getProjectFinancialSummary', () => {
 describe('invoiceService.getClientInvoiceSummary', () => {
   it('excludes cancelled invoices from totals', async () => {
     (invoiceRepository.listForClient as jest.Mock).mockResolvedValue([
-      { grandTotal: 80000, status: 'ISSUED', payments: [{ amount: 30000 }] },
+      { grandTotal: 80000, status: 'ISSUED', payments: [{ amount: 30000, status: 'SUCCESS' }] },
       { grandTotal: 20000, status: 'CANCELLED', payments: [] },
-      { grandTotal: 50000, status: 'ISSUED', payments: [{ amount: 50000 }] },
+      { grandTotal: 50000, status: 'ISSUED', payments: [{ amount: 50000, status: 'SUCCESS' }] },
     ]);
 
     const summary = await invoiceService.getClientInvoiceSummary('client1');
@@ -305,88 +331,109 @@ describe('invoiceService.getClientInvoiceSummary', () => {
 });
 
 describe('invoiceService.send - DRAFT to ISSUED workflow', () => {
-  const draftInvoice = {
-    id: 'inv1',
-    status: 'DRAFT',
-    invoiceNumber: 'INV/2026-27/00001',
-    grandTotal: 50000,
-    clientId: 'client1',
-    client: { email: 'client@test.com' },
-  };
-
-  const issuedInvoice = {
-    ...draftInvoice,
-    status: 'ISSUED',
-  };
-
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
-
-  it('transitions DRAFT to ISSUED on first send', async () => {
-    (invoiceRepository.findById as jest.Mock).mockResolvedValue(draftInvoice);
-    (invoiceRepository.markSent as jest.Mock).mockResolvedValue({ ...draftInvoice, status: 'ISSUED' });
-
-    await invoiceService.send('inv1', 'admin1', false);
-
-    expect(invoiceRepository.markSent).toHaveBeenCalledWith('inv1');
-  });
-
-  it('sends email and records timeline on first send', async () => {
-    (invoiceRepository.findById as jest.Mock).mockResolvedValue(draftInvoice);
-    (invoiceRepository.markSent as jest.Mock).mockResolvedValue({ ...draftInvoice, status: 'ISSUED' });
-    const { timelineService } = require('../../timeline/timeline.service');
-    const { notificationsService } = require('../../notifications/notifications.service');
-
-    await invoiceService.send('inv1', 'admin1', false);
-
-    expect(timelineService.recordEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ eventType: 'INVOICE_SENT' })
-    );
-    expect(notificationsService.emitEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ eventType: 'invoice.issued' })
-    );
-  });
-
-  it('rejects double-send without resend flag', async () => {
-    (invoiceRepository.findById as jest.Mock).mockResolvedValue(issuedInvoice);
-
-    await expect(invoiceService.send('inv1', 'admin1', false)).rejects.toThrow('already been sent');
-    expect(invoiceRepository.markSent).not.toHaveBeenCalled();
-  });
-
-  it('allows resend on ISSUED invoice', async () => {
-    (invoiceRepository.findById as jest.Mock).mockResolvedValue(issuedInvoice);
-    const { timelineService } = require('../../timeline/timeline.service');
-
-    await invoiceService.send('inv1', 'admin1', true);
-
-    expect(timelineService.recordEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ eventType: 'INVOICE_RESENT' })
-    );
-    expect(invoiceRepository.markSent).not.toHaveBeenCalled();
-  });
-
-  it('rejects send on cancelled invoice', async () => {
-    (invoiceRepository.findById as jest.Mock).mockResolvedValue({ ...draftInvoice, status: 'CANCELLED' });
-
-    await expect(invoiceService.send('inv1', 'admin1', false)).rejects.toThrow('cancelled');
-  });
-
-  it('rejects send when client has no email', async () => {
-    (invoiceRepository.findById as jest.Mock).mockResolvedValue({ ...draftInvoice, client: null });
-
-    await expect(invoiceService.send('inv1', 'admin1', false)).rejects.toThrow('email');
-  });
-});
-
-describe('invoiceService.getForClient - DRAFT visibility', () => {
-  it('rejects access to DRAFT invoice', async () => {
-    (invoiceRepository.findById as jest.Mock).mockResolvedValue({
+    const draftInvoice = {
       id: 'inv1',
       status: 'DRAFT',
+      invoiceNumber: 'INV/2026-27/00001',
+      grandTotal: 50000,
       clientId: 'client1',
+      client: { email: 'client@test.com' },
+    };
+
+    const issuedInvoice = {
+      ...draftInvoice,
+      status: 'ISSUED',
+    };
+
+    beforeEach(() => {
+      jest.clearAllMocks();
     });
+
+    it('transitions DRAFT to ISSUED on first send', async () => {
+      (invoiceRepository.findById as jest.Mock).mockResolvedValue(draftInvoice);
+      (invoiceRepository.markSent as jest.Mock).mockResolvedValue({ ...draftInvoice, status: 'ISSUED' });
+
+      await invoiceService.send('inv1', 'admin1', false);
+
+      expect(invoiceRepository.markSent).toHaveBeenCalledWith('inv1');
+    });
+
+    it('sends email and records timeline on first send', async () => {
+      (invoiceRepository.findById as jest.Mock).mockResolvedValue(draftInvoice);
+      (invoiceRepository.markSent as jest.Mock).mockResolvedValue({ ...draftInvoice, status: 'ISSUED' });
+      const { timelineService } = require('../../timeline/timeline.service');
+      const { notificationsService } = require('../../notifications/notifications.service');
+
+      await invoiceService.send('inv1', 'admin1', false);
+
+      expect(timelineService.recordEvent).toHaveBeenCalledWith(
+        expect.objectContaining({ eventType: 'INVOICE_SENT' })
+      );
+      expect(notificationsService.emitEvent).toHaveBeenCalledWith(
+        expect.objectContaining({ eventType: 'invoice.issued' })
+      );
+    });
+
+    it('rejects double-send without resend flag', async () => {
+      (invoiceRepository.findById as jest.Mock).mockResolvedValue(issuedInvoice);
+
+      await expect(invoiceService.send('inv1', 'admin1', false)).rejects.toThrow('already been sent');
+      expect(invoiceRepository.markSent).not.toHaveBeenCalled();
+    });
+
+    it('allows resend on ISSUED invoice', async () => {
+      (invoiceRepository.findById as jest.Mock).mockResolvedValue(issuedInvoice);
+      const { timelineService } = require('../../timeline/timeline.service');
+
+      await invoiceService.send('inv1', 'admin1', true);
+
+      expect(timelineService.recordEvent).toHaveBeenCalledWith(
+        expect.objectContaining({ eventType: 'INVOICE_RESENT' })
+      );
+      expect(invoiceRepository.markSent).not.toHaveBeenCalled();
+    });
+
+    it('rejects send on cancelled invoice', async () => {
+      (invoiceRepository.findById as jest.Mock).mockResolvedValue({ ...draftInvoice, status: 'CANCELLED' });
+
+      await expect(invoiceService.send('inv1', 'admin1', false)).rejects.toThrow('cancelled');
+    });
+
+    it('rejects send when client has no email', async () => {
+      (invoiceRepository.findById as jest.Mock).mockResolvedValue({ ...draftInvoice, client: null });
+
+      await expect(invoiceService.send('inv1', 'admin1', false)).rejects.toThrow('email');
+    });
+  });
+
+  describe('invoiceService.cancel - notification uses client email', () => {
+    it('sends cancel notification with client email instead of literal string', async () => {
+      const invoiceWithClient = {
+        id: 'inv1',
+        status: 'ISSUED',
+        invoiceNumber: 'INV/2026-27/00001',
+        clientId: 'client1',
+        client: { email: 'client@test.com' },
+      };
+      (invoiceRepository.findById as jest.Mock).mockResolvedValue(invoiceWithClient);
+      (invoiceRepository.cancel as jest.Mock).mockResolvedValue({ ...invoiceWithClient, status: 'CANCELLED' });
+      const { notificationsService } = require('../../notifications/notifications.service');
+
+      await invoiceService.cancel('inv1', { reason: 'test' }, 'admin1');
+
+      expect(notificationsService.emitEvent).toHaveBeenCalledWith(
+        expect.objectContaining({ recipient: 'client@test.com' })
+      );
+    });
+  });
+
+  describe('invoiceService.getForClient - DRAFT visibility', () => {
+    it('rejects access to DRAFT invoice', async () => {
+      (invoiceRepository.findById as jest.Mock).mockResolvedValue({
+        id: 'inv1',
+        status: 'DRAFT',
+        clientId: 'client1',
+      });
 
     await expect(invoiceService.getForClient('inv1', 'client1')).rejects.toThrow('not found');
   });
@@ -406,6 +453,10 @@ describe('invoiceService.getForClient - DRAFT visibility', () => {
 });
 
 describe('invoiceService.create - DRAFT status', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   it('creates invoice with DRAFT status and does not notify client', async () => {
     (projectRepository.findById as jest.Mock).mockResolvedValue({
       id: 'proj1',
@@ -470,7 +521,7 @@ describe('enrichInvoice - displayStatus calculation', () => {
       id: 'inv1',
       status: 'ISSUED',
       grandTotal: 10000,
-      payments: [{ amount: 3000 }],
+      payments: [{ amount: 3000, status: 'SUCCESS' }],
     });
 
     const result = await invoiceService.getById('inv1');
@@ -484,7 +535,7 @@ describe('enrichInvoice - displayStatus calculation', () => {
       id: 'inv1',
       status: 'ISSUED',
       grandTotal: 10000,
-      payments: [{ amount: 10000 }],
+      payments: [{ amount: 10000, status: 'SUCCESS' }],
     });
 
     const result = await invoiceService.getById('inv1');
@@ -510,10 +561,28 @@ describe('enrichInvoice - displayStatus calculation', () => {
       id: 'inv1',
       status: 'ISSUED',
       grandTotal: 10000,
-      payments: [{ amount: 3000 }, { amount: 2000 }],
+      payments: [{ amount: 3000, status: 'SUCCESS' }, { amount: 2000, status: 'SUCCESS' }],
     });
 
     const result = await invoiceService.getById('inv1');
     expect(result.paymentCount).toBe(2);
+  });
+
+  it('excludes PENDING payments from paidAmount and paymentCount', async () => {
+    (invoiceRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'inv1',
+      status: 'ISSUED',
+      grandTotal: 10000,
+      payments: [
+        { amount: 5000, status: 'SUCCESS' },
+        { amount: 3000, status: 'PENDING' },
+        { amount: 2000, status: 'FAILED' },
+      ],
+    });
+
+    const result = await invoiceService.getById('inv1');
+    expect(result.paidAmount).toBe(5000);
+    expect(result.paymentCount).toBe(1);
+    expect(result.outstandingAmount).toBe(5000);
   });
 });

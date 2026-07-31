@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Command } from 'cmdk';
 import { useNavigate } from 'react-router-dom';
-import { FileText, Users, FolderKanban, Receipt, FileSpreadsheet, LayoutDashboard, Layers, Wrench, FolderOpen } from 'lucide-react';
+import { FileText, Users, FolderKanban, Receipt, FileSpreadsheet, LayoutDashboard, Layers, Wrench, FolderOpen, CreditCard } from 'lucide-react';
 import { useDisclosure } from '@/hooks/useDisclosure';
 import { useDebounce } from '@/hooks/useDebounce';
 import { useGlobalSearch } from '@/queries/useSearch';
@@ -15,6 +15,7 @@ const NAV_COMMANDS = [
   { label: 'Projects', icon: FolderKanban, path: ROUTES.admin.projects },
   { label: 'Quotations', icon: FileSpreadsheet, path: ROUTES.admin.quotations },
   { label: 'Invoices', icon: Receipt, path: ROUTES.admin.invoices },
+  { label: 'Payments', icon: CreditCard, path: ROUTES.admin.payments },
 ];
 
 const MIN_QUERY_LENGTH = 2;

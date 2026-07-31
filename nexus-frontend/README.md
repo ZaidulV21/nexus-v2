@@ -18,7 +18,8 @@ All business modules from the PRD are implemented and wired to the backend API:
 - **Services** (`/admin/services`) — CRUD with image upload, thumbnail list, image replace/remove on detail
 - **Quotations** (`/admin/quotations`) — Create (client-only), revise, approve, send, PDF preview/download/regenerate
 - **Projects** (`/admin/projects`) — List, detail, aggregate status tracking
-- **Invoices** (`/admin/invoices`) — Create, send, cancel, payment recording, PDF preview/download/regenerate
+- **Invoices** (`/admin/invoices`) — Create, send, cancel, offline payment recording, receipt emails, PDF preview/download/regenerate
+- **Payments** (`/admin/payments`) — Payment ledger: search, status filter, pagination, gateway column; rows open the invoice detail
 - **Search** (`/admin/search`, Cmd+K) — Global search across 7 modules with type filtering
 - **Notifications** (`/admin/notifications`) — In-app notification center with unread badge
 - **Settings** (`/admin/settings/company`) — Full settings page with 5 sections, file uploads
@@ -27,7 +28,7 @@ All business modules from the PRD are implemented and wired to the backend API:
 ### Client Portal (`/portal/*`)
 - **Dashboard** (`/portal/dashboard`) — Personal info, quick stats, recent activity (timeline), notifications, upcoming payments, projects, quotations, invoices, documents, messages
 - **Quotation Detail** — PDF as source of truth, Accept/Reject/Revision workflow
-- **Invoice Detail** — PDF view, payment summary cards, payment history
+- **Invoice Detail** — PDF view, payment summary cards, payment history, **Pay Online** via Razorpay checkout when outstanding balance remains
 - **Projects**, **Documents**, **Notifications**
 
 ### Public Website (`/`)

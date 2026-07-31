@@ -22,13 +22,13 @@ It is **not** a CRM, and **not** multi-tenant SaaS. It is a purpose-built operat
 - Give the business (Admin) a single system to manage leads, quotations, invoices, projects, documents, and client communication.
 - Track each requested service's progress **independently**, even within one Lead/Project.
 - Produce GST-compliant, legally immutable invoices with manual partial-payment tracking.
-- Give clients a dashboard to see their project status, documents, quotations, invoices, and message the business.
-- Build every module so that V2/V3 features (roles, vendor management, automation, payment gateway, questionnaire builder, mobile apps) slot in without a backend rewrite.
+- Give clients a dashboard to see their project status, documents, quotations, invoices, pay invoices online, and message the business.
+- Build every module so that V2/V3 features (roles, vendor management, automation, advanced payment features, questionnaire builder, mobile apps) slot in without a backend rewrite.
 
 ### 2.2 Explicit Non-Goals for V1
 - No multi-tenancy, no organization/business-configuration layer above the single business.
 - No Vendor Portal, no Sales Team module, no internal roles beyond Admin.
-- No payment gateway integration (manual payment recording only).
+- ~~No payment gateway integration (manual payment recording only).~~ **SUPERSEDED** — a Razorpay payment gateway was added after the V1 core shipped (see §8.2 update and `PAYMENTS.md`); offline manual recording remains supported.
 - No automation engine / workflow rules editor.
 - No dynamic questionnaire builder (questionnaires are developer-configured).
 - No WhatsApp/SMS/push notifications (email only).
@@ -139,7 +139,9 @@ The system automatically calculates, at the Project level:
 **Payment Plans / automatic milestone generation are explicitly deferred to V2.**
 
 ### 8.2 Partial Payments
-Manual partial payment recording is required in V1 (e.g., an Admin logs a ₹30,000 payment against a ₹100,000 invoice, leaving ₹70,000 outstanding). No payment gateway integration in V1 — all payments are recorded by the Admin after being received through offline channels (bank transfer, cheque, cash, UPI, etc.), with method/reference noted.
+Manual partial payment recording is required in V1 (e.g., an Admin logs a ₹30,000 payment against a ₹100,000 invoice, leaving ₹70,000 outstanding).
+
+**Update (post-V1):** A **Razorpay payment gateway** has been integrated. Clients can pay an invoice's outstanding balance online from the Client Portal (Razorpay Checkout: card / UPI / net banking / wallet), while Admin continues to record payments received through offline channels (bank transfer, cheque, cash, UPI, etc.) with method/reference noted. Both channels write to the same `payments` table and share the same rules (no negative/zero/over-payment, no duplicates, no payment against cancelled invoices). Online payments are verified server-side via HMAC signature; see `PAYMENTS.md` for the full architecture, idempotency strategy, and webhook/refund plans.
 
 ### 8.3 GST Compliance
 Invoices are treated as **legal financial records** with the following non-negotiable rules:
@@ -270,6 +272,7 @@ These are not new — they were established in business analysis and are restate
 | Quotation (multi-service, versioned) | ✅ |
 | Invoice (freeform, GST-compliant, immutable once issued) | ✅ |
 | Payments (manual, partial payment tracking) | ✅ |
+| Payments — online gateway (Razorpay Checkout, post-V1 add-on) | ✅ |
 | Project Management (with Project Services, independent status) | ✅ |
 | Documents (Lead + Project attachment, Admin upload only) | ✅ |
 | Messages (two-way chat, Admin ↔ Client) | ✅ |
@@ -280,7 +283,7 @@ These are not new — they were established in business analysis and are restate
 | Client Dashboard | ✅ |
 | Authentication (JWT, permission-based under the hood) | ✅ |
 
-**Explicitly excluded from V1** (see §2.2), but architecturally protected for future addition: Vendor Portal, Staff/Sales roles, Role-Based Permission UI, Task Management, Calendar/Reminders, Questionnaire Builder, Payment Gateway, WhatsApp Integration, Automation Rules, Mobile Applications, Credit Notes, Client-side digital quote acceptance, Client-side project sign-off, Multi-user client company logins.
+**Explicitly excluded from V1** (see §2.2), but architecturally protected for future addition: Vendor Portal, Staff/Sales roles, Role-Based Permission UI, Task Management, Calendar/Reminders, Questionnaire Builder, WhatsApp Integration, Automation Rules, Mobile Applications, Credit Notes, Client-side digital quote acceptance, Client-side project sign-off, Multi-user client company logins. *(Payment Gateway was on this list but has since been implemented — see §8.2 and `PAYMENTS.md`.)*
 
 ---
 

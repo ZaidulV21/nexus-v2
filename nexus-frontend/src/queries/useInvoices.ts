@@ -161,6 +161,19 @@ export function useSendReceipt(invoiceId: string) {
   });
 }
 
+export function useCreateRazorpayOrder() {
+  return useMutation({
+    mutationFn: (invoiceId: string) => invoiceService.createRazorpayOrder(invoiceId),
+  });
+}
+
+export function useVerifyRazorpayPayment() {
+  return useMutation({
+    mutationFn: (payload: { razorpay_payment_id: string; razorpay_order_id: string; razorpay_signature: string }) =>
+      invoiceService.verifyRazorpayPayment(payload),
+  });
+}
+
 export function useResendReceipt(invoiceId: string) {
   const queryClient = useQueryClient();
   return useMutation({

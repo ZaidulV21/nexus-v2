@@ -1,6 +1,6 @@
-import { useState, type ReactNode } from 'react';
+import { useState, useCallback, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { CreditCard, Download, Receipt, Globe } from 'lucide-react';
+import { CreditCard, Download, Globe, Loader2 } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
@@ -10,7 +10,7 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { EntityTimeline } from '@/components/common/EntityTimeline';
-import { useMyInvoice, usePaymentHistory } from '@/queries/useInvoices';
+import { useMyInvoice, usePaymentHistory, useCreateRazorpayOrder, useVerifyRazorpayPayment } from '@/queries/useInvoices';
 import { formatCurrency, formatDateTime } from '@/lib/format';
 import { ROUTES } from '@/routes/routes';
 import type { Invoice } from '@/types';
@@ -216,9 +216,68 @@ function PaymentHistory({ invoice }: { invoice: Invoice }) {
   );
 }
 
+function loadRazorpayScript(): Promise<boolean> {
+  return new Promise((resolve) => {
+    if ((window as any).Razorpay) return resolve(true);
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+}
+
 export function PortalInvoiceDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { data: invoice, isLoading, isError, refetch } = useMyInvoice(id);
+  const { mutateAsync: createOrder, isPending: isCreatingOrder } = useCreateRazorpayOrder();
+  const { mutateAsync: verifyPayment } = useVerifyRazorpayPayment();
+  const [isPaying, setIsPaying] = useState(false);
+
+  const handlePayOnline = useCallback(async () => {
+    if (!invoice) return;
+    setIsPaying(true);
+    try {
+      const order = await createOrder(invoice.id);
+      const loaded = await loadRazorpayScript();
+      if (!loaded) {
+        alert('Failed to load payment gateway. Please try again.');
+        return;
+      }
+      const options = {
+        key: order.key,
+        amount: order.amount,
+        currency: order.currency,
+        name: 'Nexus',
+        description: `Invoice ${invoice.invoiceNumber}`,
+        order_id: order.orderId,
+        handler: async function (response: any) {
+          try {
+            await verifyPayment({
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_signature: response.razorpay_signature,
+            });
+          } finally {
+            refetch();
+            setIsPaying(false);
+          }
+        },
+        modal: {
+          ondismiss: function () {
+            setIsPaying(false);
+          },
+        },
+      };
+      const rzp = new (window as any).Razorpay(options);
+      rzp.on('payment.failed', function () {
+        setIsPaying(false);
+      });
+      rzp.open();
+    } catch {
+      setIsPaying(false);
+    }
+  }, [invoice, createOrder, verifyPayment, refetch]);
 
   if (isLoading) {
     return (
@@ -250,8 +309,13 @@ export function PortalInvoiceDetailPage() {
               </Button>
             )}
             {invoice.status !== 'CANCELLED' && (invoice.outstandingAmount ?? 0) > 0 && (
-              <Button variant="secondary" size="sm" disabled>
-                <Globe className="h-3.5 w-3.5" /> Pay Online (Coming Soon)
+              <Button variant="secondary" size="sm" onClick={handlePayOnline} disabled={isCreatingOrder || isPaying}>
+                {isCreatingOrder || isPaying ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Globe className="h-3.5 w-3.5" />
+                )}
+                {isCreatingOrder ? 'Creating Order...' : isPaying ? 'Opening Checkout...' : 'Pay Online'}
               </Button>
             )}
           </div>
@@ -284,11 +348,10 @@ export function PortalInvoiceDetailPage() {
         </CardContent>
       </Card>
 
-      {invoice.status !== 'CANCELLED' && (invoice.outstandingAmount ?? 0) > 0 && (
+      {invoice.status !== 'CANCELLED' && (invoice.outstandingAmount ?? 0) > 0 && !isPaying && (
         <div className="mt-4 flex items-center gap-2 rounded-lg border border-border bg-surface px-4 py-3 text-sm text-ink-muted">
-          <Receipt className="h-4 w-4 shrink-0" />
-          Payments are currently recorded by the business after receipt (bank transfer, UPI, cheque, or cash). Online
-          payment is coming in a future update.
+          <Globe className="h-4 w-4 shrink-0" />
+          Pay online via debit/credit card, UPI, net banking, or wallet.
         </div>
       )}
     </div>

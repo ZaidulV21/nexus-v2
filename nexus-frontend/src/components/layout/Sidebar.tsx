@@ -6,6 +6,7 @@ import {
   FileSpreadsheet,
   FolderKanban,
   Receipt,
+  CreditCard,
   Layers,
   MessageSquare,
   FolderOpen,
@@ -34,6 +35,7 @@ const NAV_SECTIONS = [
       { label: 'Quotations', icon: FileSpreadsheet, to: ROUTES.admin.quotations },
       { label: 'Projects', icon: FolderKanban, to: ROUTES.admin.projects },
       { label: 'Invoices', icon: Receipt, to: ROUTES.admin.invoices },
+      { label: 'Payments', icon: CreditCard, to: ROUTES.admin.payments },
     ],
   },
   {

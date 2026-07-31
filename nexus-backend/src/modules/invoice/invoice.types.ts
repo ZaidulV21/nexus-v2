@@ -23,3 +23,5 @@ export interface RecordPaymentInput {
   transactionReference?: string;
   referenceNote?: string;
 }
+
+export type PaymentStatus = 'PENDING' | 'SUCCESS' | 'FAILED' | 'REFUNDED';

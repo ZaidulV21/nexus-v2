@@ -262,7 +262,7 @@ The old error message only exists in `SINGLE-WORKFLOW-COMPLETE.md:279` (historic
 ### Backend
 ```bash
 ✅ npm run build — SUCCESS (0 errors)
-✅ npm test — 213/213 tests passing (20 test suites, ~10s)
+✅ npm test — 253/253 tests passing (21 test suites, ~10s)
 ```
 
 ### Frontend
@@ -270,6 +270,8 @@ The old error message only exists in `SINGLE-WORKFLOW-COMPLETE.md:279` (historic
 ✅ npx tsc --noEmit — SUCCESS (0 errors)
 ✅ npx vite build — SUCCESS
 ```
+
+> The counts above reflect the final state (incl. the Razorpay payments module). Totals mentioned in the per-phase sections of this file are historical snapshots at the time each phase shipped.
 
 ---
 
@@ -1424,3 +1426,73 @@ Quotations were created with `leadId: null`. On acceptance, `resolveSourceLeadId
 | Lead dropdown in quotation form | ✅ |
 | Backfill migration for existing data | ✅ |
 | No regressions to existing workflow | ✅ |
+
+---
+
+# Phase — Razorpay Online Payments
+
+**Date**: 2026-07-31  
+**Status**: ✅ IMPLEMENTATION COMPLETE
+
+## Summary
+
+Integrated the **Razorpay payment gateway**: Clients can pay invoice outstanding balances online from the Client Portal; Admins can record offline payments as before. Both write to the same `payments` table. Verification is synchronous (HMAC-signed Checkout handler → `POST /api/payments/verify`); no webhook is consumed. Full reference: **[PAYMENTS.md](PAYMENTS.md)**.
+
+## Backend Changes
+
+### New `src/modules/payments/` module
+1. `payments.routes.ts` — `POST /api/payments/create-order` (CLIENT), `POST /api/payments/verify` (CLIENT), `GET /api/payments` (Admin, `invoice.view`)
+2. `payments.controller.ts` — Zod-validated handlers
+3. `payments.service.ts` — order creation (outstanding balance in paise), signature verification, duplicate checks, transactional payment write, timeline/notification side-effects
+4. `payments.validation.ts`, `payments.types.ts`, `razorpay.d.ts`
+5. `tests/payments.service.test.ts` — 8 new tests
+
+### Database
+6. `prisma/migrations/20260731000000_add_payment_status_and_relations/` — `PaymentStatus` enum; `payments.clientId`/`projectId` (backfilled → `NOT NULL`, FKs); `payments.status` default `SUCCESS`; indexes on clientId/projectId/status
+
+### Existing modules
+7. `src/modules/invoice/invoice.repository.ts` — `paymentRepository.listAll`, `findByGatewayTransactionId`, `create` (status/gateway fields)
+8. `src/modules/notifications/notifications.service.ts` — `payment.successful` event registered
+9. `src/app.ts` — `/api/payments` mounted
+
+### Backend dependency
+10. `razorpay@^2.9.8` added to `package.json`
+
+### Environment
+11. `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` added to `src/config/env.ts`
+
+## Frontend Changes
+
+1. `src/pages/portal/PortalInvoiceDetailPage.tsx` — **Pay Online** flow (create order → Checkout.js popup → verify)
+2. `src/pages/payments/PaymentsPage.tsx` — NEW Admin Payments ledger at `/admin/payments`
+3. `src/services/paymentService.ts` — NEW; `src/services/invoiceService.ts` — order/verify methods
+4. `src/queries/usePayments.ts` — NEW; `useInvoices.ts` — order/verify hooks
+5. `src/queries/keys.ts`, `src/types/index.ts` — payments keys + `RazorpayOrderResponse`/`VerifyPaymentResponse`
+6. `src/App.tsx`, `src/components/layout/Sidebar.tsx`, `src/components/ui/CommandPalette.tsx`, `src/routes/routes.ts` — Payments route wiring
+
+## Key Design Decisions
+
+1. **Synchronous verification** — no webhook today; server-side reconciliation planned (`PAYMENTS.md` §5.2)
+2. **Signature-first** — HMAC-SHA256 verified before any DB work
+3. **Idempotency** — duplicate `razorpay_payment_id` → `409`; outstanding recomputed inside `$transaction` (gap: no unique index on `gatewayTransactionId`)
+4. **Shared core** — offline and online flows use the same `PaymentStatus`/balance/display rules
+5. **Reserved** — `REFUNDED` (no refund flow yet), `OVERDUE` (no due-date support)
+
+## Verification
+
+| Check | Result |
+|-------|--------|
+| Backend Tests (253/253, 21 suites — 8 new payment tests) | ✅ |
+| Backend TypeScript | ✅ 0 errors |
+| Frontend TypeScript (`tsc --noEmit`) | ✅ 0 errors |
+| Frontend Production Build | ✅ Clean |
+| Order created for outstanding balance | ✅ |
+| Invalid signature → 400 | ✅ |
+| Duplicate payment → 409 | ✅ |
+| Full payment → `PAID` / partial → `PARTIALLY PAID` | ✅ |
+| Cancelled / overpayment / wrong-client guards | ✅ |
+| Admin payments ledger with filters | ✅ |
+
+## Audit Findings
+
+See `PAYMENTS.md` §12: (1) `payment.successful` email renders the invoice template (payload lacks `paymentId`); (2) no unique DB index on `gatewayTransactionId`; (3) no webhook reconciliation; (4) refunds enum-only; (5) `OVERDUE` reserved.

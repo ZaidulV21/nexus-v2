@@ -47,6 +47,10 @@ export const queryKeys = {
     detail: (id: string) => ['invoices', 'detail', id] as const,
     clientDetail: (id: string) => ['invoices', 'client-detail', id] as const,
   },
+  payments: {
+    all: ['payments'] as const,
+    list: (params: unknown) => ['payments', 'list', params] as const,
+  },
   documents: {
     all: ['documents'] as const,
     clientList: ['documents', 'client-list'] as const,

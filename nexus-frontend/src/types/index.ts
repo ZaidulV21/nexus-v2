@@ -281,14 +281,22 @@ export interface InvoiceItem {
 export interface Payment {
   id: string;
   invoiceId: string;
+  clientId: string;
+  projectId: string;
   amount: string;
   method: string;
+  status: string;
   transactionReference?: string | null;
   referenceNote?: string | null;
   paidAt: string;
   recordedByUserId?: string;
+  gatewayTransactionId?: string | null;
+  gatewayMetadata?: Record<string, any> | null;
   receiptUrl?: string | null;
   receiptGeneratedAt?: string | null;
+  invoice?: { invoiceNumber: string; grandTotal: string; status: string } | null;
+  client?: { contactName: string; companyName: string | null } | null;
+  project?: { projectNumber: string } | null;
 }
 
 export type InvoiceStatus = 'ISSUED' | 'CANCELLED';
@@ -394,6 +402,31 @@ export interface PaginatedResponse<T> {
 export interface ApiResponse<T> {
   success: boolean;
   data: T;
+}
+
+export interface RazorpayOrderResponse {
+  orderId: string;
+  amount: number;
+  currency: string;
+  key: string;
+  receipt: string;
+}
+
+export interface VerifyPaymentResponse {
+  payment: {
+    id: string;
+    amount: number;
+    method: string;
+    status: string;
+    gatewayTransactionId: string;
+    paidAt: string;
+  };
+  invoice: {
+    id: string;
+    paidAmount: number;
+    outstandingAmount: number;
+    displayStatus: string;
+  };
 }
 
 export interface CompanySetting {

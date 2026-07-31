@@ -1,5 +1,5 @@
 import { api } from '@/lib/api';
-import type { Invoice, Payment } from '@/types';
+import type { Invoice, Payment, RazorpayOrderResponse, VerifyPaymentResponse } from '@/types';
 
 export interface InvoiceListParams {
   page?: number;
@@ -79,4 +79,10 @@ export const invoiceService = {
     api.post<Payment>(`/invoices/${invoiceId}/payments/${paymentId}/send-receipt`),
   resendReceipt: (invoiceId: string, paymentId: string) =>
     api.post<Payment>(`/invoices/${invoiceId}/payments/${paymentId}/resend-receipt`),
+
+  createRazorpayOrder: (invoiceId: string) =>
+    api.post<RazorpayOrderResponse>('/payments/create-order', { invoiceId }),
+
+  verifyRazorpayPayment: (payload: { razorpay_payment_id: string; razorpay_order_id: string; razorpay_signature: string }) =>
+    api.post<VerifyPaymentResponse>('/payments/verify', payload),
 };

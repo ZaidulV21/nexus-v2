@@ -23,6 +23,7 @@ import notificationRoutes from './modules/notifications/notifications.routes';
 import companyRoutes from './modules/company/company.routes';
 import pdfRoutes from './modules/pdf/pdf.routes';
 import publicAuthRoutes from './modules/otp/otp.routes';
+import paymentsRoutes from './modules/payments/payments.routes';
 
 export function createApp(): Express {
   const app = express();
@@ -53,6 +54,7 @@ export function createApp(): Express {
   app.use('/api/notifications', notificationRoutes);
   app.use('/api/company', companyRoutes);
   app.use('/api/pdf', pdfRoutes);
+  app.use('/api/payments', paymentsRoutes);
 
   app.use('/uploads', express.static(path.resolve(env.localStoragePath)));
 

@@ -161,7 +161,7 @@ docker-compose.yml - local Postgres for development
 
 ## Known scope limitations (by design, per the PRD)
 
-- No payment gateway — payments are manually recorded by Admin (PRD §8.2).
+- ~~No payment gateway~~ **Outdated** — a Razorpay online-payments module is implemented in `src/modules/payments/` (see `PAYMENTS.md`). Offline manual recording (PRD §8.2) remains fully supported as the second channel.
 - Questionnaires are developer-seeded, not admin-editable (PRD §5) — see `prisma/seed.ts` for the placeholder question set; replace with real questions per service before go-live.
 - Email notification channel uses **Resend** (`src/modules/email/email.service.ts`) — requires `RESEND_API_KEY` env var; `EMAIL_FROM` and `APP_URL` optional with sensible defaults. Missing API key → emails silently skipped.
 - `s3Storage.provider.ts` is a stub — implement before deploying to production; `local` storage driver works for development as-is.

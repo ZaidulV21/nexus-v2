@@ -582,6 +582,8 @@ src/modules/project/project.aggregateStatus.ts   — pure function computing der
 
 **Purpose:** Freeform, GST-compliant, immutable invoicing with manual partial payments (PRD §8).
 
+> **Addendum (post-V1):** A Razorpay online-payments module was added on top of this design — Clients pay invoice outstanding balances from the Client Portal and the backend verifies capture synchronously (HMAC). `payments` gained `client_id`, `project_id`, `status` (`PaymentStatus`), and gateway columns via migration `20260731000000_add_payment_status_and_relations`. See [`PAYMENTS.md`](../../PAYMENTS.md) for the current architecture, idempotency strategy, and webhook/refund plans.
+
 **Database tables:**
 - `invoices` (id, invoice_number [sequential per financial year, immutable], project_id, client_id, label, status [Issued/Cancelled], subtotal, gst_amount, grand_total, issued_at, created_by_user_id) — **no update/delete on core financial fields once issued; only `status` may move to Cancelled**
 - `invoice_items` (id, invoice_id, description, quantity, unit_price, hsn_sac_code, tax_rate, tax_amount, line_total)

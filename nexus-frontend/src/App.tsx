@@ -15,6 +15,7 @@ import { ServiceDetailPage as AdminServiceDetailPage } from '@/pages/services/Se
 import { ProjectsPage as AdminProjectsPage } from '@/pages/projects/ProjectsPage';
 import { ProjectDetailPage as AdminProjectDetailPage } from '@/pages/projects/ProjectDetailPage';
 import { InvoicesPage } from '@/pages/invoices/InvoicesPage';
+import { PaymentsPage } from '@/pages/payments/PaymentsPage';
 import { InvoiceDetailPage } from '@/pages/invoices/InvoiceDetailPage';
 import { MessagesPage } from '@/pages/messages/MessagesPage';
 import { DocumentsPage } from '@/pages/documents/DocumentsPage';
@@ -112,6 +113,7 @@ export default function App() {
           <Route path="projects/:id" element={<AdminProjectDetailPage />} />
           <Route path="invoices" element={<InvoicesPage />} />
           <Route path="invoices/:id" element={<InvoiceDetailPage />} />
+          <Route path="payments" element={<PaymentsPage />} />
           <Route path="messages" element={<MessagesPage />} />
           <Route path="documents" element={<DocumentsPage />} />
           <Route path="notifications" element={<NotificationsPage />} />

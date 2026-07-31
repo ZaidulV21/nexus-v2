@@ -20,6 +20,7 @@ const KNOWN_EVENT_TYPES = new Set([
   'invoice.issued',
   'invoice.cancelled',
   'payment.recorded',
+  'payment.successful',
   'project.completed',
   'message.received',
   'document.uploaded',
@@ -243,6 +244,19 @@ const EVENT_NOTIFICATION_MAP: Record<string, EventNotificationMapping> = {
     adminTitle: 'Payment receipt sent',
     adminDescription: (p) => `Receipt for ${p.amount || ''} sent for invoice ${p.invoiceNumber || ''}`,
     adminActionUrl: (id) => `/invoices/${id}`,
+  },
+  'payment.successful': {
+    title: 'Payment received',
+    description: (p) => `Payment of ${p.amount || ''} received for invoice ${p.invoiceNumber || ''}`,
+    type: 'SUCCESS',
+    priority: 'NORMAL',
+    relatedEntity: 'INVOICE',
+    adminTitle: 'Payment received',
+    adminDescription: (p) => `Client paid ₹${p.amount || ''} against Invoice ${p.invoiceNumber || ''}`,
+    adminActionUrl: (id) => `/invoices/${id}`,
+    clientTitle: 'Payment successful',
+    clientDescription: () => 'Payment received successfully.',
+    clientActionUrl: (id) => `/portal/invoices/${id}`,
   },
 };
 

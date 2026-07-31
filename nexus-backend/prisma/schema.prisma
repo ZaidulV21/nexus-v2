@@ -268,6 +268,7 @@ model Client {
   conversations Conversation[]
   documents     Document[]
   invoices      Invoice[]
+  payments      Payment[]
   projects      Project[]
   quotations    Quotation[]
 
@@ -357,6 +358,7 @@ model Project {
   conversations   Conversation[]
   documents       Document[]
   invoices        Invoice[]
+  payments        Payment[]
   projectServices ProjectService[]
   client          Client           @relation(fields: [clientId], references: [id])
   lead            Lead             @relation(fields: [leadId], references: [id])
@@ -420,13 +422,16 @@ model InvoiceItem {
 }
 
 model Payment {
-  id                   String    @id @default(uuid())
+  id                   String        @id @default(uuid())
   invoiceId            String
-  amount               Decimal   @db.Decimal(12, 2)
+  clientId             String
+  projectId            String
+  amount               Decimal       @db.Decimal(12, 2)
   method               String
+  status               PaymentStatus @default(SUCCESS)
   referenceNote        String?
   recordedByUserId     String
-  paidAt               DateTime  @default(now())
+  paidAt               DateTime      @default(now())
   transactionReference String?
   gatewayMetadata      Json?
   gatewayPaidAt        DateTime?
@@ -435,8 +440,13 @@ model Payment {
   gatewayTransactionId String?
   receiptGeneratedAt   DateTime?
   receiptUrl           String?
-  invoice              Invoice   @relation(fields: [invoiceId], references: [id])
+  invoice              Invoice       @relation(fields: [invoiceId], references: [id])
+  client               Client        @relation(fields: [clientId], references: [id])
+  project              Project       @relation(fields: [projectId], references: [id])
 
+  @@index([clientId])
+  @@index([projectId])
+  @@index([status])
   @@map("payments")
 }
 
@@ -592,6 +602,13 @@ enum ApprovalMethod {
   WHATSAPP
   EMAIL
   IN_PERSON
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
 }
 
 enum InvoiceStatus {

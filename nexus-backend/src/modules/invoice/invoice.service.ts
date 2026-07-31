@@ -40,11 +40,23 @@ function getRelatedQuotation(invoice: any) {
   };
 }
 
+function isSuccessfulPayment(payment: any): boolean {
+  return !payment.status || payment.status === 'SUCCESS';
+}
+
+function computePaidAmount(payments: any[]): number {
+  return payments.filter(isSuccessfulPayment).reduce((sum, p) => sum + Number(p.amount), 0);
+}
+
+function computePaymentCount(payments: any[]): number {
+  return payments.filter(isSuccessfulPayment).length;
+}
+
 function enrichInvoice(invoice: any) {
-  const paidAmount = invoice.payments?.reduce((sum: number, payment: any) => sum + Number(payment.amount), 0) ?? 0;
+  const paidAmount = computePaidAmount(invoice.payments ?? []);
   const grandTotal = Number(invoice.grandTotal);
   const outstandingAmount = invoice.status === 'CANCELLED' ? 0 : grandTotal - paidAmount;
-  const paymentCount = invoice.payments?.length ?? 0;
+  const paymentCount = computePaymentCount(invoice.payments ?? []);
 
   let displayStatus: string;
   if (invoice.status === 'CANCELLED') {
@@ -199,13 +211,16 @@ export const invoiceService = {
       actorUserId,
     });
 
-    await notificationsService.emitEvent({
-      eventType: 'invoice.cancelled',
-      entityType: 'INVOICE',
-      entityId: id,
-      recipient: 'client-on-file',
-      payload: { invoiceNumber: invoice.invoiceNumber, reason: input.reason },
-    });
+    const cancelRecipientEmail = invoice.client?.email;
+    if (cancelRecipientEmail) {
+      await notificationsService.emitEvent({
+        eventType: 'invoice.cancelled',
+        entityType: 'INVOICE',
+        entityId: id,
+        recipient: cancelRecipientEmail,
+        payload: { invoiceNumber: invoice.invoiceNumber, reason: input.reason },
+      });
+    }
 
     import('../pdf/pdf.service').then(({ pdfService }) => {
       pdfService.generate('INVOICE', id, actorUserId).catch(() => {});
@@ -219,37 +234,48 @@ export const invoiceService = {
     if (!invoice) throw new NotFoundError('Invoice not found');
     if (invoice.status === 'CANCELLED') throw new ValidationError('Cannot record a payment against a cancelled invoice');
 
-    const paidSoFar = await paymentRepository.sumForInvoice(invoiceId);
-    const alreadyPaid = Number(paidSoFar._sum.amount || 0);
     const grandTotal = Number(invoice.grandTotal);
-    const outstanding = grandTotal - alreadyPaid;
+    const clientId = invoice.clientId;
+    const projectId = invoice.projectId;
 
-    if (input.amount <= 0) {
-      throw new ValidationError('Payment amount must be greater than zero');
-    }
+    const payment = await runInTransaction(async (tx) => {
+      const paidSoFar = await paymentRepository.sumForInvoice(invoiceId, tx);
+      const alreadyPaid = Number(paidSoFar._sum.amount || 0);
+      const outstanding = grandTotal - alreadyPaid;
 
-    if (input.amount > outstanding) {
-      throw new ValidationError(
-        `Payment of ${input.amount} would exceed the invoice's outstanding balance of ${outstanding}`
-      );
-    }
+      if (input.amount <= 0) {
+        throw new ValidationError('Payment amount must be greater than zero');
+      }
 
-    if (input.transactionReference) {
-      const existing = await paymentRepository.findByTransactionReference(input.transactionReference);
-      if (existing) {
+      if (input.amount > outstanding) {
         throw new ValidationError(
-          `A payment with transaction reference "${input.transactionReference}" already exists`
+          `Payment of ${input.amount} would exceed the invoice's outstanding balance of ${outstanding}`
         );
       }
-    }
 
-    const payment = await paymentRepository.create({
-      invoiceId,
-      amount: input.amount,
-      method: input.method,
-      transactionReference: input.transactionReference,
-      referenceNote: input.referenceNote,
-      recordedByUserId: actorUserId,
+      if (input.transactionReference) {
+        const existing = await paymentRepository.findByTransactionReference(input.transactionReference, undefined, tx);
+        if (existing) {
+          throw new ValidationError(
+            `A payment with transaction reference "${input.transactionReference}" already exists`
+          );
+        }
+      }
+
+      return paymentRepository.create(
+        {
+          invoiceId,
+          clientId,
+          projectId,
+          amount: input.amount,
+          method: input.method,
+          status: 'SUCCESS',
+          transactionReference: input.transactionReference,
+          referenceNote: input.referenceNote,
+          recordedByUserId: actorUserId,
+        },
+        tx
+      );
     });
 
     await timelineService.recordEvent({
@@ -268,13 +294,16 @@ export const invoiceService = {
       actorUserId,
     });
 
-    await notificationsService.emitEvent({
-      eventType: 'payment.recorded',
-      entityType: 'INVOICE',
-      entityId: invoiceId,
-      recipient: 'client-on-file',
-      payload: { amount: input.amount, invoiceNumber: invoice.invoiceNumber, clientId: invoice.clientId },
-    });
+    const recipientEmail = invoice.client?.email;
+    if (recipientEmail) {
+      await notificationsService.emitEvent({
+        eventType: 'payment.recorded',
+        entityType: 'INVOICE',
+        entityId: invoiceId,
+        recipient: recipientEmail,
+        payload: { amount: input.amount, invoiceNumber: invoice.invoiceNumber, clientId },
+      });
+    }
 
     import('../pdf/pdf.service').then(({ pdfService }) => {
       pdfService.generate('INVOICE', invoiceId, actorUserId).catch(() => {});
@@ -356,7 +385,7 @@ export const invoiceService = {
 
     const totalInvoiced = activeInvoices.reduce((sum, inv) => sum + Number(inv.grandTotal), 0);
     const totalPaid = activeInvoices.reduce(
-      (sum, inv) => sum + inv.payments.reduce((s, p) => s + Number(p.amount), 0),
+      (sum, inv) => sum + computePaidAmount(inv.payments ?? []),
       0
     );
 
@@ -401,7 +430,7 @@ export const invoiceService = {
 
     const totalInvoiced = activeInvoices.reduce((sum, inv) => sum + Number(inv.grandTotal), 0);
     const totalPaid = activeInvoices.reduce(
-      (sum, inv) => sum + inv.payments.reduce((s, p) => s + Number(p.amount), 0),
+      (sum, inv) => sum + computePaidAmount(inv.payments ?? []),
       0
     );
 

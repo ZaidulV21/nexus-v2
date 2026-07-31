@@ -59,7 +59,9 @@ Project Module
   ↓
 Invoice created → Invoice email sent via Resend
   ↓
-Payment recorded → Payment receipt email sent via Resend
+Payment received (online via Razorpay checkout from the Client Portal, or recorded offline by Admin)
+  ↓
+Payment receipt email sent via Resend (PDF receipt + receipt email on demand)
 ```
 
 ---
@@ -227,10 +229,23 @@ REJECTED → DRAFT (Admin revises)
 **Note**: Status is auto-calculated from payment state. No manual status editing allowed.
 
 ### Payment Recording
+
+Two channels record payments against an invoice; both are governed by the same business rules.
+
+**Online — Razorpay (self-service by Client):**
+1. Client opens an invoice with outstanding balance in the Client Portal and clicks **Pay Online**
+2. `POST /api/payments/create-order` — backend creates a Razorpay order for exactly the outstanding amount
+3. Razorpay Checkout opens (card / UPI / net banking / wallet)
+4. On success the portal calls `POST /api/payments/verify`; the backend verifies the HMAC signature, rejects duplicates, and writes a `SUCCESS` `RAZORPAY` payment in a database transaction
+5. Invoice `displayStatus` recomputes to **PARTIALLY PAID** or **PAID**; timeline + in-app/email notifications fire
+
+**Offline — manual recording (by Admin):**
 - **Full Payment**: Single payment covers entire grand total
 - **Partial Payment**: Payment less than grand total, multiple allowed
 - **Business Rules**: Rejects negative, zero, overpayment, and duplicate transaction references
 - **Fields**: Amount, Method, Transaction/UTR Reference, Notes, Recorded By
+
+See [PAYMENTS.md](PAYMENTS.md) for the complete payment architecture, API endpoints, idempotency strategy, refund plans, and deployment steps.
 
 ### Invoice PDF Generation
 - **Trigger**: Fire-and-forget after `create`, `send`, `cancel`, `recordPayment`
@@ -350,7 +365,8 @@ REJECTED → DRAFT (Admin revises)
 - **Quotation resent** — "Revised Quotation" variant with same breakdown
 - **Invoice sent** — branded email with grand total, outstanding amount, and portal link
 - **Invoice reminder** — "Invoice Reminder" variant
-- **Payment receipt** — confirmation with amount paid, payment date/method
+- **Payment receipt** — confirmation with amount paid, payment date/method (sent on `send-receipt` / `resend-receipt`)
+- **Payment successful (online)** — `payment.successful` event after Razorpay verification (in-app notification; email renders the invoice template — see [PAYMENTS.md §12](PAYMENTS.md#12-known-limitations--audit-findings))
 
 **Email infrastructure**: Resend SDK (`resend` npm package), centralized `EmailService`, 5 HTML templates (base, client-welcome, quotation-sent, invoice-sent, payment-receipt), company branding from `CompanySetting` → `getCompanyBranding()`. Graceful degradation: missing `RESEND_API_KEY` → emails skipped, not errors.
 
@@ -359,6 +375,7 @@ REJECTED → DRAFT (Admin revises)
 - Quotation events
 - Project updates
 - Invoice events
+- Payment successful / payment recorded
 - Payment receipt sent
 
 ---
@@ -371,6 +388,7 @@ REJECTED → DRAFT (Admin revises)
 - Request quotation revisions
 - View projects
 - View invoices (payment summary + payment history)
+- Pay invoices online via Razorpay checkout
 - Download documents
 - Receive email notifications (welcome, quotation sent, invoice sent, payment receipt)
 
@@ -473,7 +491,7 @@ Lead → Client (conversion, welcome email via Resend)
 Client → Quotation (ownership, XOR constraint: leadId OR clientId)
 Quotation → Project (acceptance)
 Project → Invoice (creation, invoice email via Resend)
-Invoice → Payment (recording, receipt email via Resend)
+Invoice → Payment (Razorpay online checkout or offline recording, receipt email via Resend)
 Lead ← Quotation (automatic status sync via sourceLeadId)
 Lead ← Quotation.client.sourceLead (display resolution for converted quotations)
 ```
@@ -491,7 +509,7 @@ Lead ← Quotation.client.sourceLead (display resolution for converted quotation
 7. **Timeline, Audit Log, Notifications, Portal** - Remain synchronized
 8. **Lead Archiving** - Soft archive with mandatory reason, excludes from dashboard/search, fully reversible
 9. **Global Search** - Backend-first architecture, type filtering, related entity includes, Cmd+K integration
-10. **Payment Management** - Auto-calculated invoice status, transaction references, duplicate prevention, sorted payment history
+10. **Payment Management** - Auto-calculated invoice status, transaction references, duplicate prevention, sorted payment history, Razorpay online checkout (see `PAYMENTS.md`)
 11. **Email Delivery** - Production Resend integration with branded HTML templates, company branding from single source, graceful degradation
 12. **Lead Display** - Client-owned quotations show originating lead via `Client.sourceLead` relation — no schema or constraint changes
 13. **Service Name Display** - Quotation items show their associated service name via denormalized `serviceName` snapshot — populated at creation time, enriched at read time for backward compatibility

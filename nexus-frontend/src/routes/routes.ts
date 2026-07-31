@@ -38,6 +38,7 @@ export const ROUTES = {
     projectDetail: (id: string) => `/admin/projects/${id}` as string,
     invoices: '/admin/invoices',
     invoiceDetail: (id: string) => `/admin/invoices/${id}` as string,
+    payments: '/admin/payments',
     messages: '/admin/messages',
     documents: '/admin/documents',
     notifications: '/admin/notifications',

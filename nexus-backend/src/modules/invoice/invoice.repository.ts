@@ -125,31 +125,107 @@ export const invoiceRepository = {
   },
 };
 
+export interface PaymentListFilters {
+  skip: number;
+  take: number;
+  search?: string;
+  status?: string;
+  clientId?: string;
+  invoiceId?: string;
+  projectId?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  sortBy?: string;
+  sortOrder: 'asc' | 'desc';
+}
+
 export const paymentRepository = {
+  async listAll(filters: PaymentListFilters) {
+    const where: any = {};
+    if (filters.search) {
+      where.OR = [
+        { invoice: { invoiceNumber: { contains: filters.search, mode: 'insensitive' } } },
+        { client: { contactName: { contains: filters.search, mode: 'insensitive' } } },
+        { client: { companyName: { contains: filters.search, mode: 'insensitive' } } },
+        { project: { projectNumber: { contains: filters.search, mode: 'insensitive' } } },
+        { transactionReference: { contains: filters.search, mode: 'insensitive' } },
+      ];
+    }
+    if (filters.status) where.status = filters.status;
+    if (filters.clientId) where.clientId = filters.clientId;
+    if (filters.invoiceId) where.invoiceId = filters.invoiceId;
+    if (filters.projectId) where.projectId = filters.projectId;
+    if (filters.dateFrom || filters.dateTo) {
+      where.paidAt = {};
+      if (filters.dateFrom) where.paidAt.gte = new Date(filters.dateFrom);
+      if (filters.dateTo) where.paidAt.lte = new Date(filters.dateTo);
+    }
+
+    const orderBy: any = {};
+    orderBy[filters.sortBy || 'paidAt'] = filters.sortOrder;
+
+    const [items, total] = await Promise.all([
+      prisma.payment.findMany({
+        where,
+        skip: filters.skip,
+        take: filters.take,
+        orderBy,
+        include: {
+          invoice: { select: { invoiceNumber: true, grandTotal: true, status: true } },
+          client: { select: { contactName: true, companyName: true } },
+          project: { select: { projectNumber: true } },
+        },
+      }),
+      prisma.payment.count({ where }),
+    ]);
+
+    return { items, total };
+  },
+
   create(
-    data: { invoiceId: string; amount: number; method: string; transactionReference?: string; referenceNote?: string; recordedByUserId: string }
+    data: {
+      invoiceId: string;
+      clientId: string;
+      projectId: string;
+      amount: number;
+      method: string;
+      status: 'PENDING' | 'SUCCESS' | 'FAILED' | 'REFUNDED';
+      transactionReference?: string;
+      referenceNote?: string;
+      recordedByUserId: string;
+      gatewayTransactionId?: string;
+      gatewayMetadata?: Prisma.InputJsonValue;
+    },
+    tx?: Prisma.TransactionClient
   ) {
-    return prisma.payment.create({ data });
+    const client = tx ?? prisma;
+    return client.payment.create({ data });
   },
 
   findById(id: string) {
     return prisma.payment.findFirst({ where: { id } });
   },
 
-  sumForInvoice(invoiceId: string) {
-    return prisma.payment.aggregate({ where: { invoiceId }, _sum: { amount: true } });
+  sumForInvoice(invoiceId: string, tx?: Prisma.TransactionClient) {
+    const client = tx ?? prisma;
+    return client.payment.aggregate({ where: { invoiceId }, _sum: { amount: true } });
   },
 
   listForInvoice(invoiceId: string, sortOrder: 'asc' | 'desc' = 'desc') {
     return prisma.payment.findMany({ where: { invoiceId }, orderBy: { paidAt: sortOrder } });
   },
 
-  findByTransactionReference(transactionReference: string, excludePaymentId?: string) {
-    return prisma.payment.findFirst({
+  findByTransactionReference(transactionReference: string, excludePaymentId?: string, tx?: Prisma.TransactionClient) {
+    const client = tx ?? prisma;
+    return client.payment.findFirst({
       where: {
         transactionReference,
         ...(excludePaymentId ? { id: { not: excludePaymentId } } : {}),
       },
     });
+  },
+
+  findByGatewayTransactionId(gatewayTransactionId: string) {
+    return prisma.payment.findFirst({ where: { gatewayTransactionId } });
   },
 };

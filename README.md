@@ -10,6 +10,7 @@ Nexus/
 ├── nexus-frontend/     React + TypeScript + Vite + TailwindCSS
 ├── IMPLEMENTATION.md   Detailed phase-by-phase implementation docs
 ├── IMPLEMENTATION-PROGRESS.md   Progress tracker
+├── PAYMENTS.md         Payment architecture & Razorpay integration reference
 └── WORKFLOW.md         Business workflow documentation
 ```
 
@@ -20,10 +21,11 @@ Nexus/
 - **Framework**: Express.js
 - **ORM**: Prisma (PostgreSQL)
 - **Auth**: JWT (bcrypt passwords, role-based access)
+- **Payments**: Razorpay (online checkout via Checkout.js) + manual offline recording
 - **Email**: Resend (HTML templates, fire-and-forget delivery)
 - **Storage**: Cloudinary (images, PDFs) with local fallback
-- **PDF**: PDFKit (branded quotation/invoice generation)
-- **Testing**: Jest (213 tests, 20 suites)
+- **PDF**: PDFKit (branded quotation/invoice/receipt generation)
+- **Testing**: Jest (253 tests, 21 suites)
 
 ### Frontend
 - **Framework**: React 19 + TypeScript + Vite 5
@@ -42,7 +44,7 @@ Nexus/
 | Client Portal | Customer-facing dashboard, quotation/invoice PDFs, notifications |
 | Quotations | Client-owned, versioned, PDF-generated, email delivery |
 | Projects | Auto-created from accepted quotations, aggregate status tracking |
-| Invoices & Payments | Auto-numbered, payment recording, status calculation, PDF |
+| Invoices & Payments | Auto-numbered, Razorpay online checkout, offline payment recording, status calculation, PDF |
 | Notifications | In-app notification center, event-driven, real-time badge |
 | Company Settings | Singleton config, file uploads (Cloudinary), branding cache |
 | Global Search | Cross-module search (7 entity types), Cmd+K palette |
@@ -58,13 +60,14 @@ Nexus/
 - PostgreSQL (or Docker)
 - Resend API key (optional — emails silently skipped without it)
 - Cloudinary credentials (optional — local file storage works for dev)
+- Razorpay API keys (optional in dev — required for online payments; see [PAYMENTS.md](PAYMENTS.md))
 
 ### Backend
 
 ```bash
 cd nexus-backend
 npm install
-cp .env.example .env          # configure DATABASE_URL, JWT_SECRET, etc.
+cp .env.example .env          # configure DATABASE_URL, JWT_SECRET, RAZORPAY_KEY_ID/SECRET, etc.
 npx prisma generate
 npx prisma migrate dev --name init
 npm run prisma:seed            # seeds admin user + baseline services
@@ -76,13 +79,13 @@ npm run dev                    # starts on http://localhost:4000
 ```bash
 cd nexus-frontend
 npm install
-cp .env.example .env          # set VITE_API_URL=http://localhost:4000/api
+cp .env.example .env          # set VITE_API_BASE_URL=http://localhost:4000/api
 npm run dev                    # starts on http://localhost:5173
 ```
 
 ## Running Tests
 
-### Backend (213 tests)
+### Backend (253 tests)
 ```bash
 cd nexus-backend
 npm test                       # all unit tests
@@ -106,7 +109,8 @@ Lead (wizard or admin-created)
   → Admin converts to Client (or auto-created during wizard)
     → Quotation created (client-owned, versioned)
       → Client accepts → Project auto-created
-        → Invoice generated → Payment recorded
+        → Invoice generated → Sent → Payment received
+          (online via Razorpay checkout, or offline recorded by Admin)
 ```
 
 ### Public Website → CRM Integration
@@ -159,26 +163,30 @@ The Get Quote wizard (`/get-quote`) is an 8-step flow that:
 | `/api/clients/*` | Client management, Lead → Client conversion |
 | `/api/quotations/*` | Quotation CRUD, approve/send/revise |
 | `/api/projects/*` | Project management |
-| `/api/invoices/*` | Invoice CRUD, payment recording |
+| `/api/invoices/*` | Invoice CRUD, offline payment recording, payment history, receipts |
+| `/api/payments` | Payment ledger (search, status/date/client filters, pagination) |
 | `/api/notifications/*` | In-app notification center |
 | `/api/company/settings` | Company settings CRUD |
 | `/api/services/*` | Service CRUD, image upload/remove |
-| `/api/pdf/:type/:id` | PDF generation/download |
+| `/api/pdf/:type/:id` | PDF generation/download (`QUOTATION`/`INVOICE`/`RECEIPT`) |
 | `/api/search` | Global cross-module search |
 
 ### Client Portal (requires CLIENT role)
 | Endpoint | Purpose |
 |----------|---------|
-| `/api/portal/quotations/*` | View quotations, accept/reject/revise |
-| `/api/portal/invoices/*` | View invoices, payment history |
-| `/api/portal/projects/*` | View projects |
-| `/api/portal/notifications/*` | Client notifications |
+| `/api/quotations/me`, `/api/quotations/me/:id` | View quotations, accept/reject/revise |
+| `/api/invoices/me`, `/api/invoices/me/:id` | View invoices, payment history |
+| `/api/payments/create-order`, `/api/payments/verify` | Razorpay online checkout |
+| `/api/projects/me`, `/api/projects/me/:id` | View projects |
+| `/api/notifications/*` | Client notifications |
+
+See [PAYMENTS.md](PAYMENTS.md) for the complete payment architecture, lifecycle, endpoints, idempotency strategy, and deployment steps.
 
 ## Implementation Status
 
 All core features are implemented and verified:
 
-- **213/213 backend tests passing**
+- **253/253 backend tests passing**
 - **Frontend TypeScript: 0 errors**
 - **Frontend production build: clean**
 
