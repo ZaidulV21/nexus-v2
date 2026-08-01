@@ -182,9 +182,9 @@ REJECTED → DRAFT (Admin revises)
 - **Process**: Fetches company branding → Downloads images (logo, QR, signature, stamp) → Generates PDF buffer → Uploads to storage (Cloudinary/localStorage) → Stores `pdfUrl`/`pdfGeneratedAt` on Quotation record
 - **Content**: Header with logo/company details, document info with version/date/status/valid until, recipient block with GSTIN, 6-column services table (Description, Service, Qty, Rate, Tax %, Amount), amount in words, summary with GST breakdown, notes/terms & conditions/payment terms sections, bank details, signature/stamp, footer with page numbers
 - **Watermarks**: DRAFT and REJECTED statuses render diagonal rotated watermark overlay on every page
-- **Timeline**: Records `QUOTATION_PDF_GENERATED` on generation, `QUOTATION_PDF_DOWNLOADED` on download
+- **Timeline**: PDF generation/download are system events — recorded in the Audit Log (`PDF_GENERATED` / `PDF_DOWNLOADED`), never on the business timeline
 - **Error handling**: PDF failures are silently caught (`.catch(() => {})`) — never block the main workflow
-- **Download**: `GET /api/pdf/QUOTATION/:quotationId` — returns PDF URL; records `PDF_DOWNLOADED` timeline event
+- **Download**: `GET /api/pdf/QUOTATION/:quotationId` — returns PDF URL; records `PDF_DOWNLOADED` in the Audit Log
 - **Regenerate**: `POST /api/pdf/QUOTATION/:quotationId/regenerate` — forces regeneration even if PDF exists
 - **Frontend**: Preview (opens in new tab), Download (via `<a download>`), Regenerate (button with toast feedback) on QuotationDetailPage
 

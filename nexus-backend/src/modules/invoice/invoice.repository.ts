@@ -213,6 +213,13 @@ export const paymentRepository = {
     });
   },
 
+  markRefunded(id: string, gatewayMetadata: Prisma.InputJsonValue) {
+    return prisma.payment.update({
+      where: { id },
+      data: { status: 'REFUNDED', gatewayMetadata },
+    });
+  },
+
   sumForInvoice(invoiceId: string, tx?: Prisma.TransactionClient) {
     const client = tx ?? prisma;
     return client.payment.aggregate({ where: { invoiceId }, _sum: { amount: true } });

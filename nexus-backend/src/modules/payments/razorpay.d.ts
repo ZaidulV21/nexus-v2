@@ -36,6 +36,16 @@ declare module 'razorpay' {
     created_at: number;
   }
 
+  interface RazorpayRefund {
+    id: string;
+    entity: string;
+    amount: number;
+    currency: string;
+    payment_id: string;
+    status: string;
+    created_at: number;
+  }
+
   class Razorpay {
     constructor(options: { key_id: string; key_secret: string });
     orders: {
@@ -44,6 +54,7 @@ declare module 'razorpay' {
     };
     payments: {
       fetch(paymentId: string): Promise<RazorpayPayment>;
+      refund(paymentId: string, params: { amount: number }): Promise<RazorpayRefund>;
     };
   }
 

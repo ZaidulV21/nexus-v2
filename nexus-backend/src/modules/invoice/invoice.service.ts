@@ -1,4 +1,5 @@
 import { runInTransaction } from '../../core/utils/transaction';
+import { Prisma } from '@prisma/client';
 import { invoiceRepository, paymentRepository } from './invoice.repository';
 import { invoiceNumberingService } from './invoiceNumbering.service';
 import { projectRepository } from '../project/project.repository';
@@ -247,45 +248,59 @@ export const invoiceService = {
     const projectId = invoice.projectId;
 
     let alreadyPaid = 0;
-    const payment = await runInTransaction(async (tx) => {
-      const paidSoFar = await paymentRepository.sumForInvoice(invoiceId, tx);
-      alreadyPaid = Number(paidSoFar._sum.amount || 0);
-      const outstanding = grandTotal - alreadyPaid;
+    let payment;
+    try {
+      payment = await runInTransaction(async (tx) => {
+        const paidSoFar = await paymentRepository.sumForInvoice(invoiceId, tx);
+        alreadyPaid = Number(paidSoFar._sum.amount || 0);
+        const outstanding = grandTotal - alreadyPaid;
 
-      if (input.amount <= 0) {
-        throw new ValidationError('Payment amount must be greater than zero');
-      }
+        if (input.amount <= 0) {
+          throw new ValidationError('Payment amount must be greater than zero');
+        }
 
-      if (input.amount > outstanding) {
-        throw new ValidationError(
-          `Payment of ${input.amount} would exceed the invoice's outstanding balance of ${outstanding}`
-        );
-      }
-
-      if (input.transactionReference) {
-        const existing = await paymentRepository.findByTransactionReference(input.transactionReference, undefined, tx);
-        if (existing) {
+        if (input.amount > outstanding) {
           throw new ValidationError(
-            `A payment with transaction reference "${input.transactionReference}" already exists`
+            `Payment of ${input.amount} would exceed the invoice's outstanding balance of ${outstanding}`
           );
         }
-      }
 
-      return paymentRepository.create(
-        {
-          invoiceId,
-          clientId,
-          projectId,
-          amount: input.amount,
-          method: input.method,
-          status: 'SUCCESS',
-          transactionReference: input.transactionReference,
-          referenceNote: input.referenceNote,
-          recordedByUserId: actorUserId,
-        },
-        tx
-      );
-    });
+        if (input.transactionReference) {
+          const existing = await paymentRepository.findByTransactionReference(input.transactionReference, undefined, tx);
+          if (existing) {
+            throw new ValidationError(
+              `A payment with transaction reference "${input.transactionReference}" already exists`
+            );
+          }
+        }
+
+        return paymentRepository.create(
+          {
+            invoiceId,
+            clientId,
+            projectId,
+            amount: input.amount,
+            method: input.method,
+            status: 'SUCCESS',
+            transactionReference: input.transactionReference,
+            referenceNote: input.referenceNote,
+            recordedByUserId: actorUserId,
+          },
+          tx
+        );
+      });
+    } catch (err) {
+      // Two concurrent offline payments with the same reference can both pass
+      // the pre-check above before either commits. The DB-level UNIQUE index on
+      // transactionReference is the source of truth: map the P2002 violation to
+      // the same clean duplicate-reference error instead of a second Payment.
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw new ValidationError(
+          `A payment with transaction reference "${input.transactionReference ?? ''}" already exists`
+        );
+      }
+      throw err;
+    }
 
     const newPaidAmount = alreadyPaid + input.amount;
     const newOutstanding = grandTotal - newPaidAmount;
@@ -355,6 +370,11 @@ export const invoiceService = {
     const payment = await paymentRepository.findById(paymentId);
     if (!payment) throw new NotFoundError('Payment not found');
 
+    // A receipt that has already been emailed is a RE-SEND, not a first send.
+    // Distinguish it so the timeline records "Receipt Re-sent" (RECEIPT_RESENT)
+    // instead of repeating "Receipt Sent" (RECEIPT_SENT) - no duplicate events.
+    const isResend = !!payment.receiptSentAt;
+
     const invoice = await invoiceRepository.findById(payment.invoiceId);
     if (!invoice) throw new NotFoundError('Invoice not found');
 
@@ -389,21 +409,29 @@ export const invoiceService = {
       },
     });
 
-    // 3. Audit + timeline record the real outcome - never a false "Receipt Sent".
+    // Audit records the real email outcome - a false "Receipt Sent" is never
+    // recorded. A delivery failure is a SYSTEM event: it is written to the
+    // Audit Log only (RECEIPT_SEND_FAILED), never to the business timeline,
+    // which keeps low-level email internals away from clients.
     if (emailResult?.emailStatus === 'SENT') {
+      const eventType = isResend ? 'RECEIPT_RESENT' : 'RECEIPT_SENT';
+      const auditAction = isResend ? 'RECEIPT_RESENT' : 'RECEIPT_SENT';
+
       await auditService.recordAudit({
         entityType: 'INVOICE',
         entityId: payment.invoiceId,
-        action: 'RECEIPT_SENT',
-        afterState: { paymentId, recipient, emailStatus: 'SENT', sentAt: new Date().toISOString() },
+        action: auditAction,
+        afterState: { paymentId, recipient, emailStatus: 'SENT', sentAt: new Date().toISOString(), resent: isResend },
         actorUserId,
       });
 
       await timelineService.recordEvent({
         entityType: 'INVOICE',
         entityId: payment.invoiceId,
-        eventType: 'RECEIPT_SENT',
-        description: `Payment receipt sent to client for payment of ${payment.amount}`,
+        eventType,
+        description: isResend
+          ? `Payment receipt re-sent to client for payment of ${payment.amount}`
+          : `Payment receipt sent to client for payment of ${payment.amount}`,
         actorUserId,
       });
 
@@ -416,14 +444,6 @@ export const invoiceService = {
       entityId: payment.invoiceId,
       action: 'RECEIPT_SEND_FAILED',
       afterState: { paymentId, recipient, emailStatus: emailResult?.emailStatus ?? 'FAILED' },
-      actorUserId,
-    });
-
-    await timelineService.recordEvent({
-      entityType: 'INVOICE',
-      entityId: payment.invoiceId,
-      eventType: 'RECEIPT_SENDING_FAILED',
-      description: `Receipt email could not be sent to the client for payment of ${payment.amount}`,
       actorUserId,
     });
 

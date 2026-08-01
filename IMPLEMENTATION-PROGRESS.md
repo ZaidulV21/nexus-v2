@@ -1499,30 +1499,30 @@ See `PAYMENTS.md` Â§12: (1) `payment.successful` email renders the invoice templ
 
 ---
 
-## EVENT-ARCHITECTURE HARDENING (2026-07-31) — COMPLETE
+## EVENT-ARCHITECTURE HARDENING (2026-07-31) ï¿½ COMPLETE
 
 Controlled fix to the event architecture around payments, receipts, timelines, notifications, and emails. Payment flow, webhook flow, payment verification, invoice calculations, and Razorpay integration are **unchanged**.
 
 ### Timeline
 - TimelineEvent is now business-events-only. PDF generate/download/regenerate (system events) are removed from pdf.service.ts/pdf.controller.ts and live only in the Audit Log.
-- Dedupe guard: 	imelineRepository.findRecentDuplicate(entityType, entityId, eventType, 60s) — an identical business event raised again within 60s is skipped, so double-clicks/reloads/retries never duplicate a timeline entry.
+- Dedupe guard: 	imelineRepository.findRecentDuplicate(entityType, entityId, eventType, 60s) ï¿½ an identical business event raised again within 60s is skipped, so double-clicks/reloads/retries never duplicate a timeline entry.
 - Client visibility: 	imelineService.getTimelineFor(..., { viewerType: 'CLIENT' }) filters staff-only events (INVOICE_CREATED, INVOICE_RESENT) out of the portal. 	imeline.controller.ts passes the viewer type from eq.user.type.
 - INVOICE_CREATED recorded on invoice create; ecordPayment now also records INVOICE_PAID or PARTIAL_PAYMENT (in addition to PAYMENT_RECORDED).
 
 ### Notifications & email
 - 
 otificationsService.emitEvent returns a result: { notificationEventId, emailStatus: SENT|SKIPPED|FAILED, emailErrorMessage, notificationLogId, deduplicated }.
-- Event dedupe: identical recent event (same type + entity, 60s) is skipped — one email + one in-app notification per business action.
+- Event dedupe: identical recent event (same type + entity, 60s) is skipped ï¿½ one email + one in-app notification per business action.
 - emailChannel.send returns { status: 'SENT', messageId } | { status: 'SKIPPED', reason }; a 
 ull result from emailService.send (e.g. RESEND_API_KEY unset) is reported as not-sent instead of swallowed.
-- New event payment.receipt_available — client in-app notification that a receipt is downloadable (separate from the on-demand receipt *email*).
+- New event payment.receipt_available ï¿½ client in-app notification that a receipt is downloadable (separate from the on-demand receipt *email*).
 
 ### Receipt email pipeline
 - payment.successful and payment.recorded payloads now include paymentId, paymentMethod, paymentDate, invoiceId, so the automatic email renders payment-receipt.template instead of falling back to the invoice template.
 - sendReceipt/esendReceipt are honest: RECEIPT_SENT timeline/audit + payments.receiptSentAt are written **only** when the email channel reports SENT; otherwise RECEIPT_SENDING_FAILED/RECEIPT_SEND_FAILED are recorded and the endpoint throws 502.
 
 ### Schema / migration
-- prisma/migrations/20260731220000_event_architecture_hardening/ — adds payments.receiptSentAt, 	imeline_events.clientVisible, indexes (entityType, entityId, eventType), deletes PDF lifecycle rows from 	imeline_events, deduplicates existing business events.
+- prisma/migrations/20260731220000_event_architecture_hardening/ ï¿½ adds payments.receiptSentAt, 	imeline_events.clientVisible, indexes (entityType, entityId, eventType), deletes PDF lifecycle rows from 	imeline_events, deduplicates existing business events.
 - 
 px prisma generate re-run (client regenerated for eceiptSentAt).
 
@@ -1532,7 +1532,7 @@ otifications.service.test.ts: +dedupe, +SKIPPED, +result-shape assertions. payme
 - Backend 	sc --noEmit: 0 errors. Frontend production build: clean.
 
 ### Docs
-- PAYMENTS.md §7.2/§8.1/§10.1/§12/§13 updated to match the new architecture.
+- PAYMENTS.md ï¿½7.2/ï¿½8.1/ï¿½10.1/ï¿½12/ï¿½13 updated to match the new architecture.
 
 ### Client portal receipt access (2026-07-31) - COMPLETE
 - Clients can now view and download their payment receipts in the Client Portal, without admin involvement.
@@ -1541,3 +1541,42 @@ otifications.service.test.ts: +dedupe, +SKIPPED, +result-shape assertions. payme
 - Frontend PortalInvoiceDetailPage: each payment row shows [View Receipt] [Download Receipt] (useReceiptUrl per payment; on-demand render when no stored URL); invoice Download PDF now uses on-demand useInvoicePdfUrl.
 - Backend tsc --noEmit: 0 errors. Full suite 255/255 passing (run --runInBand; parallel jest workers are flaky on this Windows box). Frontend production build clean.
 - Reminder: restart backend dev server + npx prisma migrate deploy (20260731220000_event_architecture_hardening).
+
+### Payment timeline ordering (2026-07-31) - COMPLETE
+- BUG: verifyPayment wrote PAYMENT_SUCCESSFUL and INVOICE_PAID fire-and-forget, so the two writes raced - the timeline could read Payment Initiated -> Invoice Fully Paid -> Payment Received.
+- FIXED: verifyPayment now runs the timeline pipeline outside the transaction and AWAITS the payment events in strict business order: PAYMENT_INITIATED -> PAYMENT_SUCCESSFUL (Payment Received) -> INVOICE_PAID/PARTIAL_PAYMENT -> RECEIPT_GENERATED -> RECEIPT_AVAILABLE -> RECEIPT_SENT (only on actual email send). A payment can never fully pay an invoice before it is recorded.
+- NEW timeline milestones RECEIPT_GENERATED + RECEIPT_AVAILABLE (previously notification-only titles). Recorded after the receipt PDF render succeeds (truthful, non-blocking, failure-safe - a render failure never fails the payment confirmation). Added to both the online flow (verifyPayment) and the offline flow (recordPayment in invoice.service.ts).
+- Audit of all payment timeline insertion points: payments.service.ts createRazorpayOrder (PAYMENT_INITIATED) + verifyPayment/fireTimelineAndNotifications (now ordered), invoice.service.ts recordPayment (PAYMENT_RECORDED -> INVOICE_PAID, already correct + receipt chain added) and sendReceipt (RECEIPT_SENT/RECEIPT_SENDING_FAILED, already correctly positioned). No webhook handler exists, so no other insertion points.
+- Tests: payments.service.test.ts mocks pdf.service and asserts the full ordered chain ['PAYMENT_SUCCESSFUL','INVOICE_PAID','RECEIPT_GENERATED','RECEIPT_AVAILABLE'] plus partial-payment ordering. Backend tsc clean; 255/255 passing (--runInBand).
+- PAYMENTS.md 12.7/12.10 updated: receipt milestones are business timeline events (the one exception to PDF-render-is-audit-only).
+
+### Receipt lifecycle completion (2026-07-31) - COMPLETE
+- PROBLEM: only "Receipt Sent" was visible on the timeline; the receipt lifecycle was incomplete. The milestones were recorded ad-hoc at the orchestration call sites, so sendReceipt / on-demand renders left no intermediate events.
+- FIXED: pdfService.generate now owns the receipt lifecycle and records RECEIPT_GENERATED -> RECEIPT_STORED -> RECEIPT_AVAILABLE (INVOICE entity, in business order) on the FIRST generation of a given receipt (receiptUrl was null), after the PDF render+store succeeds. Exactly-once: repeat renders/regenerates/on-demand views never duplicate, and the timeline dedupe (60s) guards races.
+- Full chain: Payment Received (PAYMENT_SUCCESSFUL/PAYMENT_RECORDED) -> Invoice Fully Paid/Partial (INVOICE_PAID/PARTIAL_PAYMENT) -> Receipt Generated (RECEIPT_GENERATED) -> Receipt Stored (RECEIPT_STORED) -> Receipt Available (RECEIPT_AVAILABLE) -> Receipt Sent (RECEIPT_SENT, only when the email channel reports SENT). Works for online (verifyPayment), offline (recordPayment), sendReceipt resends, and on-demand portal downloads.
+- Call sites simplified: payments.service.ts fireTimelineAndNotifications and invoice.service.ts recordPayment now just fire-and-forget generateReceipt(payment.id, actor) - pdf.service records the milestones.
+- Tests: new pdf.receipt-lifecycle.test.ts (first-gen records Generated->Stored->Available in order with correct entity/actor; existing receipt does NOT re-record; QUOTATION/INVOICE renders never record). payments.service.test.ts asserts payment-event ordering + generateReceipt called with (paymentId, clientId). Backend tsc clean; 258/258 passing (--runInBand).
+- PAYMENTS.md 12.7/12.10 updated.
+
+### Client timeline is a whitelist (2026-07-31) - COMPLETE
+- PROBLEM: the client portal timeline filtered with a BLACKLIST (CLIENT_HIDDEN_EVENT_TYPES = INVOICE_CREATED, INVOICE_RESENT). Every new internal event type was visible to clients by default unless someone remembered to blacklist it - fragile, and it already leaked staff events (INVOICE_CREATED, STATUS_CHANGED, RECEIPT_GENERATED/RECEIPT_STORED on the invoice page).
+- FIXED: timeline.service.ts now filters the CLIENT view by an explicit WHITELIST (CLIENT_VISIBLE_EVENT_TYPES). Any event type not on the whitelist is hidden from clients by default, so internal implementation events (PDF generated/stored, webhook/system events, staff actions like create/resent/approve, receipt-render internals) can never leak to the portal. ADMIN viewers still see everything.
+- Whitelisted customer-facing events:
+  - Invoice: INVOICE_SENT (Invoice Received), INVOICE_CANCELLED, PAYMENT_SUCCESSFUL, PAYMENT_RECORDED (offline), INVOICE_PAID (Fully Paid), PARTIAL_PAYMENT, RECEIPT_AVAILABLE, RECEIPT_SENT.
+  - Quotation: QUOTATION_SENT, QUOTATION_REVISION_REQUESTED, QUOTATION_ACCEPTED, QUOTATION_REJECTED. (Staff-only QUOTATION_CREATED / QUOTATION_APPROVED / QUOTATION_RESENT / QUOTATION_REVISED stay hidden.)
+  - Project: PROJECT_CREATED, PROJECT_COMPLETED, SERVICE_ADDED. (STATUS_CHANGED from the status engine stays hidden.)
+  - Client: CLIENT_ACCOUNT_CREATED. (CLIENT_UPDATED, QUOTATIONS_MIGRATED stay hidden.)
+- Applied at the source: timeline.controller.ts already derives viewerType from the token (CLIENT vs ADMIN), so every portal page (invoice, quotation, project, client dashboard) inherits the whitelist - no frontend changes needed.
+- Tests: new timeline/tests/timeline.service.test.ts (ADMIN sees all; CLIENT sees only whitelisted events; internal-only timeline returns empty; staff quotation actions + lead events hidden). Backend tsc clean; 264/264 passing (--runInBand).
+- Note: GET /timeline/:entityType/:entityId is authenticate-only - it applies the whitelist for CLIENT tokens but does not yet enforce entity OWNERSHIP (a client could read another client's invoice timeline with a guessed id). The portal only fetches client-owned entities, so this is informational; enforce ownership like resolvePdfForViewer if hardening further.
+
+### Admin timeline complete + no duplicate events (2026-07-31) - COMPLETE
+- REQUIREMENT: the Admin invoice timeline must show the full lifecycle - Invoice Created, Invoice Sent, Payment Initiated, Payment Received, Invoice Fully Paid, Receipt Generated, Receipt Sent, Receipt Re-sent, Invoice Cancelled, Refund Processed - and never record duplicate events.
+- GAP 1 (Receipt Re-sent): resendReceipt() was literally sendReceipt(), so a re-send re-recorded RECEIPT_SENT - a duplicate/lying event. FIXED: sendReceipt() now checks payment.receiptSentAt; an already-sent receipt records RECEIPT_RESENT ("Payment receipt re-sent to client...") + audit action RECEIPT_RESENT (afterState includes resent: true) instead of RECEIPT_SENT. First send still records RECEIPT_SENT.
+- GAP 2 (Refund Processed): refunds were enum-only (REFUNDED), no endpoint, no event. FIXED: POST /api/payments/:paymentId/refund (Admin, invoice.create) -> paymentsService.refundPayment(). Validates payment exists + status SUCCESS (a REFUNDED payment cannot be refunded again -> REFUND_PROCESSED recorded at most once per payment). For Razorpay payments calls razorpay.payments.refund(gatewayTransactionId, { amount }) FIRST; gateway failure throws 502 and records/marks NOTHING (truthful). Offline payments are marked refunded without a gateway call. paymentRepository.markRefunded flips status=REFUNDED and merges { refundId, refundStatus, refundedAt, refundedByUserId } into gatewayMetadata (no schema change). Records timeline REFUND_PROCESSED (INVOICE entity, admin-only - NOT in the client whitelist) + audit REFUND_PROCESSED. A refunded payment no longer counts toward paidAmount/outstanding (both sum SUCCESS only), so invoice displayStatus recomputes on read.
+- Existing events verified already correct: INVOICE_CREATED (create), INVOICE_SENT (first send; re-sends use INVOICE_RESENT), PAYMENT_INITIATED (create-order), PAYMENT_SUCCESSFUL + INVOICE_PAID/PARTIAL_PAYMENT (ordered pipeline), RECEIPT_GENERATED (pdf.service, once per receipt), RECEIPT_SENT (email), INVOICE_CANCELLED (cancel). Admins see ALL events unfiltered, so the timeline remains complete.
+- Duplicate prevention: distinct event types per business action (RECEIPT_RESENT vs RECEIPT_SENT, INVOICE_RESENT vs INVOICE_SENT), the 60s timeline dedupe for accidental double-clicks, and the refund SUCCESS-only guard.
+- Types: extended the local ambient src/modules/payments/razorpay.d.ts with payments.refund() + RazorpayRefund (it previously shadowed the real package types and only declared fetch, which made the gateway refund call fail tsc).
+- Tests: payments.service.test.ts +refundPayment (5 tests: not-found, non-SUCCESS rejection/idempotency, Razorpay gateway refund with merged metadata + single REFUND_PROCESSED, offline payment without gateway call, gateway failure records nothing). invoice.service.test.ts +sendReceipt/resendReceipt (first send = RECEIPT_SENT, re-send = RECEIPT_RESENT, email-failure throws 502 and records RECEIPT_SENDING_FAILED). timeline.service.test.ts: RECEIPT_RESENT added to the client whitelist expectation. Backend tsc clean; 272/272 passing (--runInBand).
+- Frontend: no changes needed (admin timeline + audit pages render descriptions from the backend; RECEIPT_RESENT/REFUND_PROCESSED flow through unchanged).
+- PAYMENTS.md updated: 4.1 endpoint table (+refund), 9 rewritten (planned -> implemented), 10.1 test counts + refund coverage, 10.3 manual checklist (receipt resend + refund), 12 gaps 4/6/7/10 updated and +11 (canonical admin timeline, no duplicates), 13 related files. Whitelist now includes RECEIPT_RESENT; REFUND_PROCESSED is admin-only.

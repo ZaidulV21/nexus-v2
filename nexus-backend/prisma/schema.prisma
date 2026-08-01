@@ -455,6 +455,13 @@ model Payment {
   @@index([clientId])
   @@index([projectId])
   @@index([status])
+  // Online payments must be idempotent at the database level: one Razorpay
+  // transaction (and one manual transaction reference) can never produce more
+  // than one Payment record, even under concurrent verification requests.
+  // Both columns are nullable - the UNIQUE indexes allow multiple NULLs, so
+  // offline payments without a reference remain unaffected.
+  @@unique([gatewayTransactionId])
+  @@unique([transactionReference])
   @@map("payments")
 }
 

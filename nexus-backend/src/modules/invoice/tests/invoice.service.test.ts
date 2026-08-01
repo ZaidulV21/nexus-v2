@@ -18,6 +18,7 @@ jest.mock('../invoice.repository', () => ({
     listForInvoice: jest.fn(),
     findById: jest.fn(),
     findByTransactionReference: jest.fn(),
+    markReceiptSent: jest.fn(),
   },
 }));
 jest.mock('../invoiceNumbering.service', () => ({
@@ -31,8 +32,12 @@ jest.mock('../../audit/audit.service', () => ({ auditService: { recordAudit: jes
 jest.mock('../../notifications/notifications.service', () => ({ notificationsService: { emitEvent: jest.fn() } }));
 
 import { invoiceRepository, paymentRepository } from '../invoice.repository';
+import { Prisma } from '@prisma/client';
 import { projectRepository } from '../../project/project.repository';
 import { invoiceService } from '../invoice.service';
+import { timelineService } from '../../timeline/timeline.service';
+import { auditService } from '../../audit/audit.service';
+import { notificationsService } from '../../notifications/notifications.service';
 
 describe('invoiceService.create - GST totals', () => {
   it('computes GST correctly across line items with different tax rates', async () => {
@@ -160,6 +165,64 @@ describe('invoiceService.recordPayment - business rules', () => {
     await expect(
       invoiceService.recordPayment('inv1', { amount: 5000, method: 'UPI', transactionReference: 'UTR123' }, 'admin1')
     ).rejects.toThrow('already exists');
+  });
+
+  it('maps a DB unique-constraint violation (P2002) to a clean duplicate-reference error (race)', async () => {
+    // Two concurrent requests can both pass the findByTransactionReference pre-check
+    // before either commits; the DB UNIQUE index is the source of truth.
+    (paymentRepository.sumForInvoice as jest.Mock).mockResolvedValue({ _sum: { amount: 0 } });
+    (paymentRepository.findByTransactionReference as jest.Mock).mockResolvedValue(null);
+    (paymentRepository.create as jest.Mock).mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('Unique constraint failed on transactionReference', {
+        code: 'P2002',
+        clientVersion: '5.22.0',
+        meta: { target: ['transactionReference'] },
+      })
+    );
+
+    await expect(
+      invoiceService.recordPayment('inv1', { amount: 5000, method: 'UPI', transactionReference: 'UTR123' }, 'admin1')
+    ).rejects.toMatchObject({ message: 'A payment with transaction reference "UTR123" already exists' });
+
+    // The failed insert must not produce any business side effects.
+    expect(timelineService.recordEvent).not.toHaveBeenCalled();
+    expect(auditService.recordAudit).not.toHaveBeenCalled();
+    expect(notificationsService.emitEvent).not.toHaveBeenCalled();
+  });
+
+  it('creates exactly one payment when two concurrent offline payments use the same reference', async () => {
+    (paymentRepository.sumForInvoice as jest.Mock).mockResolvedValue({ _sum: { amount: 0 } });
+    (paymentRepository.findByTransactionReference as jest.Mock).mockResolvedValue(null);
+    const created = new Set<string>();
+    (paymentRepository.create as jest.Mock).mockImplementation((data: any) => {
+      if (created.has(data.transactionReference)) {
+        return Promise.reject(
+          new Prisma.PrismaClientKnownRequestError('Unique constraint failed on transactionReference', {
+            code: 'P2002',
+            clientVersion: '5.22.0',
+            meta: { target: ['transactionReference'] },
+          })
+        );
+      }
+      created.add(data.transactionReference);
+      return Promise.resolve({ id: 'pay1', amount: data.amount, transactionReference: data.transactionReference, status: 'SUCCESS' });
+    });
+
+    const results = await Promise.allSettled([
+      invoiceService.recordPayment('inv1', { amount: 5000, method: 'UPI', transactionReference: 'UTR123' }, 'admin1'),
+      invoiceService.recordPayment('inv1', { amount: 5000, method: 'UPI', transactionReference: 'UTR123' }, 'admin1'),
+    ]);
+
+    const fulfilled = results.filter((r) => r.status === 'fulfilled');
+    const rejected = results.filter((r) => r.status === 'rejected');
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    expect((rejected[0] as any).reason.message).toMatch('already exists');
+    expect(paymentRepository.create).toHaveBeenCalledTimes(2);
+
+    // Only the winning request runs the timeline/audit/notification pipeline.
+    expect(timelineService.recordEvent).toHaveBeenCalledTimes(2); // PAYMENT_RECORDED + PARTIAL_PAYMENT
+    expect(auditService.recordAudit).toHaveBeenCalledTimes(1);
   });
 
   it('allows payment with transaction reference when unique', async () => {
@@ -586,5 +649,90 @@ describe('enrichInvoice - displayStatus calculation', () => {
     expect(result.paidAmount).toBe(5000);
     expect(result.paymentCount).toBe(1);
     expect(result.outstandingAmount).toBe(5000);
+  });
+});
+
+describe('invoiceService.sendReceipt / resendReceipt - no duplicate events', () => {
+  const payment = {
+    id: 'pay1',
+    invoiceId: 'inv1',
+    amount: 50000,
+    method: 'RAZORPAY',
+    receiptSentAt: null,
+  };
+  const invoiceWithClient = {
+    id: 'inv1',
+    invoiceNumber: 'INV/2026-27/00001',
+    clientId: 'client1',
+    client: { email: 'client@test.com' },
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (paymentRepository.findById as jest.Mock).mockResolvedValue(payment);
+    (invoiceRepository.findById as jest.Mock).mockResolvedValue(invoiceWithClient);
+    (notificationsService.emitEvent as jest.Mock).mockResolvedValue({ emailStatus: 'SENT' });
+  });
+
+  it('records RECEIPT_SENT on the first send', async () => {
+    await invoiceService.sendReceipt('pay1', 'admin1');
+
+    expect(timelineService.recordEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entityType: 'INVOICE',
+        entityId: 'inv1',
+        eventType: 'RECEIPT_SENT',
+        description: expect.stringContaining('receipt sent'),
+      })
+    );
+    expect(timelineService.recordEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({ eventType: 'RECEIPT_RESENT' })
+    );
+    expect(paymentRepository.markReceiptSent).toHaveBeenCalledWith('pay1');
+  });
+
+  it('records RECEIPT_RESENT (not another RECEIPT_SENT) when the receipt was already sent', async () => {
+    (paymentRepository.findById as jest.Mock).mockResolvedValue({
+      ...payment,
+      receiptSentAt: new Date('2026-07-30T10:00:00Z'),
+    });
+
+    await invoiceService.resendReceipt('pay1', 'admin1');
+
+    expect(timelineService.recordEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entityType: 'INVOICE',
+        entityId: 'inv1',
+        eventType: 'RECEIPT_RESENT',
+        description: expect.stringContaining('re-sent'),
+      })
+    );
+    expect(timelineService.recordEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({ eventType: 'RECEIPT_SENT' })
+    );
+    expect(paymentRepository.markReceiptSent).toHaveBeenCalledWith('pay1');
+  });
+
+  it('never records a Sent/Resent timeline event when the email fails - the failure goes to the Audit Log only', async () => {
+    (notificationsService.emitEvent as jest.Mock).mockResolvedValue({ emailStatus: 'FAILED' });
+
+    await expect(invoiceService.sendReceipt('pay1', 'admin1')).rejects.toThrow(/could not be sent/i);
+
+    // A delivery failure is a SYSTEM event: Audit Log only, never the timeline.
+    expect(auditService.recordAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entityType: 'INVOICE',
+        entityId: 'inv1',
+        action: 'RECEIPT_SEND_FAILED',
+        afterState: expect.objectContaining({ emailStatus: 'FAILED' }),
+      })
+    );
+    expect(timelineService.recordEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({ eventType: 'RECEIPT_SENDING_FAILED' })
+    );
+    expect(timelineService.recordEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({ eventType: 'RECEIPT_SENT' })
+    );
+    expect(paymentRepository.markReceiptSent).not.toHaveBeenCalled();
   });
 });

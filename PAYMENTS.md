@@ -134,6 +134,7 @@ Outstanding = grand total − sum of `SUCCESS` payments. Cancelled invoices alwa
 |---|---|---|---|
 | `POST` | `/api/payments/create-order` | Client (JWT, actor `CLIENT`) | Create a Razorpay order for an invoice's outstanding balance |
 | `POST` | `/api/payments/verify` | Client (JWT, actor `CLIENT`) | Verify a captured payment and record it against the invoice |
+| `POST` | `/api/payments/:paymentId/refund` | Admin (`invoice.create` permission) | Refund a successful payment (§9), record `REFUND_PROCESSED` |
 | `GET` | `/api/payments` | Admin (`invoice.view` permission) | Paginated payment list with filters |
 
 **`POST /api/payments/create-order`**
@@ -365,15 +366,16 @@ The offline `recordPayment` uses the same pattern and additionally rejects a dup
 
 ---
 
-## 9. Refund architecture (planned, not implemented)
+## 9. Refund architecture (implemented 2026-07-31)
 
-- The `REFUNDED` status already exists in the `PaymentStatus` enum, but **no refund flow is implemented** — no API endpoint, no refund fields (`gatewayRefundId`, `refundedAt`, `refundAmount` are absent), and nothing flips a payment to `REFUNDED`.
-- Planned shape (recommendation, not built):
-  - Add `gatewayRefundId`, `refundedAt`, `refundAmount` to the `Payment` model.
-  - Add `POST /api/payments/:paymentId/refund` (Admin, `invoice.create`) → `razorpay.payments.refund` → set `status = REFUNDED`, store the refund metadata, emit timeline/notification.
-  - Make it idempotent on `gatewayRefundId`.
-  - Optionally reconcile via a `refund.processed` webhook once §5.2 is built.
-- Until then, refunds are handled out-of-band and a refunded payment is not representable in the system.
+- `POST /api/payments/:paymentId/refund` (Admin, `invoice.create`) → `paymentsService.refundPayment`:
+  - Validates the payment exists and is `SUCCESS` (a `REFUNDED`/`PENDING`/`FAILED` payment cannot be refunded — this is the idempotency guard, so `REFUND_PROCESSED` is recorded at most once per payment).
+  - Razorpay payments with a `gatewayTransactionId` first call `razorpay.payments.refund(paymentId, { amount })` (full refund in paise). If the gateway rejects it, the call throws `502 Refund could not be processed by the payment gateway` and **nothing** is marked or recorded (truthful — the timeline only says "Refund Processed" after the money movement is actually requested).
+  - Offline / non-gateway payments are marked refunded without a gateway call.
+  - `paymentRepository.markRefunded` flips `status = REFUNDED` and merges refund metadata into `gatewayMetadata` (`refundId`, `refundStatus`, `refundedAt`, `refundedByUserId`) — no schema change needed.
+  - Records timeline `REFUND_PROCESSED` (INVOICE entity — a customer-facing "Refund Issued" business event, so it is in the client whitelist too) + audit `REFUND_PROCESSED`.
+  - A refunded payment no longer counts toward `paidAmount`/outstanding (both compute over `SUCCESS` payments only), so the invoice's `displayStatus` recomputes on next read (e.g. `PAID` → `PARTIALLY PAID`/`SENT`).
+- Not implemented: refund webhook reconciliation (`refund.processed`, once §5.2 exists) and DB columns for refunds (metadata lives in `gatewayMetadata` JSON).
 
 ---
 
@@ -383,11 +385,11 @@ The offline `recordPayment` uses the same pattern and additionally rejects a dup
 
 ```bash
 cd nexus-backend
-npm test                       # 255 tests, 21 suites — includes payments.service.test.ts (8 tests)
+npm test                       # 272 tests, 23 suites — includes payments.service.test.ts (13 tests)
 npm run smoke-test             # end-to-end against a running server (real DB)
 ```
 
-`payments.service.test.ts` covers: invalid signature rejection, duplicate-payment rejection, missing `notes.invoiceId`, invoice-not-owned-by-client, amount-exceeds-outstanding, successful record with correct balances (`PARTIALLY PAID`), full payment (`PAID`), and payment against cancelled invoice. Timeline/notification side-effects are mocked; the tests assert the enriched `payment.successful` payload (`paymentId`, `invoiceId`, `paymentMethod`) and the `payment.receipt_available` event.
+`payments.service.test.ts` covers: invalid signature rejection, duplicate-payment rejection, missing `notes.invoiceId`, invoice-not-owned-by-client, amount-exceeds-outstanding, successful record with correct balances (`PARTIALLY PAID`), full payment (`PAID`), payment against cancelled invoice, and `refundPayment` (not-found, non-`SUCCESS` rejection, Razorpay gateway refund with merged metadata + single `REFUND_PROCESSED`, offline payment without gateway call, gateway failure records nothing). Timeline/notification side-effects are mocked; the tests assert the enriched `payment.successful` payload (`paymentId`, `invoiceId`, `paymentMethod`) and the `payment.receipt_available` event.
 
 ### 10.2 Manual — online flow (Razorpay Test Mode)
 
@@ -408,7 +410,9 @@ npm run smoke-test             # end-to-end against a running server (real DB)
 - [ ] Admin records a partial payment with a UTR → `PARTIALLY PAID`.
 - [ ] Duplicate `transactionReference` → rejected.
 - [ ] Amount > outstanding → rejected.
-- [ ] `send-receipt` / `resend-receipt` → client receives the branded payment-receipt email (subject `Payment Receipt — <invoice>`).
+- [ ] `send-receipt` / `resend-receipt` → client receives the branded payment-receipt email (subject `Payment Receipt — <invoice>`); timeline shows `RECEIPT_SENT` once, then `RECEIPT_RESENT` on re-send (never a second `RECEIPT_SENT`).
+- [ ] `POST /api/payments/:paymentId/refund` (Admin) on a Razorpay payment → gateway refund, payment flips to `REFUNDED`, timeline shows `REFUND_PROCESSED` once; invoice outstanding increases accordingly.
+- [ ] Re-attempt refund on the now-`REFUNDED` payment → `400 Only successful payments can be refunded` (no duplicate `REFUND_PROCESSED`).
 
 ### 10.4 Regression
 
@@ -461,17 +465,19 @@ These are the discrepancies/gaps surfaced during the audit. They are documented 
 1. ~~**The receipt email template is only used by the `send-receipt`/`resend-receipt` flow.**~~ **FIXED.** The `payment.successful` (online) and `payment.recorded` (offline) payloads now include `paymentId` (plus `paymentMethod`, `paymentDate`, `invoiceId`), so the automatic email after a payment renders `payment-receipt.template`. The explicit `sendReceipt`/`resendReceipt` flow (`payment.receipt_sent`) also renders it.
 2. **No unique DB constraint on `gatewayTransactionId`** (§8.2) — concurrent duplicate verifies could race past the pre-check.
 3. **No server-side payment reconciliation** (§5.1) — payments captured by Razorpay but never verified are not recorded.
-4. **Refunds are not implementable end-to-end** (§9) — `REFUNDED` is enum-only.
+4. ~~**Refunds are not implementable end-to-end** (§9) — `REFUNDED` is enum-only.~~ **FIXED.** `POST /api/payments/:paymentId/refund` (Admin) now refunds a `SUCCESS` payment via `razorpay.payments.refund` (or marks offline payments refunded), flips `status = REFUNDED`, merges refund metadata into `gatewayMetadata`, and records timeline `REFUND_PROCESSED` + audit. Refund webhook reconciliation (§5.2) is still not built.
 5. **`OVERDUE` status** remains reserved (StatusBadge supports it) but is never produced by the backend.
-6. **Receipt "Sent" is now honest.** `sendReceipt`/`resendReceipt` only record `RECEIPT_SENT` on the timeline/audit and set `payments.receiptSentAt` when the email channel reports `SENT`; otherwise they record `RECEIPT_SENDING_FAILED`/`RECEIPT_SEND_FAILED` and throw `502`. The email channel treats a `null` result from `emailService.send` (e.g. `RESEND_API_KEY` unset) as not-sent.
-7. **System events are out of the business timeline.** PDF generate/download and PDF regenerate are recorded only in the Audit Log; the `TimelineEvent` table keeps business events only, deduplicated per `(entityType, entityId, eventType)`, and client viewers are filtered so staff-only events (`INVOICE_CREATED`, `INVOICE_RESENT`) never reach the portal.
+6. **Receipt "Sent" is now honest.** `sendReceipt` records `RECEIPT_SENT` (first send) or `RECEIPT_RESENT` (re-send, when `payments.receiptSentAt` is already set) — never a duplicate `RECEIPT_SENT` for a re-send — and sets `payments.receiptSentAt` only when the email channel reports `SENT`; otherwise it records `RECEIPT_SEND_FAILED` **in the Audit Log only** and throws `502`. The email channel treats a `null` result from `emailService.send` (e.g. `RESEND_API_KEY` unset) as not-sent. A delivery failure is a system event, so it never appears on the business timeline.
+7. **Business events vs technical events (Problem 9); the client timeline is a whitelist.** Raw PDF render/regenerate and PDF download are recorded only in the Audit Log — `pdf.service.generate` writes `PDF_GENERATED`, `pdf.controller` writes `PDF_DOWNLOADED` — and `timelineService.recordEvent` itself redirects any `TECHNICAL_EVENT_TYPES` event (webhook received/verified, PDF generated/downloaded, receipt PDF generated/downloaded, `RECEIPT_STORED`, `EMAIL_PROVIDER_ACCEPTED`, `RETRY_ATTEMPT`, `INTERNAL_API_CALL`) to the Audit Log, so low-level implementation events can never land on — or leak from — the business timeline. The `TimelineEvent` table keeps business events only, deduplicated per `(entityType, entityId, eventType)`. Client viewers are filtered by an explicit WHITELIST (`CLIENT_VISIBLE_EVENT_TYPES` in `timeline.service.ts`): only customer-facing business events reach the portal — `INVOICE_SENT`, `INVOICE_CANCELLED`, `PAYMENT_SUCCESSFUL`, `PAYMENT_RECORDED`, `INVOICE_PAID`, `PARTIAL_PAYMENT`, `RECEIPT_AVAILABLE`, `RECEIPT_SENT`, `RECEIPT_RESENT`, `REFUND_PROCESSED`, `QUOTATION_SENT`/`REVISION_REQUESTED`/`ACCEPTED`/`REJECTED`, `PROJECT_CREATED`, `PROJECT_COMPLETED`, `SERVICE_ADDED`, `CLIENT_ACCOUNT_CREATED`. Everything else (staff creates/resents/approvals, `STATUS_CHANGED`, `QUOTATIONS_MIGRATED`, `RECEIPT_GENERATED` on the client view, lead/company/service events) is hidden by default — a whitelist, not a blacklist, so new internal event types can never leak to clients. Admins still see the complete business history — and never low-level implementation events. The one "internal-looking" exception is the receipt lifecycle: `RECEIPT_GENERATED` and `RECEIPT_AVAILABLE` ARE business milestones on the admin timeline (the client-facing receipt lifecycle), recorded by `pdfService.generate` exactly once per receipt — on the FIRST generation, after the PDF render+store succeeds — so intermediate events are never skipped and repeated renders/regenerates/on-demand views never duplicate them. `RECEIPT_STORED` (PDF persisted) is a system event and is written to the Audit Log only. (Known follow-up: `GET /timeline/:entityType/:entityId` filters by token type but does not yet enforce entity ownership.)
 8. **Notification/email dedupe.** `notificationsService.emitEvent` skips an identical recent event (same `eventType`+entity within 60s) so each business action produces one email + one in-app notification, and returns the real email outcome (`SENT`/`SKIPPED`/`FAILED`).
 9. **Client-scoped document access.** `GET /pdf/:documentType/:documentId` is now client-scoped via `pdfService.resolvePdfForViewer`: a CLIENT can only fetch their own QUOTATION/INVOICE/RECEIPT (404 otherwise, existence hidden; admins bypass). Receipts are auto-generated on successful payment capture (`verifyPayment`) so they exist before the client opens the portal.
+10. **Payment timeline ordering (was wrong).** The online flow previously wrote `PAYMENT_SUCCESSFUL` and `INVOICE_PAID` fire-and-forget, so `Invoice Fully Paid` could land before `Payment Received`. `verifyPayment` now awaits the payment events strictly in business order — `PAYMENT_INITIATED` (order creation) → `PAYMENT_SUCCESSFUL` → `INVOICE_PAID`/`PARTIAL_PAYMENT` → `RECEIPT_GENERATED` → `RECEIPT_AVAILABLE` (receipt PDF storage, `RECEIPT_STORED`, is an audit-only system event) → `RECEIPT_SENT`/`RECEIPT_RESENT` (on email, `RESENT` for re-sends) — and `recordPayment` follows the same chain for offline payments. The receipt milestones are recorded once per receipt by `pdfService.generate` (see #7), so the full lifecycle is visible regardless of whether the receipt was created at capture, via `sendReceipt`, or on-demand.
+11. **Admin timeline canonical payment events (complete, no duplicates).** The admin invoice timeline shows the full business lifecycle exactly once per action: Invoice Created (`INVOICE_CREATED`) → Invoice Sent (`INVOICE_SENT`; re-sends record `INVOICE_RESENT`, never a second `INVOICE_SENT`) → Payment Initiated (`PAYMENT_INITIATED`) → Payment Received (`PAYMENT_SUCCESSFUL`) → Invoice Fully Paid/Partial (`INVOICE_PAID`/`PARTIAL_PAYMENT`) → Receipt Generated (`RECEIPT_GENERATED`, once per receipt; `RECEIPT_STORED` is audit-only) → Receipt Available (`RECEIPT_AVAILABLE`) → Receipt Sent/Re-sent (`RECEIPT_SENT`/`RECEIPT_RESENT`) → Invoice Cancelled (`INVOICE_CANCELLED`) → Refund Processed (`REFUND_PROCESSED`, once — a refunded payment cannot be refunded again). The 60s timeline dedupe guards accidental double-clicks, and every distinct business action has its own event type so no event is recorded twice. Technical events (PDF generated/downloaded, receipt storage, webhook processing, email delivery failures/retries, internal API calls) appear only in the Audit Log.
 
 ---
 
 ## 13. Related files
 
-- Backend: `nexus-backend/src/modules/payments/*`, `nexus-backend/src/modules/invoice/invoice.{routes,controller,service,repository}.ts`, `nexus-backend/src/modules/notifications/notifications.service.ts`, `nexus-backend/src/modules/notifications/channels/email.channel.ts`, `nexus-backend/src/modules/notifications/channels/channel.interface.ts`, `nexus-backend/src/modules/email/templates/payment-receipt.template.ts`, `nexus-backend/src/modules/pdf/{pdf.service.ts,pdf.controller.ts,templates/receipt.template.ts}`, `nexus-backend/src/modules/timeline/{timeline.service.ts,timeline.repository.ts}`, `nexus-backend/prisma/schema.prisma`, `nexus-backend/prisma/migrations/20260731000000_add_payment_status_and_relations/migration.sql`, `nexus-backend/prisma/migrations/20260731220000_event_architecture_hardening/migration.sql`, `nexus-backend/src/config/env.ts`, `nexus-backend/src/app.ts`.
+- Backend: `nexus-backend/src/modules/payments/*` (incl. `razorpay.d.ts`), `nexus-backend/src/modules/invoice/invoice.{routes,controller,service,repository}.ts`, `nexus-backend/src/modules/notifications/notifications.service.ts`, `nexus-backend/src/modules/notifications/channels/email.channel.ts`, `nexus-backend/src/modules/notifications/channels/channel.interface.ts`, `nexus-backend/src/modules/email/templates/payment-receipt.template.ts`, `nexus-backend/src/modules/pdf/{pdf.service.ts,pdf.controller.ts,templates/receipt.template.ts}`, `nexus-backend/src/modules/timeline/{timeline.service.ts,timeline.repository.ts}`, `nexus-backend/prisma/schema.prisma`, `nexus-backend/prisma/migrations/20260731000000_add_payment_status_and_relations/migration.sql`, `nexus-backend/prisma/migrations/20260731220000_event_architecture_hardening/migration.sql`, `nexus-backend/src/config/env.ts`, `nexus-backend/src/app.ts`.
 - Frontend: `nexus-frontend/src/pages/portal/PortalInvoiceDetailPage.tsx`, `nexus-frontend/src/pages/payments/PaymentsPage.tsx`, `nexus-frontend/src/services/{paymentService,invoiceService}.ts`, `nexus-frontend/src/queries/{usePayments,useInvoices,keys}.ts`, `nexus-frontend/src/types/index.ts`.
 - Workflow: see `WORKFLOW.md` (Invoice Lifecycle) for the business-process view.

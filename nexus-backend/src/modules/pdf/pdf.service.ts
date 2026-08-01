@@ -5,6 +5,7 @@ import { cloudinaryProvider } from '../../core/storage/cloudinary.provider';
 import { localStorageProvider } from '../../core/storage/localStorage.provider';
 import { env } from '../../config/env';
 import { auditService } from '../audit/audit.service';
+import { timelineService } from '../timeline/timeline.service';
 import { NotFoundError, ValidationError } from '../../core/errors/AppError';
 import {
   PdfDocumentType,
@@ -304,6 +305,8 @@ export const pdfService = {
     const buffer = await generatePdfBuffer(documentType, documentId);
 
     let title: string;
+    let receiptPayment: { id: string; amount: number | { toString(): string }; invoiceId: string; invoice: { invoiceNumber: string } } | undefined;
+    let isFirstReceipt = false;
     if (documentType === 'QUOTATION') {
       const q = await prisma.quotation.findUnique({ where: { id: documentId }, select: { quotationNumber: true } });
       title = q?.quotationNumber || documentId;
@@ -313,6 +316,8 @@ export const pdfService = {
     } else {
       const payment = await prisma.payment.findUnique({ where: { id: documentId }, include: { invoice: { select: { invoiceNumber: true } } } });
       title = payment ? `RCT-${payment.invoice.invoiceNumber}-${documentId.slice(0, 8).toUpperCase()}` : documentId;
+      receiptPayment = payment ?? undefined;
+      isFirstReceipt = !payment?.receiptUrl;
     }
 
     const fileName = `${getDocumentTitle(documentType, title)}.pdf`;
@@ -349,6 +354,39 @@ export const pdfService = {
       afterState: { pdfUrl, generatedAt: now.toISOString(), fileSize: buffer.length },
       actorUserId,
     });
+
+    // Receipt lifecycle milestones. "Generated" (rendered) and "Available"
+    // (client can view/download it in the portal) are BUSINESS events that mark
+    // the client-facing receipt lifecycle and belong on the invoice timeline.
+    // They are recorded together, in order, and ONLY on the first generation of
+    // a given receipt so intermediate events are never skipped and repeated
+    // renders, regenerates, and on-demand views never duplicate them.
+    // "Stored" (PDF persisted) is a SYSTEM event - it is written to the Audit
+    // Log only, never to the business timeline.
+    if (documentType === 'RECEIPT' && isFirstReceipt && receiptPayment) {
+      const receiptAmount = Number(receiptPayment.amount);
+      await timelineService.recordEvent({
+        entityType: 'INVOICE',
+        entityId: receiptPayment.invoiceId,
+        eventType: 'RECEIPT_GENERATED',
+        description: `Payment receipt generated for payment of ${receiptAmount}`,
+        actorUserId,
+      });
+      await timelineService.recordEvent({
+        entityType: 'INVOICE',
+        entityId: receiptPayment.invoiceId,
+        eventType: 'RECEIPT_AVAILABLE',
+        description: `Payment receipt available for Invoice ${receiptPayment.invoice.invoiceNumber}`,
+        actorUserId,
+      });
+      await auditService.recordAudit({
+        entityType: 'INVOICE',
+        entityId: receiptPayment.invoiceId,
+        action: 'RECEIPT_STORED',
+        afterState: { paymentId: receiptPayment.id, receiptUrl: pdfUrl, amount: receiptAmount },
+        actorUserId,
+      });
+    }
 
     return { pdfUrl, generatedAt: now, fileSize: buffer.length };
   },

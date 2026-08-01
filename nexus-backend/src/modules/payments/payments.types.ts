@@ -6,6 +6,13 @@ export interface CreateOrderResponse {
   receipt: string;
 }
 
+export interface RefundPaymentResponse {
+  paymentId: string;
+  status: 'REFUNDED';
+  refundId?: string;
+  refundStatus?: string;
+}
+
 export interface VerifyPaymentResponse {
   payment: {
     id: string;

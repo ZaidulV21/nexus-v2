@@ -1,12 +1,14 @@
 import crypto from 'crypto';
+import { Prisma } from '@prisma/client';
 import Razorpay from 'razorpay';
 import { env } from '../../config/env';
 import { invoiceRepository, paymentRepository } from '../invoice/invoice.repository';
 import { timelineService } from '../timeline/timeline.service';
 import { notificationsService } from '../notifications/notifications.service';
+import { auditService } from '../audit/audit.service';
 import { runInTransaction } from '../../core/utils/transaction';
 import { AppError, NotFoundError } from '../../core/errors/AppError';
-import type { CreateOrderResponse, VerifyPaymentResponse } from './payments.types';
+import type { CreateOrderResponse, VerifyPaymentResponse, RefundPaymentResponse } from './payments.types';
 
 let razorpayInstance: Razorpay | null = null;
 
@@ -111,72 +113,142 @@ export async function verifyPayment(
     throw new AppError('Cannot record payment against a cancelled invoice', 400);
   }
 
-  return runInTransaction(async (tx) => {
+  // The application-level pre-check above stops the common duplicate, but two
+  // concurrent verification requests can both pass it before either commits.
+  // The DB-level UNIQUE index on gatewayTransactionId is the source of truth:
+  // the loser surfaces as a P2002 constraint violation, which is mapped to the
+  // same clean business error instead of a second Payment row.
+  let paymentRecord;
+  try {
+    paymentRecord = await runInTransaction(async (tx) => {
 
-    const grandTotal = Number(invoice.grandTotal);
-    const paidSoFarAgg = await paymentRepository.sumForInvoice(invoiceId, tx);
-    const paidSoFar = Number(paidSoFarAgg._sum?.amount ?? 0);
-    const outstanding = grandTotal - paidSoFar;
+      const grandTotal = Number(invoice.grandTotal);
+      const paidSoFarAgg = await paymentRepository.sumForInvoice(invoiceId, tx);
+      const paidSoFar = Number(paidSoFarAgg._sum?.amount ?? 0);
+      const outstanding = grandTotal - paidSoFar;
 
-    if (amount <= 0) throw new AppError('Invalid payment amount', 400);
-    if (amount > outstanding) {
-      throw new AppError(`Payment of ${amount} exceeds outstanding balance of ${outstanding}`, 400);
-    }
+      if (amount <= 0) throw new AppError('Invalid payment amount', 400);
+      if (amount > outstanding) {
+        throw new AppError(`Payment of ${amount} exceeds outstanding balance of ${outstanding}`, 400);
+      }
 
-    const payment = await paymentRepository.create(
-      {
-        invoiceId,
-        clientId,
-        projectId: invoice.projectId,
-        amount,
-        method: 'RAZORPAY',
-        status: 'SUCCESS',
-        transactionReference: razorpay_payment_id,
-        recordedByUserId: clientId,
-        gatewayTransactionId: razorpay_payment_id,
-        gatewayMetadata: {
-          order_id: razorpay_order_id,
-          payment_id: razorpay_payment_id,
-          signature: razorpay_signature,
-          gateway_status: razorpayPayment.status,
+      const payment = await paymentRepository.create(
+        {
+          invoiceId,
+          clientId,
+          projectId: invoice.projectId,
+          amount,
+          method: 'RAZORPAY',
+          status: 'SUCCESS',
+          transactionReference: razorpay_payment_id,
+          recordedByUserId: clientId,
+          gatewayTransactionId: razorpay_payment_id,
+          gatewayMetadata: {
+            order_id: razorpay_order_id,
+            payment_id: razorpay_payment_id,
+            signature: razorpay_signature,
+            gateway_status: razorpayPayment.status,
+          },
         },
-      },
-      tx,
-    );
+        tx,
+      );
 
-    const newPaidAmount = paidSoFar + amount;
-    const newOutstanding = grandTotal - newPaidAmount;
-    const displayStatus = computeDisplayStatus(invoice.status, newPaidAmount, newOutstanding);
+      const newPaidAmount = paidSoFar + amount;
+      const newOutstanding = grandTotal - newPaidAmount;
+      const displayStatus = computeDisplayStatus(invoice.status, newPaidAmount, newOutstanding);
 
-    fireTimelineAndNotifications(invoice, payment, newPaidAmount, newOutstanding, clientId);
-
-    // Payment captured -> receipt PDF generated + stored immediately, so the
-    // receipt is available to the client in the portal without waiting for an
-    // admin or for an on-demand render. Non-blocking by design.
-    import('../pdf/pdf.service').then(({ pdfService }) => {
-      pdfService.generateReceipt(payment.id).catch(() => {});
+      return { payment, newPaidAmount, newOutstanding, displayStatus };
     });
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      throw new AppError('Payment already processed', 409);
+    }
+    throw err;
+  }
 
-    return {
-      payment: {
-        id: payment.id,
-        amount,
-        method: 'RAZORPAY',
-        status: 'SUCCESS',
-        gatewayTransactionId: razorpay_payment_id,
-        paidAt: payment.paidAt.toISOString(),
-      },
-      invoice: {
-        id: invoice.id,
-        paidAmount: newPaidAmount,
-        outstandingAmount: newOutstanding,
-        displayStatus,
-      },
-    };
-  });
+  const { payment, newPaidAmount, newOutstanding, displayStatus } = paymentRecord;
+
+  // Timeline + notification pipeline. Business events are recorded strictly in
+  // the order they happened (the payment is persisted by the transaction above
+  // before any of these fire), so the invoice timeline never reads "Invoice
+  // Fully Paid" before "Payment Received".
+  await fireTimelineAndNotifications(invoice, payment, newPaidAmount, newOutstanding, clientId);
+
+  return {
+    payment: {
+      id: payment.id,
+      amount,
+      method: 'RAZORPAY',
+      status: 'SUCCESS',
+      gatewayTransactionId: razorpay_payment_id,
+      paidAt: payment.paidAt.toISOString(),
+    },
+    invoice: {
+      id: invoice.id,
+      paidAmount: newPaidAmount,
+      outstandingAmount: newOutstanding,
+      displayStatus,
+    },
+  };
 }
 
-function fireTimelineAndNotifications(
+export async function refundPayment(paymentId: string, actorUserId: string): Promise<RefundPaymentResponse> {
+  const payment = await paymentRepository.findById(paymentId);
+  if (!payment) throw new NotFoundError('Payment not found');
+  if (payment.status !== 'SUCCESS') {
+    throw new AppError('Only successful payments can be refunded', 400);
+  }
+
+  const invoice = await invoiceRepository.findById(payment.invoiceId);
+  if (!invoice) throw new NotFoundError('Invoice not found');
+
+  let refundId: string | undefined;
+  let refundStatus: string | undefined;
+
+  // Gateway refund first (truthful: the timeline only says "Refund Processed"
+  // after the money movement is actually requested from the gateway). Offline
+  // / non-Razorpay payments are marked refunded without a gateway call.
+  if (payment.method === 'RAZORPAY' && payment.gatewayTransactionId) {
+    try {
+      const refund = await getRazorpay().payments.refund(payment.gatewayTransactionId, {
+        amount: Math.round(Number(payment.amount) * 100),
+      });
+      refundId = refund.id;
+      refundStatus = refund.status ?? 'REFUNDED';
+    } catch (err) {
+      throw new AppError('Refund could not be processed by the payment gateway', 502);
+    }
+  }
+
+  await paymentRepository.markRefunded(paymentId, {
+    ...(payment.gatewayMetadata as Record<string, unknown> | undefined),
+    refundId,
+    refundStatus,
+    refundedAt: new Date().toISOString(),
+    refundedByUserId: actorUserId,
+  });
+
+  await timelineService.recordEvent({
+    entityType: 'INVOICE',
+    entityId: payment.invoiceId,
+    eventType: 'REFUND_PROCESSED',
+    description: `Refund of ${payment.amount} processed for Invoice ${invoice.invoiceNumber}`,
+    actorUserId,
+    metadata: { paymentId, refundId, refundStatus },
+  });
+
+  await auditService.recordAudit({
+    entityType: 'INVOICE',
+    entityId: payment.invoiceId,
+    action: 'REFUND_PROCESSED',
+    afterState: { paymentId, refundId, refundStatus, amount: payment.amount },
+    actorUserId,
+  });
+
+  return { paymentId, status: 'REFUNDED', refundId, refundStatus };
+}
+
+async function fireTimelineAndNotifications(
   invoice: NonNullable<Awaited<ReturnType<typeof invoiceRepository.findById>>>,
   payment: { id: string; amount: number | { toString(): string }; paidAt: Date | string },
   newPaidAmount: number,
@@ -186,32 +258,45 @@ function fireTimelineAndNotifications(
   const amount = Number(payment.amount);
   const paidAt = payment.paidAt instanceof Date ? payment.paidAt : new Date(payment.paidAt);
 
-  timelineService.recordEvent({
+  // 1. Payment received. A payment cannot fully pay an invoice before it is
+  // recorded, so this event is always awaited and written FIRST.
+  await timelineService.recordEvent({
     entityType: 'INVOICE',
     entityId: invoice.id,
     eventType: 'PAYMENT_SUCCESSFUL',
     description: `Payment of ${amount} received via Razorpay for Invoice ${invoice.invoiceNumber}`,
     actorUserId: clientId,
-  }).catch(() => {});
+  });
 
+  // 2. Invoice fully paid (or partially) - only after the payment is recorded.
   if (newOutstanding > 0) {
-    timelineService.recordEvent({
+    await timelineService.recordEvent({
       entityType: 'INVOICE',
       entityId: invoice.id,
       eventType: 'PARTIAL_PAYMENT',
       description: `Partial payment of ${amount} received. Outstanding: ${newOutstanding}`,
       actorUserId: clientId,
-    }).catch(() => {});
+    });
   } else {
-    timelineService.recordEvent({
+    await timelineService.recordEvent({
       entityType: 'INVOICE',
       entityId: invoice.id,
       eventType: 'INVOICE_PAID',
       description: `Invoice fully paid. Total paid: ${newPaidAmount}`,
       actorUserId: clientId,
-    }).catch(() => {});
+    });
   }
 
+  // 3. Receipt generated -> stored -> available. The receipt PDF is rendered
+  // and stored immediately so the client can view/download it in the portal.
+  // pdf.service records the receipt lifecycle milestones itself (exactly once,
+  // on the first generation of the receipt); a render failure must never fail
+  // the payment confirmation, so this stays non-blocking and failure-safe.
+  import('../pdf/pdf.service').then(({ pdfService }) => {
+    pdfService.generateReceipt(payment.id, clientId).catch(() => {});
+  });
+
+  // 4. Notifications (email + in-app), fire-and-forget.
   const recipientEmail = invoice.client?.email;
   if (!recipientEmail) return;
 

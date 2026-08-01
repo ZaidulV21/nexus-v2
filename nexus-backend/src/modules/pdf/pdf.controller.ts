@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { pdfService } from './pdf.service';
+import { auditService } from '../audit/audit.service';
 import { ok } from '../../core/utils/response';
 import { UnauthorizedError, ValidationError } from '../../core/errors/AppError';
 import { PdfDocumentType } from './pdf.types';
@@ -49,8 +50,16 @@ export const pdfController = {
       );
 
       // PDF download is a SYSTEM event (viewing/rendering a document). It is
-      // deliberately NOT recorded in the business timeline; the audit log
-      // captures PDF_GENERATED when a document is produced on demand.
+      // deliberately NOT recorded on the business timeline; the Audit Log
+      // records PDF_DOWNLOADED (and PDF_GENERATED when a document is produced
+      // on demand). Clients never see these - the Audit Log is admin-only.
+      auditService.recordAudit({
+        entityType: documentType.toUpperCase() as PdfDocumentType,
+        entityId: documentId,
+        action: 'PDF_DOWNLOADED',
+        afterState: { pdfUrl },
+        actorUserId: req.user.id,
+      }).catch(() => {});
 
       return ok(res, { pdfUrl });
     } catch (err) {

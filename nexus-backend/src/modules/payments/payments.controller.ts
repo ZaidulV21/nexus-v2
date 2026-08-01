@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { createRazorpayOrder, verifyPayment } from './payments.service';
+import { createRazorpayOrder, verifyPayment, refundPayment } from './payments.service';
 import { createOrderSchema, verifyPaymentSchema } from './payments.validation';
 import { ok, paginated } from '../../core/utils/response';
 import { parsePagination } from '../../core/utils/pagination';
@@ -24,6 +24,16 @@ export async function handleVerifyPayment(req: Request, res: Response, next: Nex
     const parsed = verifyPaymentSchema.safeParse(req.body);
     if (!parsed.success) throw new ValidationError('Invalid payload', parsed.error.flatten());
     const result = await verifyPayment(parsed.data, req.user.id);
+    return ok(res, result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function handleRefundPayment(req: Request, res: Response, next: NextFunction) {
+  try {
+    if (!req.user) throw new UnauthorizedError();
+    const result = await refundPayment(req.params.paymentId, req.user.id);
     return ok(res, result);
   } catch (err) {
     next(err);
