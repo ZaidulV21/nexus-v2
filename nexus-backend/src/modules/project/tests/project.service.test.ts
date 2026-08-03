@@ -45,6 +45,8 @@ import { projectRepository, projectServiceRepository } from '../project.reposito
 import { leadRepository } from '../../lead/lead.repository';
 import { clientRepository } from '../../client/client.repository';
 import { quotationVersionRepository } from '../../quotation/quotation.repository';
+import { timelineService } from '../../timeline/timeline.service';
+import { statusEngineService } from '../../status-engine/statusEngine.service';
 import { projectService } from '../project.service';
 
 describe('projectService.create', () => {
@@ -129,5 +131,100 @@ describe('projectService.complete', () => {
 
     const result = await projectService.complete('proj1', 'admin1');
     expect(result.id).toBe('proj1');
+  });
+});
+
+describe('projectService.getById - staged progress', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('maps each service status to a quarter-step progress percentage', async () => {
+    (projectRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'proj1',
+      projectNumber: 'P-00001',
+      projectServices: [
+        { id: 'ps1', status: 'PROJECT CREATED' },
+        { id: 'ps2', status: 'IN PROGRESS' },
+        { id: 'ps3', status: 'ON HOLD' },
+        { id: 'ps4', status: 'COMPLETED' },
+      ],
+    });
+    (projectRepository.listStatusHistoryForServiceIds as jest.Mock).mockResolvedValue([]);
+
+    const result = await projectService.getById('proj1');
+
+    expect(result.projectServices.map((ps: any) => ps.progressPercentage)).toEqual([25, 50, 75, 100]);
+    expect(result.completionPercentage).toBe(63); // (25+50+75+100) / 4 = 62.5 -> 63
+    expect(result.completedServices).toBe(1);
+    expect(result.totalServices).toBe(4);
+  });
+
+  it('excludes CANCELLED services from the project-level average', async () => {
+    (projectRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'proj1',
+      projectNumber: 'P-00001',
+      projectServices: [
+        { id: 'ps1', status: 'CANCELLED' },
+        { id: 'ps2', status: 'IN PROGRESS' },
+        { id: 'ps3', status: 'COMPLETED' },
+      ],
+    });
+    (projectRepository.listStatusHistoryForServiceIds as jest.Mock).mockResolvedValue([]);
+
+    const result = await projectService.getById('proj1');
+
+    expect(result.projectServices.find((ps: any) => ps.id === 'ps1').progressPercentage).toBe(0);
+    expect(result.completionPercentage).toBe(75); // (50 + 100) / 2
+  });
+});
+
+describe('projectService.updateProjectServiceStatus - timeline sync', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('records a STATUS_CHANGED event with the fresh progress and a per-milestone dedupe key', async () => {
+    (projectServiceRepository.findById as jest.Mock)
+      .mockResolvedValueOnce({
+        id: 'ps1',
+        status: 'PROJECT CREATED',
+        service: { name: 'Interior Design' },
+        project: { id: 'proj1', projectNumber: 'P-00001', clientId: 'client1' },
+      })
+      .mockResolvedValueOnce({
+        id: 'ps1',
+        status: 'IN PROGRESS',
+        service: { name: 'Interior Design' },
+        project: { id: 'proj1', projectNumber: 'P-00001' },
+      });
+    (statusEngineService.transition as jest.Mock).mockResolvedValue({});
+    (projectRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'proj1',
+      projectNumber: 'P-00001',
+      projectServices: [{ id: 'ps1', status: 'IN PROGRESS' }],
+    });
+    (projectRepository.listStatusHistoryForServiceIds as jest.Mock).mockResolvedValue([]);
+
+    await projectService.updateProjectServiceStatus('ps1', { toStatus: 'IN PROGRESS' }, 'admin1');
+
+    expect(statusEngineService.transition).toHaveBeenCalledWith(
+      expect.objectContaining({ entityType: 'PROJECT_SERVICE', entityId: 'ps1', toStatus: 'IN PROGRESS' })
+    );
+    expect(timelineService.recordEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entityType: 'PROJECT',
+        entityId: 'proj1',
+        eventType: 'STATUS_CHANGED',
+        description: 'Interior Design is now IN PROGRESS — project progress 50%',
+        dedupeKey: 'ps1:IN PROGRESS',
+        metadata: expect.objectContaining({
+          fromStatus: 'PROJECT CREATED',
+          toStatus: 'IN PROGRESS',
+          projectServiceId: 'ps1',
+          progressPercentage: 50,
+        }),
+      })
+    );
   });
 });

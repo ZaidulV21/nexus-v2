@@ -69,6 +69,9 @@ const CLIENT_VISIBLE_EVENT_TYPES = new Set([
   'PROJECT_CREATED',
   'PROJECT_COMPLETED',
   'SERVICE_ADDED',
+  // Service status / progress updates (Problem 2): keeps the client project
+  // timeline in sync with the Admin timeline on every progress change.
+  'STATUS_CHANGED',
   // Client account
   'CLIENT_ACCOUNT_CREATED',
   // Service converted/attached to the client account

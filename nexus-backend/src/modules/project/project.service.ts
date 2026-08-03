@@ -16,8 +16,19 @@ import { ConflictError, NotFoundError, ValidationError } from '../../core/errors
 
 const COMPLETED_SERVICE_STATUSES = DONE_PROJECT_SERVICE_STATUSES;
 
+// Per-service progress is derived from where the service sits in the PROJECT
+// pipeline (PRD 4.3 / Problem 2): each active stage advances the percentage in
+// quarter steps so a single-service project reads 25% -> 50% -> 75% -> 100%.
+const PROJECT_SERVICE_PROGRESS: Record<string, number> = {
+  'PROJECT CREATED': 25,
+  'IN PROGRESS': 50,
+  'ON HOLD': 75,
+  COMPLETED: 100,
+  CANCELLED: 0,
+};
+
 function completionPercentage(status: string) {
-  return COMPLETED_SERVICE_STATUSES.has(status) ? 100 : 0;
+  return PROJECT_SERVICE_PROGRESS[status] ?? 0;
 }
 
 function buildQuotationSummaries(projectServices: any[]) {
@@ -64,6 +75,7 @@ async function attachAggregateStatus(project: any) {
 
   const completedServices = projectServices.filter((ps: any) => COMPLETED_SERVICE_STATUSES.has(ps.status)).length;
   const totalServices = projectServices.length;
+  const activeServices = projectServices.filter((ps: any) => ps.status !== 'CANCELLED');
   const enrichedServices = projectServices.map((ps: any) => ({
     ...ps,
     progressPercentage: completionPercentage(ps.status),
@@ -77,7 +89,12 @@ async function attachAggregateStatus(project: any) {
     aggregateStatus: computeAggregateStatus(projectServices),
     completedServices,
     totalServices,
-    completionPercentage: totalServices ? Math.round((completedServices / totalServices) * 100) : 0,
+    // Project-level progress is the mean of the per-service stage progress so it
+    // moves with every status change instead of only flipping to 100% when all
+    // services complete. CANCELLED services are out of scope and excluded.
+    completionPercentage: activeServices.length
+      ? Math.round(activeServices.reduce((sum: number, ps: any) => sum + completionPercentage(ps.status), 0) / activeServices.length)
+      : 0,
   };
 }
 
@@ -251,14 +268,29 @@ export const projectService = {
       reason: input.reason,
     });
 
+    // Reload the project so the timeline event carries the freshly computed
+    // progress (Problem 2): both the Admin and the Client timelines must show
+    // the same "project progress X%" update the moment a status changes.
+    const freshProject = await projectRepository.findById(record.project.id);
+    const progressPercentage = freshProject ? (await attachAggregateStatus(freshProject)).completionPercentage : 0;
+
     const serviceName = record.service?.name ?? 'Service';
     await timelineService.recordEvent({
       entityType: 'PROJECT',
       entityId: record.project.id,
       eventType: 'STATUS_CHANGED',
-      description: `${serviceName}: ${record.status} → ${input.toStatus}`,
+      description: `${serviceName} is now ${input.toStatus} — project progress ${progressPercentage}%`,
       actorUserId,
-      metadata: { fromStatus: record.status, toStatus: input.toStatus, projectServiceId },
+      // Per-milestone identity so rapid 25% -> 50% -> 75% -> 100% updates each
+      // record a distinct timeline entry instead of collapsing into one dupes.
+      dedupeKey: `${projectServiceId}:${input.toStatus}`,
+      metadata: {
+        fromStatus: record.status,
+        toStatus: input.toStatus,
+        projectServiceId,
+        serviceName,
+        progressPercentage,
+      },
     });
 
     await notificationsService.emitEvent({
@@ -266,7 +298,13 @@ export const projectService = {
       entityType: 'PROJECT',
       entityId: record.project.id,
       recipient: 'admin-inbox',
-      payload: { projectNumber: record.project.projectNumber, fromStatus: record.status, toStatus: input.toStatus, clientId: record.project.clientId },
+      payload: {
+        projectNumber: record.project.projectNumber,
+        fromStatus: record.status,
+        toStatus: input.toStatus,
+        progressPercentage,
+        clientId: record.project.clientId,
+      },
     });
 
     return projectServiceRepository.findById(projectServiceId);

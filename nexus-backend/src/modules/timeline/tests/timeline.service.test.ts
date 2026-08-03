@@ -77,6 +77,7 @@ describe('timelineService.getTimelineFor - client visibility whitelist', () => {
       'RECEIPT_AVAILABLE',
       'RECEIPT_SENT',
       'RECEIPT_RESENT',
+      'STATUS_CHANGED',
       'REFUND_PROCESSED',
     ]);
   });
@@ -84,7 +85,7 @@ describe('timelineService.getTimelineFor - client visibility whitelist', () => {
   it('returns an empty timeline when the client entity has only internal events', async () => {
     mockListForEntity.mockResolvedValue([
       makeEvent('RECEIPT_GENERATED', 'e-1'),
-      makeEvent('STATUS_CHANGED', 'e-2'),
+      makeEvent('QUOTATION_CREATED', 'e-2'),
       makeEvent('QUOTATIONS_MIGRATED', 'e-3'),
     ]);
 
