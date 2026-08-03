@@ -61,10 +61,26 @@ async function getBranding(): Promise<EmailBranding> {
 }
 
 export const clientService = {
-  // Implements PRD's Lead -> Client conversion: Admin-triggered when the Lead
-  // is qualified and ready for quotation workflow. If a Client portal account
-  // was already created during the quote wizard, it is reused — no duplicate
-  // account is created and no temporary password is generated.
+  // Implements PRD's Lead -> Client conversion as TWO independent operations:
+  //
+  //   1. Client creation - happens ONLY on the first conversion of a Lead.
+  //   2. Service attachment - every qualified service is attached to the
+  //      Lead's Client exactly once (each LeadService carries its own
+  //      convertedAt). Later conversions attach the remaining services to the
+  //      SAME Client - never a new Client, never a reset, never a rewrite of
+  //      existing Service History. Only ever append.
+  //
+  // This makes conversion repeatable for multi-service Leads:
+  //   Lead [Solar, Website, Interior]
+  //     -> Convert Solar  -> Client created, Solar attached
+  //     -> Convert Website-> Website attached to existing Client
+  //     -> Convert Interior -> Interior attached to existing Client
+  //
+  // A Client portal account already created during the quote wizard is reused -
+  // no duplicate account, no duplicate contact, no duplicate company, no
+  // temporary password regeneration. If a Client already exists for this Lead
+  // nothing is re-created; only the not-yet-attached qualified services are
+  // appended.
   async convertLeadToClient(leadId: string, actorUserId?: string) {
     const lead = await leadRepository.findById(leadId);
     if (!lead) throw new NotFoundError('Lead not found');
@@ -89,83 +105,187 @@ export const clientService = {
       throw new ValidationError('Lead must have an email address on file to create a Client login');
     }
 
-    // Check if this Lead is linked to an existing Client (repeat enquiry).
-    // This is checked first — a Lead with clientId was created by an existing
-    // client submitting a new enquiry via the Quote Wizard.
+    // Resolve the Client this Lead belongs to, if one already exists. Two valid
+    // relationships: a Client that submitted a repeat enquiry (lead.clientId),
+    // or a Client created from this Lead on an earlier conversion
+    // (client.sourceLeadId). No Client => this is the first conversion.
+    let existingClient = null;
     if (lead.clientId) {
-      const linkedClient = await clientRepository.findById(lead.clientId);
-      if (linkedClient) {
-        const migration = await quotationRepository.migrateLeadQuotationsToClient(lead.id, linkedClient.id, prisma);
-
-        if (!lead.convertedAt) {
-          await leadRepository.markConverted(lead.id);
-        }
-
-        await timelineService.recordEvent({
-          entityType: 'LEAD',
-          entityId: lead.id,
-          eventType: 'CLIENT_ACCOUNT_CREATED',
-          description: `Existing Client account reused for ${linkedClient.contactName}`,
-          actorUserId,
-        });
-
-        await timelineService.recordEvent({
-          entityType: 'CLIENT',
-          entityId: linkedClient.id,
-          eventType: 'QUOTATIONS_MIGRATED',
-          description: `${migration.count} quotation(s) migrated from Lead ${lead.leadNumber} to Client ${linkedClient.clientNumber}`,
-          actorUserId,
-          metadata: { sourceLeadId: lead.id, sourceLeadNumber: lead.leadNumber, migratedQuotations: migration.count },
-        });
-
-        await auditService.recordAudit({
-          entityType: 'CLIENT',
-          entityId: linkedClient.id,
-          action: 'CREATE',
-          afterState: { clientId: linkedClient.id, sourceLeadId: lead.id, reused: true },
-          actorUserId,
-        });
-
-        await auditService.recordAudit({
-          entityType: 'CLIENT',
-          entityId: linkedClient.id,
-          action: 'QUOTATIONS_MIGRATED',
-          beforeState: { leadId: lead.id, leadNumber: lead.leadNumber },
-          afterState: { clientId: linkedClient.id, clientNumber: linkedClient.clientNumber, migratedQuotations: migration.count },
-          actorUserId,
-        });
-
-        await notificationsService.emitEvent({
-          eventType: 'client.account.created',
-          entityType: 'CLIENT',
-          entityId: linkedClient.id,
-          recipient: linkedClient.email,
-          payload: { clientName: linkedClient.contactName, loginEmail: linkedClient.email, clientId: linkedClient.id },
-        });
-
-        return linkedClient;
-      }
+      existingClient = await clientRepository.findById(lead.clientId);
+    }
+    if (!existingClient) {
+      existingClient = await clientRepository.findBySourceLeadId(leadId);
     }
 
-    // Check if a Client portal account was already created during the quote wizard.
-    const existingClient = await clientRepository.findBySourceLeadId(leadId);
-    if (existingClient) {
-      // Client already exists — reuse it. Migrate any Lead quotations and
-      // send the Welcome Email without creating a duplicate account.
-      const migration = await quotationRepository.migrateLeadQuotationsToClient(lead.id, existingClient.id, prisma);
+    // Only qualified services that have not yet been attached are processed by
+    // this call. Repeat conversions skip every already-attached service, so the
+    // existing Client (account, contacts, company, history, quotations) is
+    // never re-created, reset, duplicated, or overwritten.
+    const servicesToAttach = leadServices.filter(
+      (ls) => !['NEW', 'CONTACTED'].includes(ls.status) && !ls.convertedAt
+    );
 
-      if (!lead.convertedAt) {
-        await leadRepository.markConverted(lead.id);
+    // The conversion milestone (Lead.convertedAt) is only ever recorded once.
+    const isFirstConversion = !lead.convertedAt;
+    const convertedAt = new Date();
+
+    // ── Operation 1: Client creation (first conversion only) ────────────────
+    if (!existingClient) {
+      const existingEmailClient = await clientRepository.findByEmail(lead.email);
+      if (existingEmailClient) {
+        throw new ConflictError('A client account already exists for this email address');
       }
 
+      const passwordHash = await bcrypt.hash(randomBytes(12).toString('hex'), env.bcryptSaltRounds);
+
+      let client;
+      let migratedQuotations = 0;
+      try {
+        const txResult = await runInTransaction(async (tx) => {
+          const clientNumber = await clientRepository.generateClientNumber(tx);
+          const created = await clientRepository.create(
+            {
+              clientNumber,
+              companyName: lead.companyName ?? undefined,
+              contactName: lead.contactName,
+              phone: lead.phone,
+              email: lead.email as string,
+              passwordHash,
+              sourceLeadId: lead.id,
+            },
+            tx
+          );
+
+          // First conversion milestone is set together with the Client write so
+          // the two can never diverge.
+          if (isFirstConversion) {
+            await leadRepository.markConverted(lead.id, tx);
+          }
+
+          // Attach every qualified service inside the same transaction.
+          for (const ls of servicesToAttach) {
+            await leadServiceRepository.markConverted(ls.id, convertedAt, tx);
+          }
+
+          // Migrate all Lead quotations to the newly-created Client. Quotations
+          // start with leadId; after conversion they carry clientId instead.
+          const migration = await quotationRepository.migrateLeadQuotationsToClient(lead.id, created.id, tx);
+
+          return { created, migratedCount: migration.count };
+        });
+        client = txResult.created;
+        migratedQuotations = txResult.migratedCount;
+      } catch (error: any) {
+        if (error?.code === 'P2002') {
+          throw new ConflictError('A client account already exists for this email address');
+        }
+        throw error;
+      }
+
+      // Timeline - conversion milestone (LEAD) + account creation (CLIENT).
       await timelineService.recordEvent({
         entityType: 'LEAD',
         entityId: lead.id,
+        eventType: 'LEAD_CONVERTED',
+        description: `Lead ${lead.leadNumber} converted to Client ${client.clientNumber}`,
+        actorUserId,
+        metadata: { clientId: client.id },
+      });
+
+      await timelineService.recordEvent({
+        entityType: 'CLIENT',
+        entityId: client.id,
         eventType: 'CLIENT_ACCOUNT_CREATED',
-        description: `Existing Client account reused for ${existingClient.contactName}`,
+        description: `Client account created for ${client.contactName}`,
         actorUserId,
       });
 
+      // Audit - Client Created + conversion milestone, with actor + timestamp.
+      await auditService.recordAudit({
+        entityType: 'LEAD',
+        entityId: lead.id,
+        action: 'CONVERT',
+        actorUserId,
+        afterState: { clientId: client.id, convertedAt },
+      });
+
+      await auditService.recordAudit({
+        entityType: 'CLIENT',
+        entityId: client.id,
+        action: 'CREATE',
+        afterState: { clientId: client.id, sourceLeadId: lead.id },
+        actorUserId,
+      });
+
+      // Only surface the quotation migration when quotations actually moved
+      // over - a "0 quotation(s) migrated" entry is noise, not a milestone.
+      if (migratedQuotations > 0) {
+        await timelineService.recordEvent({
+          entityType: 'CLIENT',
+          entityId: client.id,
+          eventType: 'QUOTATIONS_MIGRATED',
+          description: `${migratedQuotations} quotation(s) migrated from Lead ${lead.leadNumber} to Client ${client.clientNumber}`,
+          actorUserId,
+          metadata: { sourceLeadId: lead.id, sourceLeadNumber: lead.leadNumber, migratedQuotations },
+        });
+
+        await auditService.recordAudit({
+          entityType: 'CLIENT',
+          entityId: client.id,
+          action: 'QUOTATIONS_MIGRATED',
+          beforeState: { leadId: lead.id, leadNumber: lead.leadNumber },
+          afterState: { clientId: client.id, clientNumber: client.clientNumber, migratedQuotations },
+          actorUserId,
+        });
+      }
+
+      // Generate a password-setup token and send a "Set Your Password" email.
+      // The client was created without a known password - the user sets it via
+      // the existing reset-password page, reusing the forgot-password infrastructure.
+      const resetToken = await generateResetToken(client.email);
+      const branding = await getBranding();
+      const appUrl = env.appUrl || 'http://localhost:5173';
+      const setupUrl = `${appUrl}/reset-password?token=${resetToken}`;
+
+      const html = renderSetPasswordEmail(
+        { clientName: client.contactName, loginEmail: client.email, setupUrl, expiryMinutes: 60 },
+        branding
+      );
+      await emailService.send({
+        to: client.email,
+        subject: `Set your password for ${branding.companyName || 'Nexus'} Client Portal`,
+        html,
+        replyTo: branding.supportEmail || undefined,
+      });
+
+      // Notification - New Client Created (first conversion only).
+      await notificationsService.emitEvent({
+        eventType: 'client.account.created',
+        entityType: 'CLIENT',
+        entityId: client.id,
+        recipient: client.email,
+        payload: { clientName: client.contactName, loginEmail: client.email, clientId: client.id, tempPassword: true },
+      });
+
+      // ── Operation 2: Service attachment ────────────────────────────────
+      // (DB rows were already marked inside the creation transaction.)
+      await this.recordServiceAttachments(client, lead, servicesToAttach, actorUserId, isFirstConversion);
+
+      return client;
+    }
+
+    // ── Existing Client → attach services (later conversions) ───────────────
+    // No new Client, no password reset, no welcome email. Only append services.
+    if (servicesToAttach.length === 0) {
+      // Idempotent repeat conversion - nothing new to attach.
+      return existingClient;
+    }
+
+    // Re-link any pre-conversion quotations (idempotent - only unlinked rows).
+    const migration = await quotationRepository.migrateLeadQuotationsToClient(lead.id, existingClient.id, prisma);
+
+    // Only surface the migration when quotations actually moved over.
+    if (migration.count > 0) {
       await timelineService.recordEvent({
         entityType: 'CLIENT',
         entityId: existingClient.id,
@@ -178,18 +298,34 @@ export const clientService = {
       await auditService.recordAudit({
         entityType: 'CLIENT',
         entityId: existingClient.id,
-        action: 'CREATE',
-        afterState: { clientId: existingClient.id, sourceLeadId: lead.id, reused: true },
-        actorUserId,
-      });
-
-      await auditService.recordAudit({
-        entityType: 'CLIENT',
-        entityId: existingClient.id,
         action: 'QUOTATIONS_MIGRATED',
         beforeState: { leadId: lead.id, leadNumber: lead.leadNumber },
         afterState: { clientId: existingClient.id, clientNumber: existingClient.clientNumber, migratedQuotations: migration.count },
         actorUserId,
+      });
+    }
+
+    if (isFirstConversion) {
+      // First admin conversion where the portal account was already created by
+      // the quote wizard: record the one-time conversion milestone on the Lead
+      // and notify as a newly-available Client account.
+      await leadRepository.markConverted(lead.id);
+
+      await timelineService.recordEvent({
+        entityType: 'LEAD',
+        entityId: lead.id,
+        eventType: 'LEAD_CONVERTED',
+        description: `Lead ${lead.leadNumber} converted to Client ${existingClient.clientNumber}`,
+        actorUserId,
+        metadata: { clientId: existingClient.id },
+      });
+
+      await auditService.recordAudit({
+        entityType: 'LEAD',
+        entityId: lead.id,
+        action: 'CONVERT',
+        actorUserId,
+        afterState: { clientId: existingClient.id, convertedAt },
       });
 
       await notificationsService.emitEvent({
@@ -199,114 +335,70 @@ export const clientService = {
         recipient: existingClient.email,
         payload: { clientName: existingClient.contactName, loginEmail: existingClient.email, clientId: existingClient.id },
       });
-
-      return existingClient;
     }
 
-    // No pre-existing Client — create a new account and send a "Set Your Password" link.
-    const existingEmailClient = await clientRepository.findByEmail(lead.email);
-    if (existingEmailClient) {
-      throw new ConflictError('A client account already exists for this email address');
-    }
-
-    const passwordHash = await bcrypt.hash(randomBytes(12).toString('hex'), env.bcryptSaltRounds);
-
-    let client;
-    let migratedQuotations = 0;
-    try {
-      const txResult = await runInTransaction(async (tx) => {
-        const clientNumber = await clientRepository.generateClientNumber(tx);
-        const created = await clientRepository.create(
-          {
-            clientNumber,
-            companyName: lead.companyName ?? undefined,
-            contactName: lead.contactName,
-            phone: lead.phone,
-            email: lead.email as string,
-            passwordHash,
-            sourceLeadId: lead.id,
-          },
-          tx
-        );
-        await leadRepository.markConverted(lead.id, tx);
-
-        // Migrate all Lead quotations to the newly-created Client. Quotations
-        // start with leadId; after conversion, they carry clientId instead.
-        const migration = await quotationRepository.migrateLeadQuotationsToClient(lead.id, created.id, tx);
-
-        return { created, migratedCount: migration.count };
-      });
-      client = txResult.created;
-      migratedQuotations = txResult.migratedCount;
-    } catch (error: any) {
-      if (error?.code === 'P2002') {
-        throw new ConflictError('A client account already exists for this email address');
+    // Mark the newly-attached services (idempotent - already-attached services
+    // were filtered out above, so this only ever appends).
+    await runInTransaction(async (tx) => {
+      for (const ls of servicesToAttach) {
+        await leadServiceRepository.markConverted(ls.id, convertedAt, tx);
       }
-      throw error;
+    });
+
+    // ── Operation 2: Service attachment ──────────────────────────────────
+    await this.recordServiceAttachments(existingClient, lead, servicesToAttach, actorUserId, isFirstConversion);
+
+    return existingClient;
+  },
+
+  // Records the per-service trail for an attachment: Timeline entry, Audit
+  // entry (Service Attached, Converted By, timestamp), and - on LATER
+  // conversions only - a "New Service added to Client" notification. First
+  // conversions are covered by the "New Client Created" notification instead.
+  async recordServiceAttachments(
+    client: { id: string; clientNumber: string; email: string; contactName: string },
+    lead: { id: string; leadNumber: string },
+    services: Array<{ id: string; serviceId: string; convertedAt: Date | null; service?: { name?: string | null } | null }>,
+    actorUserId: string | undefined,
+    isFirstConversion: boolean
+  ) {
+    for (const ls of services) {
+      const serviceName = ls.service?.name ?? 'Service';
+
+      await timelineService.recordEvent({
+        entityType: 'CLIENT',
+        entityId: client.id,
+        eventType: 'SERVICE_ATTACHED',
+        description: `Service "${serviceName}" added to Client ${client.clientNumber}`,
+        actorUserId,
+        metadata: { serviceId: ls.serviceId, leadServiceId: ls.id, sourceLeadId: lead.id, sourceLeadNumber: lead.leadNumber },
+      });
+
+      await auditService.recordAudit({
+        entityType: 'CLIENT',
+        entityId: client.id,
+        action: 'SERVICE_ATTACHED',
+        actorUserId,
+        beforeState: { serviceId: ls.serviceId, convertedAt: null },
+        afterState: { serviceId: ls.serviceId, serviceName, convertedAt: ls.convertedAt },
+      });
+
+      if (!isFirstConversion) {
+        await notificationsService.emitEvent({
+          eventType: 'client.service.added',
+          entityType: 'CLIENT',
+          entityId: client.id,
+          recipient: client.email,
+          payload: {
+            clientId: client.id,
+            clientName: client.contactName,
+            serviceId: ls.serviceId,
+            serviceName,
+          },
+          sendEmail: false,
+        });
+      }
     }
-
-    await timelineService.recordEvent({
-      entityType: 'LEAD',
-      entityId: lead.id,
-      eventType: 'CLIENT_ACCOUNT_CREATED',
-      description: `Client account created for ${client.contactName}`,
-      actorUserId,
-    });
-
-    await timelineService.recordEvent({
-      entityType: 'CLIENT',
-      entityId: client.id,
-      eventType: 'QUOTATIONS_MIGRATED',
-      description: `${migratedQuotations} quotation(s) migrated from Lead ${lead.leadNumber} to Client ${client.clientNumber}`,
-      actorUserId,
-      metadata: { sourceLeadId: lead.id, sourceLeadNumber: lead.leadNumber, migratedQuotations },
-    });
-
-    await auditService.recordAudit({
-      entityType: 'CLIENT',
-      entityId: client.id,
-      action: 'CREATE',
-      afterState: { clientId: client.id, sourceLeadId: lead.id },
-      actorUserId,
-    });
-
-    await auditService.recordAudit({
-      entityType: 'CLIENT',
-      entityId: client.id,
-      action: 'QUOTATIONS_MIGRATED',
-      beforeState: { leadId: lead.id, leadNumber: lead.leadNumber },
-      afterState: { clientId: client.id, clientNumber: client.clientNumber, migratedQuotations },
-      actorUserId,
-    });
-
-    // Generate a password-setup token and send a "Set Your Password" email.
-    // The client was created without a known password — the user sets it via
-    // the existing reset-password page, reusing the forgot-password infrastructure.
-    const resetToken = await generateResetToken(client.email);
-    const branding = await getBranding();
-    const appUrl = env.appUrl || 'http://localhost:5173';
-    const setupUrl = `${appUrl}/reset-password?token=${resetToken}`;
-
-    const html = renderSetPasswordEmail(
-      { clientName: client.contactName, loginEmail: client.email, setupUrl, expiryMinutes: 60 },
-      branding
-    );
-    await emailService.send({
-      to: client.email,
-      subject: `Set your password for ${branding.companyName || 'Nexus'} Client Portal`,
-      html,
-      replyTo: branding.supportEmail || undefined,
-    });
-
-    await notificationsService.emitEvent({
-      eventType: 'client.account.created',
-      entityType: 'CLIENT',
-      entityId: client.id,
-      recipient: client.email,
-      payload: { clientName: client.contactName, loginEmail: client.email, clientId: client.id, tempPassword: true },
-    });
-
-    return client;
   },
 
   async getById(id: string) {

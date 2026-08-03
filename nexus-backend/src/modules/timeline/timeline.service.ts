@@ -71,6 +71,8 @@ const CLIENT_VISIBLE_EVENT_TYPES = new Set([
   'SERVICE_ADDED',
   // Client account
   'CLIENT_ACCOUNT_CREATED',
+  // Service converted/attached to the client account
+  'SERVICE_ATTACHED',
 ]);
 
 export interface TimelineViewOptions {

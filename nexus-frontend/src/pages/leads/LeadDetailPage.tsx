@@ -45,11 +45,26 @@ export function LeadDetailPage() {
   }
 
   const isArchived = !!lead.archivedAt;
+  // A service is convertible once it has moved past the initial contact stages
+  // AND has not already been attached to the Client on an earlier conversion.
+  const hasPendingServices =
+    (lead.leadServices ?? []).some(
+      (ls) => !['NEW', 'CONTACTED'].includes(ls.status) && !ls.convertedAt
+    ) ?? false;
+  const wasAlreadyConverted = !!lead.convertedAt;
 
   async function handleConvert() {
     try {
       const client = await convertMutation.mutateAsync();
-      toast({ title: 'Client account created', description: `${client.contactName} can now log in.`, variant: 'success' });
+      if (wasAlreadyConverted) {
+        toast({
+          title: 'Service added to client',
+          description: `${client.contactName}'s account now includes the newly-qualified services.`,
+          variant: 'success',
+        });
+      } else {
+        toast({ title: 'Client account created', description: `${client.contactName} can now log in.`, variant: 'success' });
+      }
       convertModal.close();
     } catch (err) {
       toast({
@@ -108,16 +123,18 @@ export function LeadDetailPage() {
                   <ArchiveRestore className="h-3.5 w-3.5" /> Restore
                 </Button>
               </>
-            ) : lead.convertedAt ? (
+            ) : lead.convertedAt && !hasPendingServices ? (
               <span className="text-sm text-ink-muted">Converted to Client</span>
             ) : (
               <>
                 <Button size="sm" onClick={convertModal.open}>
                   <ArrowRightCircle className="h-3.5 w-3.5" /> Convert to Client
                 </Button>
-                <Button size="sm" variant="secondary" onClick={archiveModal.open}>
-                  <Archive className="h-3.5 w-3.5" /> Archive
-                </Button>
+                {!lead.convertedAt && (
+                  <Button size="sm" variant="secondary" onClick={archiveModal.open}>
+                    <Archive className="h-3.5 w-3.5" /> Archive
+                  </Button>
+                )}
               </>
             )}
           </div>
@@ -161,8 +178,12 @@ export function LeadDetailPage() {
       <ConfirmDialog
         open={convertModal.isOpen}
         onOpenChange={convertModal.setIsOpen}
-        title="Convert this lead to a client?"
-        description="Creates a Client login and emails credentials. Convert the Lead before creating quotations. Quotations can only be created for Clients."
+        title={lead.convertedAt ? 'Attach the qualified services to this client?' : 'Convert this lead to a client?'}
+        description={
+          lead.convertedAt
+            ? 'Attaches the newly-qualified services to the existing Client account. The Client login, quotations, history, and contacts are never re-created or duplicated.'
+            : 'Creates a Client login and emails credentials, then attaches every qualified service. Convert the Lead before creating quotations.'
+        }
         confirmLabel="Convert"
         loading={convertMutation.isPending}
         onConfirm={handleConvert}

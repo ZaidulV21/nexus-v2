@@ -251,6 +251,13 @@ model LeadService {
   leadId                    String
   serviceId                 String
   status                    String                @default("NEW")
+  // Timestamp when this service was converted/attached to the Lead's Client
+  // (first conversion creates the Client, later conversions only attach the
+  // service). NULL until the service is attached. Each service converts
+  // exactly once, so a repeat "Convert to Client" only ever processes the
+  // services that are qualified but not yet attached - it never duplicates a
+  // Client nor re-records the same service attachment.
+  convertedAt               DateTime?
   questionnaireVersionId    String?
   questionnaireAnswers      Json?
   siteVisitRequiredOverride Boolean?

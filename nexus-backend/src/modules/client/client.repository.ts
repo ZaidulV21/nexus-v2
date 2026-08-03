@@ -112,10 +112,20 @@ export const clientRepository = {
       };
     });
 
+    // A Client's service requests are the LEAD SERVICES that have actually been
+    // converted/attached to the account - NOT the number of Leads. A single
+    // multi-service Lead can contribute several services across conversions, so
+    // only services carrying a convertedAt count. Services still sitting in the
+    // sales pipeline (convertedAt IS NULL) are not yet part of the Client.
+    const totalServiceRequests = leads.reduce(
+      (sum, lead) => sum + lead.leadServices.filter((ls) => ls.convertedAt).length,
+      0
+    );
+
     return {
       client,
       kpis: {
-        totalServiceRequests: leads.length,
+        totalServiceRequests,
         activeProjects: activeProjects.length,
         completedProjects: completedProjects.length,
         pendingQuotations: pendingQuotations.length,

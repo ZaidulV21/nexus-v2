@@ -102,9 +102,21 @@ export function useConvertLeadToClient(leadId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () => clientService.convertLead(leadId),
-    onSuccess: () => {
+    onSuccess: (client) => {
+      // Conversion attaches services to the resolved Client. Refresh the Lead
+      // (convertedAt + per-service convertedAt), the affected Client's pages,
+      // and the timeline/audit trails that carry the SERVICE_ATTACHED trail.
       queryClient.invalidateQueries({ queryKey: queryKeys.leads.detail(leadId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.leads.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.timeline('LEAD', leadId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.auditLogs('LEAD', leadId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.clients.all });
+      if (client?.id) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.clients.detail(client.id) });
+        queryClient.invalidateQueries({ queryKey: queryKeys.clients.summary(client.id) });
+        queryClient.invalidateQueries({ queryKey: queryKeys.timeline('CLIENT', client.id) });
+        queryClient.invalidateQueries({ queryKey: queryKeys.auditLogs('CLIENT', client.id) });
+      }
     },
   });
 }

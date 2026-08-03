@@ -107,6 +107,7 @@ export interface LeadService {
   serviceId: string;
   service?: Service;
   status: WorkflowStatus;
+  convertedAt?: string | null;
   questionnaireAnswers?: Record<string, unknown> | null;
   createdAt: string;
 }

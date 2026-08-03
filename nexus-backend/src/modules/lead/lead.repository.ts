@@ -129,6 +129,14 @@ export const leadServiceRepository = {
   listForLead(leadId: string) {
     return prisma.leadService.findMany({ where: { leadId }, include: { service: true } });
   },
+
+  // Marks a Lead Service as converted/attached to the Lead's Client. Each
+  // service converts exactly once (see convertLeadToClient) - repeat
+  // conversions never touch services that already carry a convertedAt.
+  markConverted(id: string, convertedAt: Date, tx?: Prisma.TransactionClient) {
+    const client = tx ?? prisma;
+    return client.leadService.update({ where: { id }, data: { convertedAt } });
+  },
 };
 
 export const leadActivityNoteRepository = {

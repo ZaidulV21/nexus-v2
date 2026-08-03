@@ -17,6 +17,7 @@ const KNOWN_EVENT_TYPES = new Set([
   'quotation.accepted',
   'quotation.rejected',
   'client.account.created',
+  'client.service.added',
   'project.created',
   'invoice.issued',
   'invoice.cancelled',
@@ -66,6 +67,23 @@ const EVENT_NOTIFICATION_MAP: Record<string, EventNotificationMapping> = {
     adminActionUrl: (id) => `/clients/${id}`,
     clientTitle: 'Welcome! Your account is ready',
     clientDescription: () => 'Your account has been created. You can now log in and view your quotations.',
+    clientActionUrl: () => '/portal',
+  },
+  // Fired only when an additional service is attached to an EXISTING Client
+  // (later conversions of a multi-service Lead). First conversions are covered
+  // by client.account.created above - the Lead converts to a Client exactly
+  // once, while each remaining service is appended to that same Client.
+  'client.service.added': {
+    title: 'New service added to Client',
+    description: (p) => `Service ${p.serviceName || ''} added to Client ${p.clientName || ''}`,
+    type: 'SUCCESS',
+    priority: 'NORMAL',
+    relatedEntity: 'CLIENT',
+    adminTitle: 'New service added to Client',
+    adminDescription: (p) => `Service ${p.serviceName || ''} added to Client ${p.clientName || ''}`,
+    adminActionUrl: (id) => `/clients/${id}`,
+    clientTitle: 'New service added to your account',
+    clientDescription: (p) => `The service ${p.serviceName || ''} has been added to your account`,
     clientActionUrl: () => '/portal',
   },
   'quotation.approved': {
