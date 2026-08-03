@@ -11,21 +11,34 @@ export const timelineRepository = {
         description: input.description,
         actorUserId: input.actorUserId,
         metadata: input.metadata as any,
+        dedupeKey: input.dedupeKey ?? null,
       },
     });
   },
 
-  // Idempotency guard: identical business events (same entity + event type)
-  // recorded in a short window are treated as accidental duplicates and skipped.
+  // Idempotency guard: identical business events recorded in a short window are
+  // treated as accidental duplicates and skipped. Payment-related events pass a
+  // dedupeKey (paymentId / gateway transaction id) so the identity becomes
+  // (entityType, entityId, eventType, dedupeKey): two legitimate payments on
+  // the same invoice are distinct, while a retry of the SAME payment still
+  // matches and is ignored. Non-payment events keep dedupeKey NULL and keep the
+  // historical (entityType, entityId, eventType) behaviour.
   findRecentDuplicate(
     entityType: string,
     entityId: string,
     eventType: string,
-    withinMs: number
+    withinMs: number,
+    dedupeKey?: string
   ) {
     const since = new Date(Date.now() - withinMs);
     return prisma.timelineEvent.findFirst({
-      where: { entityType, entityId, eventType, createdAt: { gte: since } },
+      where: {
+        entityType,
+        entityId,
+        eventType,
+        createdAt: { gte: since },
+        dedupeKey: dedupeKey ?? null,
+      },
       orderBy: { createdAt: 'desc' },
     });
   },

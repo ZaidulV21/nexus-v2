@@ -20,6 +20,7 @@ import {
 } from '@/queries/useInvoices';
 import { formatCurrency, formatDateTime } from '@/lib/format';
 import { ROUTES } from '@/routes/routes';
+import { ApiError } from '@/lib/api';
 import type { Invoice, Payment } from '@/types';
 
 function Field({ label, value }: { label: string; value: ReactNode }) {
@@ -291,6 +292,13 @@ export function PortalInvoiceDetailPage() {
               razorpay_order_id: response.razorpay_order_id,
               razorpay_signature: response.razorpay_signature,
             });
+          } catch (err) {
+            if (!(err instanceof ApiError && err.status === 409)) {
+              // Payment failed to verify and was not already recorded.
+              alert(err instanceof ApiError ? err.message : 'Payment verification failed. Please try again.');
+            }
+            // 409: the payment was already recorded - typically because the
+            // Razorpay webhook landed first. Not an error; refresh to show it.
           } finally {
             refetch();
             setIsPaying(false);

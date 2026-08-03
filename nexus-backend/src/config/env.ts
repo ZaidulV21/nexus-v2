@@ -28,4 +28,8 @@ export const env = {
   appUrl: process.env.APP_URL || 'http://localhost:5173',
   razorpayKeyId: process.env.RAZORPAY_KEY_ID || '',
   razorpayKeySecret: process.env.RAZORPAY_KEY_SECRET || '',
+  // Webhook secret configured in the Razorpay dashboard. Used to verify the
+  // X-Razorpay-Signature header on /api/payments/webhook. When empty, webhook
+  // deliveries are rejected (browser-side verification remains the primary path).
+  razorpayWebhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET || '',
 };

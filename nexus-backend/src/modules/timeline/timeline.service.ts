@@ -98,7 +98,8 @@ export const timelineService = {
       input.entityType,
       input.entityId,
       input.eventType,
-      DEDUPE_WINDOW_MS
+      DEDUPE_WINDOW_MS,
+      input.dedupeKey
     );
     if (existing) return existing;
     return timelineRepository.create(input);

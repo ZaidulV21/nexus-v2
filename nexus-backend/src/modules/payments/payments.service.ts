@@ -8,7 +8,13 @@ import { notificationsService } from '../notifications/notifications.service';
 import { auditService } from '../audit/audit.service';
 import { runInTransaction } from '../../core/utils/transaction';
 import { AppError, NotFoundError } from '../../core/errors/AppError';
-import type { CreateOrderResponse, VerifyPaymentResponse, RefundPaymentResponse } from './payments.types';
+import type {
+  CreateOrderResponse,
+  VerifyPaymentResponse,
+  RefundPaymentResponse,
+  WebhookResult,
+  RazorpayWebhookPaymentEntity,
+} from './payments.types';
 
 let razorpayInstance: Razorpay | null = null;
 
@@ -46,6 +52,73 @@ function verifyRazorpaySignature(orderId: string, paymentId: string, signature: 
   return expected === signature;
 }
 
+// Razorpay webhook signature: HMAC-SHA256 over the RAW request body using the
+// dashboard-configured webhook secret (NOT the API key secret). The signature
+// is delivered in the X-Razorpay-Signature header.
+function verifyWebhookSignature(rawBody: string, signature: string): boolean {
+  const expected = crypto
+    .createHmac('sha256', env.razorpayWebhookSecret)
+    .update(rawBody)
+    .digest('hex');
+  return expected === signature;
+}
+
+type CapturedInvoice = NonNullable<Awaited<ReturnType<typeof invoiceRepository.findById>>>;
+
+interface RazorpayCaptureInput {
+  invoice: CapturedInvoice;
+  paymentId: string;
+  orderId: string;
+  amount: number; // rupees (already converted from paise)
+  method: string;
+  gatewayStatus: string;
+  gatewayMetadata: Record<string, unknown>;
+  clientId: string;
+  actorUserId: string;
+}
+
+// Single transaction that persists a captured Razorpay payment for an invoice.
+// Shared by the browser-side verifyPayment flow and the authoritative webhook
+// fallback so both produce an identical Payment record, identical balances,
+// and identical downstream events. The DB-level UNIQUE index on
+// gatewayTransactionId is the source of truth for idempotency: a concurrent
+// duplicate surfaces here as a P2002 constraint violation, which callers map
+// to their own business response (409 for the browser, a silent ack for the
+// webhook) - never a second Payment row.
+async function recordRazorpayCapture(tx: Prisma.TransactionClient, input: RazorpayCaptureInput) {
+  const grandTotal = Number(input.invoice.grandTotal);
+  const paidSoFarAgg = await paymentRepository.sumForInvoice(input.invoice.id, tx);
+  const paidSoFar = Number(paidSoFarAgg._sum?.amount ?? 0);
+  const outstanding = grandTotal - paidSoFar;
+
+  if (input.amount <= 0) throw new AppError('Invalid payment amount', 400);
+  if (input.amount > outstanding) {
+    throw new AppError(`Payment of ${input.amount} exceeds outstanding balance of ${outstanding}`, 400);
+  }
+
+  const payment = await paymentRepository.create(
+    {
+      invoiceId: input.invoice.id,
+      clientId: input.clientId,
+      projectId: input.invoice.projectId,
+      amount: input.amount,
+      method: input.method,
+      status: 'SUCCESS',
+      transactionReference: input.paymentId,
+      recordedByUserId: input.actorUserId,
+      gatewayTransactionId: input.paymentId,
+      gatewayMetadata: input.gatewayMetadata as Prisma.InputJsonValue,
+    },
+    tx,
+  );
+
+  const newPaidAmount = paidSoFar + input.amount;
+  const newOutstanding = grandTotal - newPaidAmount;
+  const displayStatus = computeDisplayStatus(input.invoice.status, newPaidAmount, newOutstanding);
+
+  return { payment, newPaidAmount, newOutstanding, displayStatus };
+}
+
 export async function createRazorpayOrder(
   invoiceId: string,
   clientId: string,
@@ -71,6 +144,9 @@ export async function createRazorpayOrder(
     eventType: 'PAYMENT_INITIATED',
     description: `Payment initiated for Invoice ${invoice.invoiceNumber}`,
     actorUserId: clientId,
+    // Each gateway order is its own initiation; keyed by the gateway order id
+    // so a second initiation on the same invoice is not collapsed.
+    dedupeKey: order.id,
   }).catch(() => {});
 
   return {
@@ -120,45 +196,24 @@ export async function verifyPayment(
   // same clean business error instead of a second Payment row.
   let paymentRecord;
   try {
-    paymentRecord = await runInTransaction(async (tx) => {
-
-      const grandTotal = Number(invoice.grandTotal);
-      const paidSoFarAgg = await paymentRepository.sumForInvoice(invoiceId, tx);
-      const paidSoFar = Number(paidSoFarAgg._sum?.amount ?? 0);
-      const outstanding = grandTotal - paidSoFar;
-
-      if (amount <= 0) throw new AppError('Invalid payment amount', 400);
-      if (amount > outstanding) {
-        throw new AppError(`Payment of ${amount} exceeds outstanding balance of ${outstanding}`, 400);
-      }
-
-      const payment = await paymentRepository.create(
-        {
-          invoiceId,
-          clientId,
-          projectId: invoice.projectId,
-          amount,
-          method: 'RAZORPAY',
-          status: 'SUCCESS',
-          transactionReference: razorpay_payment_id,
-          recordedByUserId: clientId,
-          gatewayTransactionId: razorpay_payment_id,
-          gatewayMetadata: {
-            order_id: razorpay_order_id,
-            payment_id: razorpay_payment_id,
-            signature: razorpay_signature,
-            gateway_status: razorpayPayment.status,
-          },
+    paymentRecord = await runInTransaction(async (tx) =>
+      recordRazorpayCapture(tx, {
+        invoice,
+        paymentId: razorpay_payment_id,
+        orderId: razorpay_order_id,
+        amount,
+        method: 'RAZORPAY',
+        gatewayStatus: razorpayPayment.status,
+        gatewayMetadata: {
+          order_id: razorpay_order_id,
+          payment_id: razorpay_payment_id,
+          signature: razorpay_signature,
+          gateway_status: razorpayPayment.status,
         },
-        tx,
-      );
-
-      const newPaidAmount = paidSoFar + amount;
-      const newOutstanding = grandTotal - newPaidAmount;
-      const displayStatus = computeDisplayStatus(invoice.status, newPaidAmount, newOutstanding);
-
-      return { payment, newPaidAmount, newOutstanding, displayStatus };
-    });
+        clientId,
+        actorUserId: clientId,
+      }),
+    );
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
       throw new AppError('Payment already processed', 409);
@@ -173,6 +228,18 @@ export async function verifyPayment(
   // before any of these fire), so the invoice timeline never reads "Invoice
   // Fully Paid" before "Payment Received".
   await fireTimelineAndNotifications(invoice, payment, newPaidAmount, newOutstanding, clientId);
+
+  // Audit trail parity with the offline payment path (invoiceService.recordPayment):
+  // the same PAYMENT_RECORDED entry with the full Payment record as afterState, so
+  // online Razorpay payments carry the payment method, amount, gateway transaction
+  // id, acting user, and timestamp in the Audit Log exactly like offline payments.
+  await auditService.recordAudit({
+    entityType: 'INVOICE',
+    entityId: invoice.id,
+    action: 'PAYMENT_RECORDED',
+    afterState: payment,
+    actorUserId: clientId,
+  });
 
   return {
     payment: {
@@ -190,6 +257,156 @@ export async function verifyPayment(
       displayStatus,
     },
   };
+}
+
+// Authoritative payment fallback: when the browser callback is lost or the
+// client never returns to the portal, the Razorpay webhook records the payment
+// itself. It shares the exact transaction + event pipeline with the browser
+// path (recordRazorpayCapture + fireTimelineAndNotifications), so whichever
+// wins the race produces the same Payment row, timeline, audit, notifications
+// and receipt - exactly once. Duplicate deliveries are acknowledged and
+// ignored.
+//
+// HTTP semantics for Razorpay:
+//   - 2xx: acknowledged (processed, or deliberately ignored). No retry.
+//   - 4xx: rejected (invalid signature / malformed payload). No retry.
+//   - 5xx: transient failure (gateway/DB). Razorpay retries with backoff.
+export async function handleRazorpayWebhook(
+  rawBody: string | Buffer,
+  signature: string | undefined,
+): Promise<WebhookResult> {
+  // 1. Signature verification over the RAW body.
+  const body = typeof rawBody === 'string' ? rawBody : rawBody?.toString() ?? '';
+  if (!signature || !verifyWebhookSignature(body, signature)) {
+    throw new AppError('Invalid webhook signature', 400);
+  }
+
+  // 2. Parse the delivery envelope.
+  let event: string;
+  let paymentEntity: RazorpayWebhookPaymentEntity | undefined;
+  try {
+    const parsed = JSON.parse(body) as {
+      event?: string;
+      payload?: { payment?: { entity?: RazorpayWebhookPaymentEntity } };
+    };
+    event = parsed.event ?? '';
+    paymentEntity = parsed.payload?.payment?.entity;
+  } catch {
+    throw new AppError('Invalid webhook payload', 400);
+  }
+
+  // 3. Only payment.captured is actionable; every other event is acknowledged
+  //    so Razorpay stops retrying a delivery we will never act on.
+  if (event !== 'payment.captured') {
+    return { event, processed: false, reason: 'event not handled' };
+  }
+  const paymentId = paymentEntity?.id;
+  const orderId = paymentEntity?.order_id;
+  if (!paymentId || !orderId || !paymentEntity) {
+    return { event, processed: false, reason: 'payment entity missing id/order_id' };
+  }
+
+  // Audit-only delivery trace (WEBHOOK_RECEIVED / WEBHOOK_VERIFIED route to
+  // the Audit Log via timelineService; they never reach the business timeline).
+  // Non-blocking: a trace failure must never fail the webhook itself.
+  timelineService
+    .recordEvent({
+      entityType: 'PAYMENT',
+      entityId: paymentId,
+      eventType: 'WEBHOOK_RECEIVED',
+      description: `Razorpay webhook ${event} received for payment ${paymentId}`,
+      metadata: { orderId, event },
+    })
+    .catch(() => {});
+  timelineService
+    .recordEvent({
+      entityType: 'PAYMENT',
+      entityId: paymentId,
+      eventType: 'WEBHOOK_VERIFIED',
+      description: `Razorpay webhook signature verified for payment ${paymentId}`,
+      metadata: { orderId, event },
+    })
+    .catch(() => {});
+
+  // 4. Ignore duplicate deliveries: a payment already recorded for this
+  //    gateway transaction (by an earlier delivery OR the browser verify) is
+  //    acknowledged without any re-processing or side effects.
+  const existing = await paymentRepository.findByGatewayTransactionId(paymentId);
+  if (existing) {
+    return { event, processed: false, paymentId, alreadyProcessed: true };
+  }
+
+  // 5. Resolve the invoice from the order notes (the order is authoritative
+  //    for attribution; the browser path fetches the same order).
+  let order;
+  try {
+    order = await getRazorpay().orders.fetch(orderId);
+  } catch (err) {
+    throw new AppError('Could not fetch Razorpay order', 502);
+  }
+  const invoiceId = order?.notes?.invoiceId;
+  if (!invoiceId) {
+    return { event, processed: false, paymentId, reason: 'order not attributed to an invoice' };
+  }
+
+  const invoice = await invoiceRepository.findById(invoiceId);
+  if (!invoice) {
+    return { event, processed: false, paymentId, reason: 'invoice not found' };
+  }
+  if (invoice.status === 'CANCELLED') {
+    return { event, processed: false, paymentId, reason: 'invoice cancelled' };
+  }
+
+  const clientId = order?.notes?.clientId ?? invoice.clientId;
+  const amount = Number(paymentEntity.amount ?? 0) / 100;
+  const gatewayStatus = paymentEntity.status ?? 'captured';
+
+  // 6. Persist inside a transaction; concurrent duplicates lose on the UNIQUE
+  //    index and are acknowledged, never double-recorded.
+  let paymentRecord;
+  try {
+    paymentRecord = await runInTransaction(async (tx) =>
+      recordRazorpayCapture(tx, {
+        invoice,
+        paymentId,
+        orderId,
+        amount,
+        method: 'RAZORPAY',
+        gatewayStatus,
+        gatewayMetadata: {
+          order_id: orderId,
+          payment_id: paymentId,
+          gateway_status: gatewayStatus,
+          payment_method: paymentEntity.method,
+          source: 'WEBHOOK',
+        },
+        clientId,
+        actorUserId: clientId,
+      }),
+    );
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      // A concurrent delivery (or the browser verify) recorded the payment
+      // first - acknowledge without side effects.
+      return { event, processed: false, paymentId, alreadyProcessed: true };
+    }
+    throw err;
+  }
+
+  // 7. Business side effects run exactly once, only after the payment row
+  //    committed - identical to the browser path.
+  const { payment, newPaidAmount, newOutstanding } = paymentRecord;
+  await fireTimelineAndNotifications(invoice, payment, newPaidAmount, newOutstanding, clientId);
+
+  await auditService.recordAudit({
+    entityType: 'INVOICE',
+    entityId: invoice.id,
+    action: 'PAYMENT_RECORDED',
+    afterState: payment,
+    actorUserId: clientId,
+  });
+
+  return { event, processed: true, paymentId };
 }
 
 export async function refundPayment(paymentId: string, actorUserId: string): Promise<RefundPaymentResponse> {
@@ -235,6 +452,7 @@ export async function refundPayment(paymentId: string, actorUserId: string): Pro
     description: `Refund of ${payment.amount} processed for Invoice ${invoice.invoiceNumber}`,
     actorUserId,
     metadata: { paymentId, refundId, refundStatus },
+    dedupeKey: paymentId,
   });
 
   await auditService.recordAudit({
@@ -266,6 +484,7 @@ async function fireTimelineAndNotifications(
     eventType: 'PAYMENT_SUCCESSFUL',
     description: `Payment of ${amount} received via Razorpay for Invoice ${invoice.invoiceNumber}`,
     actorUserId: clientId,
+    dedupeKey: payment.id,
   });
 
   // 2. Invoice fully paid (or partially) - only after the payment is recorded.
@@ -276,6 +495,7 @@ async function fireTimelineAndNotifications(
       eventType: 'PARTIAL_PAYMENT',
       description: `Partial payment of ${amount} received. Outstanding: ${newOutstanding}`,
       actorUserId: clientId,
+      dedupeKey: payment.id,
     });
   } else {
     await timelineService.recordEvent({
@@ -284,6 +504,7 @@ async function fireTimelineAndNotifications(
       eventType: 'INVOICE_PAID',
       description: `Invoice fully paid. Total paid: ${newPaidAmount}`,
       actorUserId: clientId,
+      dedupeKey: payment.id,
     });
   }
 
@@ -310,22 +531,39 @@ async function fireTimelineAndNotifications(
     paymentDate: paidAt.toISOString(),
   };
 
+  // payment.successful is a BUSINESS event only: payment recording, invoice
+  // updates, timeline, audit, and in-app notifications. No email is sent for
+  // it - the SINGLE automatic receipt email is the payment.receipt_available
+  // event below.
   notificationsService.emitEvent({
     eventType: 'payment.successful',
     entityType: 'INVOICE',
     entityId: invoice.id,
     recipient: recipientEmail,
     payload,
+    dedupeKey: payment.id,
+    sendEmail: false,
   }).catch(() => {});
 
-  // Client-facing notification that a receipt is available (idempotent via
-  // the receipt PDF itself); this is separate from the receipt EMAIL, which
-  // is only ever sent on-demand or via the sendReceipt flow.
+  // The single automatic receipt email (renders payment-receipt.template).
+  // receiptSentAt is set ONLY when the email provider actually accepted the
+  // message (emailStatus === 'SENT'), so a delivery failure leaves
+  // receiptSentAt NULL and a later manual sendReceipt still records
+  // RECEIPT_SENT - never a phantom RECEIPT_RESENT. Fire-and-forget so an email
+  // hiccup never fails the payment confirmation; the in-app "receipt
+  // available" notification above/below is idempotent via the receipt PDF.
   notificationsService.emitEvent({
     eventType: 'payment.receipt_available',
     entityType: 'INVOICE',
     entityId: invoice.id,
     recipient: recipientEmail,
     payload,
-  }).catch(() => {});
+    dedupeKey: payment.id,
+  })
+    .then((result) => {
+      if (result?.emailStatus === 'SENT') {
+        return paymentRepository.markReceiptSent(payment.id);
+      }
+    })
+    .catch(() => {});
 }

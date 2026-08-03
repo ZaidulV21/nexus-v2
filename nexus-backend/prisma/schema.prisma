@@ -70,8 +70,20 @@ model TimelineEvent {
   // layer, so this column is retained for future per-event overrides.
   clientVisible Boolean @default(true)
 
+  // Payment-scoped dedup key. The idempotency guard deduplicates events by
+  // (entityType, entityId, eventType) by default, which is correct for
+  // invoice lifecycle events but wrongly collapses two legitimate payments
+  // made on the SAME invoice within the dedupe window. Payment-related events
+  // (PAYMENT_SUCCESSFUL, PARTIAL_PAYMENT, INVOICE_PAID, PAYMENT_RECORDED,
+  // RECEIPT_*, REFUND_PROCESSED) carry the paymentId (or gateway transaction
+  // id) here so each payment is deduplicated independently: a webhook retry of
+  // the SAME payment is still ignored, while a second payment on the same
+  // invoice always produces its own timeline entry. NULL for non-payment events.
+  dedupeKey String?
+
   @@index([entityType, entityId])
   @@index([entityType, entityId, eventType])
+  @@index([entityType, entityId, eventType, dedupeKey])
   @@map("timeline_events")
 }
 
@@ -98,6 +110,15 @@ model NotificationEvent {
   createdAt  DateTime          @default(now())
   logs       NotificationLog[]
 
+  // Payment-scoped dedup key, mirroring TimelineEvent.dedupeKey: payment
+  // notifications (payment.recorded, payment.successful,
+  // payment.receipt_available, payment.receipt_sent) carry the paymentId so
+  // two legitimate payments on the same invoice each produce their own
+  // notification/email while a retry of the same payment is still ignored.
+  dedupeKey String?
+
+  @@index([eventType, entityType, entityId])
+  @@index([eventType, entityType, entityId, dedupeKey])
   @@map("notification_events")
 }
 

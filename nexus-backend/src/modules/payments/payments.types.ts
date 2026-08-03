@@ -29,3 +29,25 @@ export interface VerifyPaymentResponse {
     displayStatus: string;
   };
 }
+
+// Razorpay payment entity as delivered in a payment.captured webhook payload.
+export interface RazorpayWebhookPaymentEntity {
+  id: string;
+  order_id?: string;
+  amount?: number;
+  currency?: string;
+  status?: string;
+  method?: string;
+}
+
+// Outcome of processing a Razorpay webhook delivery. A 200 is always returned
+// to the gateway; `processed` distinguishes a newly recorded payment from an
+// acknowledged-but-ignored delivery (non-payment.captured, duplicate, or an
+// event that cannot be attributed to a known invoice).
+export interface WebhookResult {
+  event: string;
+  processed: boolean;
+  paymentId?: string;
+  alreadyProcessed?: boolean;
+  reason?: string;
+}

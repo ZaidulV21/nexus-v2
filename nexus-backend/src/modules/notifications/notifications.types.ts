@@ -4,6 +4,19 @@ export interface EmitEventInput {
   entityId?: string;
   payload: Record<string, unknown>;
   recipient: string;
+  // Optional payment-scoped idempotency key. Payment notifications carry the
+  // paymentId so the dedupe guard distinguishes two payments on the same
+  // invoice while still ignoring a retry of the same payment. Invoice
+  // lifecycle notifications omit it (dedup by eventType+entity).
+  dedupeKey?: string;
+  // Business-event-only flag. payment.successful and payment.recorded are
+  // BUSINESS events (payment recording, invoice updates, timeline, audit, and
+  // in-app notifications) and must never send an email - the single automatic
+  // receipt email is delivered via payment.receipt_available. When false, the
+  // event + in-app notifications are still recorded but NO email is dispatched
+  // and no EMAIL log row is written. Defaults to true (email sent) for every
+  // other notification type.
+  sendEmail?: boolean;
 }
 
 export type EmailStatus = 'SENT' | 'SKIPPED' | 'FAILED';

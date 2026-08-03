@@ -29,7 +29,15 @@ jest.mock('../../project/project.repository', () => ({
 }));
 jest.mock('../../timeline/timeline.service', () => ({ timelineService: { recordEvent: jest.fn() } }));
 jest.mock('../../audit/audit.service', () => ({ auditService: { recordAudit: jest.fn() } }));
-jest.mock('../../notifications/notifications.service', () => ({ notificationsService: { emitEvent: jest.fn() } }));
+jest.mock('../../notifications/notifications.service', () => ({
+  notificationsService: { emitEvent: jest.fn().mockResolvedValue({ emailStatus: 'SENT' }) },
+}));
+jest.mock('../../pdf/pdf.service', () => ({
+  pdfService: {
+    generate: jest.fn().mockResolvedValue({ pdfUrl: 'http://test/i.pdf' }),
+    generateReceipt: jest.fn().mockResolvedValue({ pdfUrl: 'http://test/r.pdf' }),
+  },
+}));
 
 import { invoiceRepository, paymentRepository } from '../invoice.repository';
 import { Prisma } from '@prisma/client';
@@ -287,6 +295,58 @@ describe('invoiceService.recordPayment - business rules', () => {
     await invoiceService.recordPayment('inv1', { amount: 30000, method: 'Cash' }, 'admin1');
 
     expect(paymentRepository.create).toHaveBeenCalledTimes(3);
+
+    // Every payment gets its OWN timeline + notification events, each keyed by
+    // that payment's id - the dedupe guard must never collapse payments made on
+    // the same invoice inside the dedupe window.
+    const recordedEvents = (timelineService.recordEvent as jest.Mock).mock.calls
+      .map((c) => c[0])
+      .filter((ev: any) => ev.eventType === 'PAYMENT_RECORDED');
+    expect(recordedEvents.map((ev: any) => ev.dedupeKey)).toEqual(['pay1', 'pay2', 'pay3']);
+
+    const recordedNotifs = (notificationsService.emitEvent as jest.Mock).mock.calls
+      .map((c) => c[0])
+      .filter((ev: any) => ev.eventType === 'payment.recorded');
+    expect(recordedNotifs.map((ev: any) => ev.dedupeKey)).toEqual(['pay1', 'pay2', 'pay3']);
+
+    // The single automatic receipt email (payment.receipt_available) also fires
+    // once per payment, keyed by that payment's id.
+    const receiptAvailableNotifs = (notificationsService.emitEvent as jest.Mock).mock.calls
+      .map((c) => c[0])
+      .filter((ev: any) => ev.eventType === 'payment.receipt_available');
+    expect(receiptAvailableNotifs.map((ev: any) => ev.dedupeKey)).toEqual(['pay1', 'pay2', 'pay3']);
+  });
+
+  it('routes the automatic receipt email via payment.receipt_available and stamps receiptSentAt only on SENT', async () => {
+    (paymentRepository.sumForInvoice as jest.Mock).mockResolvedValue({ _sum: { amount: 0 } });
+    (paymentRepository.findByTransactionReference as jest.Mock).mockResolvedValue(null);
+    (paymentRepository.create as jest.Mock).mockResolvedValue({ id: 'pay1', amount: 5000, status: 'SUCCESS' });
+    (notificationsService.emitEvent as jest.Mock).mockResolvedValue({ emailStatus: 'SENT' });
+
+    await invoiceService.recordPayment('inv1', { amount: 5000, method: 'Cash' }, 'admin1');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    // payment.recorded is a BUSINESS event only - no email is sent for it.
+    expect(notificationsService.emitEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ eventType: 'payment.recorded', sendEmail: false, dedupeKey: 'pay1' })
+    );
+    // The single automatic receipt email is payment.receipt_available.
+    expect(notificationsService.emitEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ eventType: 'payment.receipt_available', dedupeKey: 'pay1' })
+    );
+    expect(paymentRepository.markReceiptSent).toHaveBeenCalledWith('pay1');
+  });
+
+  it('leaves receiptSentAt NULL when the automatic receipt email fails (manual send stays a first SEND)', async () => {
+    (paymentRepository.sumForInvoice as jest.Mock).mockResolvedValue({ _sum: { amount: 0 } });
+    (paymentRepository.findByTransactionReference as jest.Mock).mockResolvedValue(null);
+    (paymentRepository.create as jest.Mock).mockResolvedValue({ id: 'pay1', amount: 5000, status: 'SUCCESS' });
+    (notificationsService.emitEvent as jest.Mock).mockResolvedValue({ emailStatus: 'FAILED' });
+
+    await invoiceService.recordPayment('inv1', { amount: 5000, method: 'Cash' }, 'admin1');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(paymentRepository.markReceiptSent).not.toHaveBeenCalled();
   });
 
   it('rejects payment exceeding remaining balance after partial payment', async () => {
@@ -733,6 +793,34 @@ describe('invoiceService.sendReceipt / resendReceipt - no duplicate events', () 
     expect(timelineService.recordEvent).not.toHaveBeenCalledWith(
       expect.objectContaining({ eventType: 'RECEIPT_SENT' })
     );
+    expect(paymentRepository.markReceiptSent).not.toHaveBeenCalled();
+  });
+
+  it('refuses to send a duplicate receipt silently when it was already sent (409, no email)', async () => {
+    (paymentRepository.findById as jest.Mock).mockResolvedValue({
+      ...payment,
+      receiptSentAt: new Date('2026-07-30T10:00:00Z'),
+    });
+
+    await expect(invoiceService.sendReceipt('pay1', 'admin1')).rejects.toMatchObject({
+      statusCode: 409,
+      message: expect.stringMatching(/already been sent/i),
+    });
+
+    // No email attempt, no timeline/audit event, no receiptSentAt mutation.
+    expect(notificationsService.emitEvent).not.toHaveBeenCalled();
+    expect(timelineService.recordEvent).not.toHaveBeenCalled();
+    expect(paymentRepository.markReceiptSent).not.toHaveBeenCalled();
+  });
+
+  it('refuses to resend a receipt that was never sent (409, no email)', async () => {
+    await expect(invoiceService.resendReceipt('pay1', 'admin1')).rejects.toMatchObject({
+      statusCode: 409,
+      message: expect.stringMatching(/not been sent yet/i),
+    });
+
+    expect(notificationsService.emitEvent).not.toHaveBeenCalled();
+    expect(timelineService.recordEvent).not.toHaveBeenCalled();
     expect(paymentRepository.markReceiptSent).not.toHaveBeenCalled();
   });
 });

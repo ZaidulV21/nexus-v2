@@ -289,14 +289,17 @@ export const notificationsService = {
       return { notificationEventId: '', emailStatus: 'SKIPPED', deduplicated: false };
     }
 
-    // Idempotency guard: the same business event (same type + entity) raised
-    // again within the dedupe window is an accidental duplicate and is skipped
-    // so notifications/emails are not sent twice.
+    // Idempotency guard: the same business event raised again within the dedupe
+    // window is an accidental duplicate and is skipped so notifications/emails
+    // are not sent twice. Payment notifications carry a dedupeKey (paymentId),
+    // so a retry of the SAME payment is still ignored while a second payment on
+    // the same invoice always produces its own notification.
     const recent = await notificationsRepository.findRecentEvent(
       input.eventType,
       input.entityType,
       input.entityId,
-      EVENT_DEDUPE_WINDOW_MS
+      EVENT_DEDUPE_WINDOW_MS,
+      input.dedupeKey
     );
     if (recent) {
       return {
@@ -311,10 +314,26 @@ export const notificationsService = {
       entityType: input.entityType,
       entityId: input.entityId,
       payload: input.payload as any,
+      dedupeKey: input.dedupeKey ?? null,
     });
 
     // In-App notifications (fire-and-forget, never block the business transaction)
     this.createInAppNotificationsFromEvent(input).catch(() => {});
+
+    // Business-only events (payment.successful, payment.recorded) never send
+    // an email: the payment is recorded, the invoice updated, and the
+    // timeline/audit/in-app notifications are raised, but the SINGLE automatic
+    // receipt email is delivered exclusively via payment.receipt_available.
+    // The event row above is still written (dedupe + audit trail), and the
+    // in-app notifications above still fire - only the email dispatch and its
+    // log row are skipped, so no EMAIL log implies no email was attempted.
+    if (input.sendEmail === false) {
+      return {
+        notificationEventId: event.id,
+        emailStatus: 'SKIPPED',
+        deduplicated: false,
+      };
+    }
 
     // Email dispatch: the outcome reflects the REAL delivery result. Callers
     // that need certainty (e.g. "Receipt Sent" timeline/audit entries) must

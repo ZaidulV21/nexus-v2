@@ -79,6 +79,33 @@ describe('notificationsService.emitEvent', () => {
     expect(notificationsDispatcher.dispatch).not.toHaveBeenCalled();
   });
 
+  it('records the event + in-app notifications but sends NO email when sendEmail is false', async () => {
+    jest.clearAllMocks();
+    (notificationsDispatcher.dispatch as jest.Mock).mockClear();
+
+    const result = await notificationsService.emitEvent({
+      eventType: 'payment.successful',
+      entityType: 'INVOICE',
+      entityId: 'inv-1',
+      dedupeKey: 'pay-1',
+      payload: { amount: 100, invoiceNumber: 'INV/1', paymentId: 'pay-1' },
+      recipient: 'client@nexus.test',
+      sendEmail: false,
+    });
+
+    // The event row + in-app notifications still happen (business record)...
+    expect(notificationsRepository.createEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ eventType: 'payment.successful', dedupeKey: 'pay-1' })
+    );
+    await new Promise((r) => setTimeout(r, 10));
+    expect(notificationsRepository.createManyInAppNotifications).toHaveBeenCalled();
+
+    // ...but NO email is dispatched and no EMAIL log row is written.
+    expect(notificationsDispatcher.dispatch).not.toHaveBeenCalled();
+    expect(notificationsRepository.createLog).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ emailStatus: 'SKIPPED', deduplicated: false });
+  });
+
   it('deduplicates an identical recent event and does not re-send', async () => {
     jest.clearAllMocks();
     (notificationsDispatcher.dispatch as jest.Mock).mockClear();
@@ -94,6 +121,63 @@ describe('notificationsService.emitEvent', () => {
     expect(notificationsDispatcher.dispatch).not.toHaveBeenCalled();
     expect(result.deduplicated).toBe(true);
     expect(result.emailStatus).toBe('SKIPPED');
+  });
+
+  it('deduplicates a retry of the SAME payment (same paymentId) but not a second payment on the same invoice', async () => {
+    jest.clearAllMocks();
+    (notificationsDispatcher.dispatch as jest.Mock).mockClear();
+
+    // Stateful guard: an event is a duplicate only when its dedupeKey matches
+    // the already-emitted paymentId. A different paymentId (same invoice) is new.
+    const emitted = new Set<string>();
+    (notificationsRepository.findRecentEvent as jest.Mock).mockImplementation(
+      (eventType: string, entityType: string | undefined, entityId: string | undefined, withinMs: number, dedupeKey?: string) => {
+        return Promise.resolve(emitted.has(dedupeKey ?? '') ? { id: 'evt-dupe' } : null);
+      }
+    );
+    (notificationsRepository.createEvent as jest.Mock).mockImplementation((data: any) => {
+      if (data.dedupeKey) emitted.add(data.dedupeKey);
+      return Promise.resolve({ id: `evt-${data.dedupeKey ?? 'none'}` });
+    });
+
+    // Payment 1 on invoice inv-1 → not a duplicate.
+    const first = await notificationsService.emitEvent({
+      eventType: 'payment.successful',
+      entityType: 'INVOICE',
+      entityId: 'inv-1',
+      dedupeKey: 'pay-1',
+      payload: { amount: 100, invoiceNumber: 'INV/1', paymentId: 'pay-1' },
+      recipient: 'client@nexus.test',
+    });
+    expect(first.deduplicated).toBe(false);
+    expect(notificationsRepository.createEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ dedupeKey: 'pay-1' })
+    );
+
+    // Retry of the SAME payment → still ignored.
+    const retry = await notificationsService.emitEvent({
+      eventType: 'payment.successful',
+      entityType: 'INVOICE',
+      entityId: 'inv-1',
+      dedupeKey: 'pay-1',
+      payload: { amount: 100, invoiceNumber: 'INV/1', paymentId: 'pay-1' },
+      recipient: 'client@nexus.test',
+    });
+    expect(retry.deduplicated).toBe(true);
+
+    // A SECOND, legitimate payment on the SAME invoice → its own notification.
+    const second = await notificationsService.emitEvent({
+      eventType: 'payment.successful',
+      entityType: 'INVOICE',
+      entityId: 'inv-1',
+      dedupeKey: 'pay-2',
+      payload: { amount: 200, invoiceNumber: 'INV/1', paymentId: 'pay-2' },
+      recipient: 'client@nexus.test',
+    });
+    expect(second.deduplicated).toBe(false);
+    expect(notificationsRepository.createEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ dedupeKey: 'pay-2' })
+    );
   });
 });
 

@@ -29,6 +29,11 @@ export function createApp(): Express {
   const app = express();
 
   applySecurityMiddleware(app);
+  // Preserve the RAW body for the Razorpay webhook so the signature can be
+  // verified over the exact bytes the gateway signed. Must mount before
+  // express.json(): body-parser skips re-parsing once req.body is set, so this
+  // path keeps req.body as a Buffer while every other route parses JSON.
+  app.use('/api/payments/webhook', express.raw({ type: '*/*' }));
   app.use(express.json());
   app.use(requestLogger);
 

@@ -2,11 +2,11 @@ import { prisma } from '../../config/database';
 import { CreateInAppNotificationInput, ListNotificationsParams } from './notifications.types';
 
 export const notificationsRepository = {
-  createEvent(data: { eventType: string; entityType?: string; entityId?: string; payload: any }) {
+  createEvent(data: { eventType: string; entityType?: string; entityId?: string; dedupeKey?: string | null; payload: any }) {
     return prisma.notificationEvent.create({ data });
   },
 
-  findRecentEvent(eventType: string, entityType?: string, entityId?: string, withinMs = 60_000) {
+  findRecentEvent(eventType: string, entityType?: string, entityId?: string, withinMs = 60_000, dedupeKey?: string) {
     const since = new Date(Date.now() - withinMs);
     return prisma.notificationEvent.findFirst({
       where: {
@@ -14,6 +14,7 @@ export const notificationsRepository = {
         entityType: entityType ?? undefined,
         entityId: entityId ?? undefined,
         createdAt: { gte: since },
+        dedupeKey: dedupeKey ?? null,
       },
       orderBy: { createdAt: 'desc' },
     });

@@ -4,6 +4,7 @@ import { Ban, CreditCard, Download, Eye, ExternalLink, Mail, Receipt, RefreshCw,
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { FormField } from '@/components/ui/FormField';
@@ -158,6 +159,7 @@ function InvoiceOverview({ invoice }: { invoice: Invoice }) {
 
 function PaymentHistory({ invoice }: { invoice: Invoice }) {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [resendTarget, setResendTarget] = useState<Payment | null>(null);
   const { data: payments, isLoading } = usePaymentHistory(invoice.id, sortOrder);
   const displayPayments = payments ?? invoice.payments;
   const { toast } = useToast();
@@ -172,9 +174,16 @@ function PaymentHistory({ invoice }: { invoice: Invoice }) {
     return <EmptyState title="No payments recorded" description="Payments recorded through the backend will appear here." />;
   }
 
-  async function handleSendReceipt(paymentId: string) {
+  // Sending a receipt for a payment that was already emailed is a RESEND, and
+  // must never happen silently. The admin confirms first; only then does the
+  // resend endpoint fire.
+  async function handleSendReceipt(payment: Payment) {
+    if (payment.receiptSentAt) {
+      setResendTarget(payment);
+      return;
+    }
     try {
-      await sendReceipt.mutateAsync(paymentId);
+      await sendReceipt.mutateAsync(payment.id);
       toast({ title: 'Receipt sent', variant: 'success' });
     } catch (err) {
       toast({
@@ -185,10 +194,12 @@ function PaymentHistory({ invoice }: { invoice: Invoice }) {
     }
   }
 
-  async function handleResendReceipt(paymentId: string) {
+  async function handleConfirmResend() {
+    if (!resendTarget) return;
     try {
-      await resendReceipt.mutateAsync(paymentId);
+      await resendReceipt.mutateAsync(resendTarget.id);
       toast({ title: 'Receipt resent', variant: 'success' });
+      setResendTarget(null);
     } catch (err) {
       toast({
         title: 'Could not resend receipt',
@@ -218,11 +229,21 @@ function PaymentHistory({ invoice }: { invoice: Invoice }) {
             key={payment.id}
             payment={payment}
             onSendReceipt={handleSendReceipt}
-            onResendReceipt={handleResendReceipt}
             isSending={sendReceipt.isPending || resendReceipt.isPending}
           />
         ))}
       </ul>
+      <ConfirmDialog
+        open={resendTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setResendTarget(null);
+        }}
+        title="Receipt already sent"
+        description="This receipt has already been sent. Would you like to resend it?"
+        confirmLabel="Resend receipt"
+        loading={resendReceipt.isPending}
+        onConfirm={handleConfirmResend}
+      />
     </div>
   );
 }
@@ -230,12 +251,10 @@ function PaymentHistory({ invoice }: { invoice: Invoice }) {
 function PaymentRow({
   payment,
   onSendReceipt,
-  onResendReceipt,
   isSending,
 }: {
   payment: Payment;
-  onSendReceipt: (paymentId: string) => void;
-  onResendReceipt: (paymentId: string) => void;
+  onSendReceipt: (payment: Payment) => void;
   isSending: boolean;
 }) {
   const { data: receiptData } = useReceiptUrl(payment.id);
@@ -279,17 +298,9 @@ function PaymentRow({
           variant="secondary"
           size="sm"
           loading={isSending}
-          onClick={() => onSendReceipt(payment.id)}
+          onClick={() => onSendReceipt(payment)}
         >
           <Mail className="h-3.5 w-3.5" /> Send Receipt
-        </Button>
-        <Button
-          variant="secondary"
-          size="sm"
-          loading={isSending}
-          onClick={() => onResendReceipt(payment.id)}
-        >
-          <RefreshCw className="h-3.5 w-3.5" /> Resend Receipt
         </Button>
       </div>
     </li>

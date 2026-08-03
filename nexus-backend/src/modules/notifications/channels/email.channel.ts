@@ -66,11 +66,11 @@ function buildSubject(payload: Record<string, unknown>): string | null {
   if (quotationNumber) {
     return `${isResent ? 'Revised Quotation' : 'New Quotation'} — ${quotationNumber}`;
   }
-  if (invoiceNumber) {
-    return `${isResent ? 'Invoice Reminder' : 'New Invoice'} — ${invoiceNumber}`;
-  }
   if (payload.amount !== undefined && payload.invoiceNumber) {
     return `Payment Receipt — ${payload.invoiceNumber}`;
+  }
+  if (invoiceNumber) {
+    return `${isResent ? 'Invoice Reminder' : 'New Invoice'} — ${invoiceNumber}`;
   }
   if (payload.clientName && payload.loginEmail && !payload.tempPassword) {
     const companyName = 'Nexus';

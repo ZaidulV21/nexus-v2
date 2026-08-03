@@ -371,6 +371,7 @@ export const pdfService = {
         eventType: 'RECEIPT_GENERATED',
         description: `Payment receipt generated for payment of ${receiptAmount}`,
         actorUserId,
+        dedupeKey: receiptPayment.id,
       });
       await timelineService.recordEvent({
         entityType: 'INVOICE',
@@ -378,6 +379,7 @@ export const pdfService = {
         eventType: 'RECEIPT_AVAILABLE',
         description: `Payment receipt available for Invoice ${receiptPayment.invoice.invoiceNumber}`,
         actorUserId,
+        dedupeKey: receiptPayment.id,
       });
       await auditService.recordAudit({
         entityType: 'INVOICE',

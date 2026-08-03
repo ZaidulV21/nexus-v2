@@ -6,9 +6,15 @@ import {
   handleVerifyPayment,
   handleListPayments,
   handleRefundPayment,
+  handleWebhook,
 } from './payments.controller';
 
 const router = Router();
+
+// Public (signature-authenticated) webhook endpoint for Razorpay. The raw body
+// is preserved by express.raw() mounted on this exact path in app.ts; the
+// X-Razorpay-Signature header is verified inside handleRazorpayWebhook.
+router.post('/webhook', handleWebhook);
 
 router.post('/create-order', authenticate, requireActorType('CLIENT'), handleCreateOrder);
 router.post('/verify', authenticate, requireActorType('CLIENT'), handleVerifyPayment);

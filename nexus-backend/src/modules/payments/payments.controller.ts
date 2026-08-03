@@ -1,10 +1,23 @@
 import { Request, Response, NextFunction } from 'express';
-import { createRazorpayOrder, verifyPayment, refundPayment } from './payments.service';
+import { createRazorpayOrder, verifyPayment, refundPayment, handleRazorpayWebhook } from './payments.service';
 import { createOrderSchema, verifyPaymentSchema } from './payments.validation';
 import { ok, paginated } from '../../core/utils/response';
 import { parsePagination } from '../../core/utils/pagination';
 import { paymentRepository } from '../invoice/invoice.repository';
 import { ValidationError, UnauthorizedError } from '../../core/errors/AppError';
+
+// Public endpoint called by the Razorpay servers (no JWT): authenticity comes
+// from the X-Razorpay-Signature header verified over the raw request body. The
+// raw body is captured by express.raw() mounted for this exact path in app.ts.
+export async function handleWebhook(req: Request, res: Response, next: NextFunction) {
+  try {
+    const signature = req.headers['x-razorpay-signature'];
+    const result = await handleRazorpayWebhook(req.body, typeof signature === 'string' ? signature : undefined);
+    return ok(res, result);
+  } catch (err) {
+    next(err);
+  }
+}
 
 export async function handleCreateOrder(req: Request, res: Response, next: NextFunction) {
   try {

@@ -7,7 +7,7 @@ import { timelineService } from '../timeline/timeline.service';
 import { auditService } from '../audit/audit.service';
 import { notificationsService } from '../notifications/notifications.service';
 import { CreateInvoiceInput, CancelInvoiceInput, RecordPaymentInput, InvoiceItemInput } from './invoice.types';
-import { AppError, NotFoundError, ValidationError } from '../../core/errors/AppError';
+import { AppError, ConflictError, NotFoundError, ValidationError } from '../../core/errors/AppError';
 
 function computeInvoiceTotals(items: InvoiceItemInput[]) {
   let subtotal = 0;
@@ -311,6 +311,7 @@ export const invoiceService = {
       eventType: 'PAYMENT_RECORDED',
       description: `Payment of ${input.amount} recorded via ${input.method}${input.transactionReference ? ` (Ref: ${input.transactionReference})` : ''}`,
       actorUserId,
+      dedupeKey: payment.id,
     });
 
     if (newOutstanding <= 0) {
@@ -320,6 +321,7 @@ export const invoiceService = {
         eventType: 'INVOICE_PAID',
         description: `Invoice fully paid. Total paid: ${newPaidAmount}`,
         actorUserId,
+        dedupeKey: payment.id,
       });
     } else {
       await timelineService.recordEvent({
@@ -328,6 +330,7 @@ export const invoiceService = {
         eventType: 'PARTIAL_PAYMENT',
         description: `Partial payment of ${input.amount} received. Outstanding: ${newOutstanding}`,
         actorUserId,
+        dedupeKey: payment.id,
       });
     }
 
@@ -341,21 +344,48 @@ export const invoiceService = {
 
     const recipientEmail = invoice.client?.email;
     if (recipientEmail) {
+      const receiptPayload = {
+        amount: input.amount,
+        invoiceNumber: invoice.invoiceNumber,
+        clientId,
+        invoiceId,
+        paymentId: payment.id,
+        paymentMethod: input.method,
+        paymentDate: payment.paidAt ? new Date(payment.paidAt).toISOString() : new Date().toISOString(),
+      };
+
+      // payment.recorded is a BUSINESS event only (payment recording, invoice
+      // updates, timeline, audit, in-app notifications) - no email. The single
+      // automatic receipt email is payment.receipt_available below, matching
+      // the online Razorpay flow exactly.
       await notificationsService.emitEvent({
         eventType: 'payment.recorded',
         entityType: 'INVOICE',
         entityId: invoiceId,
         recipient: recipientEmail,
-        payload: {
-          amount: input.amount,
-          invoiceNumber: invoice.invoiceNumber,
-          clientId,
-          invoiceId,
-          paymentId: payment.id,
-          paymentMethod: input.method,
-          paymentDate: payment.paidAt ? new Date(payment.paidAt).toISOString() : new Date().toISOString(),
-        },
+        payload: receiptPayload,
+        dedupeKey: payment.id,
+        sendEmail: false,
       });
+
+      // The single automatic receipt email for offline payments. receiptSentAt
+      // is set ONLY when the email provider accepted the message (same
+      // semantics as the online flow), so a failure leaves it NULL and a later
+      // manual sendReceipt records RECEIPT_SENT, never a phantom RECEIPT_RESENT.
+      notificationsService.emitEvent({
+        eventType: 'payment.receipt_available',
+        entityType: 'INVOICE',
+        entityId: invoiceId,
+        recipient: recipientEmail,
+        payload: receiptPayload,
+        dedupeKey: payment.id,
+      })
+        .then((result) => {
+          if (result?.emailStatus === 'SENT') {
+            return paymentRepository.markReceiptSent(payment.id);
+          }
+        })
+        .catch(() => {});
     }
 
     import('../pdf/pdf.service').then(({ pdfService }) => {
@@ -370,11 +400,32 @@ export const invoiceService = {
     const payment = await paymentRepository.findById(paymentId);
     if (!payment) throw new NotFoundError('Payment not found');
 
-    // A receipt that has already been emailed is a RE-SEND, not a first send.
-    // Distinguish it so the timeline records "Receipt Re-sent" (RECEIPT_RESENT)
-    // instead of repeating "Receipt Sent" (RECEIPT_SENT) - no duplicate events.
-    const isResend = !!payment.receiptSentAt;
+    // A receipt that has already been emailed must never be sent again
+    // silently: a duplicate email can only go out after explicit admin
+    // confirmation, which routes to /resend-receipt instead. Refusing here
+    // prevents silent duplicate emails even if the API is called directly.
+    if (payment.receiptSentAt) {
+      throw new ConflictError('This receipt has already been sent to the client');
+    }
 
+    return this.sendReceiptEmail(payment, actorUserId, false);
+  },
+
+  async resendReceipt(paymentId: string, actorUserId: string) {
+    const payment = await paymentRepository.findById(paymentId);
+    if (!payment) throw new NotFoundError('Payment not found');
+
+    // Explicit resend only: a receipt that was never sent cannot be "re"sent.
+    // The admin UI offers the resend path solely after confirming the receipt
+    // was already emailed.
+    if (!payment.receiptSentAt) {
+      throw new ConflictError('This receipt has not been sent yet - use Send Receipt');
+    }
+
+    return this.sendReceiptEmail(payment, actorUserId, true);
+  },
+
+  async sendReceiptEmail(payment: NonNullable<Awaited<ReturnType<typeof paymentRepository.findById>>>, actorUserId: string, isResend: boolean) {
     const invoice = await invoiceRepository.findById(payment.invoiceId);
     if (!invoice) throw new NotFoundError('Invoice not found');
 
@@ -385,10 +436,10 @@ export const invoiceService = {
     //    (audit-only) and its failure must not block the email itself.
     try {
       const { pdfService } = await import('../pdf/pdf.service');
-      await pdfService.generateReceipt(paymentId, actorUserId);
+      await pdfService.generateReceipt(payment.id, actorUserId);
     } catch (err) {
       // eslint-disable-next-line no-console
-      console.error(`[invoice] Receipt PDF generation failed for ${paymentId}:`, err);
+      console.error(`[invoice] Receipt PDF generation failed for ${payment.id}:`, err);
     }
 
     // 2. Send the receipt email, create in-app notifications, and persist the
@@ -399,7 +450,7 @@ export const invoiceService = {
       entityId: payment.invoiceId,
       recipient,
       payload: {
-        paymentId,
+        paymentId: payment.id,
         amount: payment.amount,
         invoiceNumber: invoice.invoiceNumber,
         clientId: invoice.clientId,
@@ -407,6 +458,7 @@ export const invoiceService = {
         paymentMethod: payment.method,
         paymentDate: payment.paidAt ? new Date(payment.paidAt).toISOString() : new Date().toISOString(),
       },
+      dedupeKey: payment.id,
     });
 
     // Audit records the real email outcome - a false "Receipt Sent" is never
@@ -421,7 +473,7 @@ export const invoiceService = {
         entityType: 'INVOICE',
         entityId: payment.invoiceId,
         action: auditAction,
-        afterState: { paymentId, recipient, emailStatus: 'SENT', sentAt: new Date().toISOString(), resent: isResend },
+        afterState: { paymentId: payment.id, recipient, emailStatus: 'SENT', sentAt: new Date().toISOString(), resent: isResend },
         actorUserId,
       });
 
@@ -433,9 +485,10 @@ export const invoiceService = {
           ? `Payment receipt re-sent to client for payment of ${payment.amount}`
           : `Payment receipt sent to client for payment of ${payment.amount}`,
         actorUserId,
+        dedupeKey: payment.id,
       });
 
-      await paymentRepository.markReceiptSent(paymentId);
+      await paymentRepository.markReceiptSent(payment.id);
       return payment;
     }
 
@@ -443,15 +496,11 @@ export const invoiceService = {
       entityType: 'INVOICE',
       entityId: payment.invoiceId,
       action: 'RECEIPT_SEND_FAILED',
-      afterState: { paymentId, recipient, emailStatus: emailResult?.emailStatus ?? 'FAILED' },
+      afterState: { paymentId: payment.id, recipient, emailStatus: emailResult?.emailStatus ?? 'FAILED' },
       actorUserId,
     });
 
     throw new AppError('Receipt email could not be sent to the client', 502);
-  },
-
-  async resendReceipt(paymentId: string, actorUserId: string) {
-    return this.sendReceipt(paymentId, actorUserId);
   },
 
   async getById(id: string) {

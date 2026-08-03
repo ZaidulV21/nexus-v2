@@ -148,6 +148,45 @@ describe('timelineService.recordEvent - idempotency passthrough', () => {
     });
     expect(result).toEqual({ id: 'new' });
   });
+
+  it('passes the payment dedupeKey to the idempotency guard for payment events', async () => {
+    mockFindRecentDuplicate.mockResolvedValue(null);
+    mockCreate.mockResolvedValue({ id: 'new' });
+
+    const result = await timelineService.recordEvent({
+      entityType: 'INVOICE',
+      entityId: 'inv-1',
+      eventType: 'PAYMENT_SUCCESSFUL',
+      description: 'payment 1',
+      dedupeKey: 'pay-1',
+    });
+
+    // The dedupe identity for a payment event is (entity, eventType, paymentId):
+    // a different payment on the same invoice never matches this key.
+    expect(mockFindRecentDuplicate).toHaveBeenCalledWith('INVOICE', 'inv-1', 'PAYMENT_SUCCESSFUL', 60_000, 'pay-1');
+    expect(mockCreate).toHaveBeenCalledWith(expect.objectContaining({ dedupeKey: 'pay-1' }));
+    expect(result).toEqual({ id: 'new' });
+  });
+
+  it('keeps invoice events keyed by entity+eventType (no dedupeKey)', async () => {
+    mockFindRecentDuplicate.mockResolvedValue(null);
+    mockCreate.mockResolvedValue({ id: 'new' });
+
+    await timelineService.recordEvent({
+      entityType: 'INVOICE',
+      entityId: 'inv-1',
+      eventType: 'INVOICE_SENT',
+      description: 'sent',
+    });
+
+    expect(mockFindRecentDuplicate).toHaveBeenCalledWith('INVOICE', 'inv-1', 'INVOICE_SENT', 60_000, undefined);
+    expect(mockCreate).toHaveBeenCalledWith({
+      entityType: 'INVOICE',
+      entityId: 'inv-1',
+      eventType: 'INVOICE_SENT',
+      description: 'sent',
+    });
+  });
 });
 
 describe('timelineService.recordEvent - technical events go to the Audit Log only', () => {
