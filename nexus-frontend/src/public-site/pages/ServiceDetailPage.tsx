@@ -1,169 +1,663 @@
-import { useParams, Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { ArrowRight, Check, Phone, Loader2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
+import { motion, AnimatePresence, useScroll, useSpring } from 'framer-motion';
+import {
+  ArrowRight,
+  Check,
+  ChevronRight,
+  Clock,
+  IndianRupee,
+  Layers,
+  MessageCircle,
+  Phone,
+  ShieldCheck,
+  Sparkles,
+  Star,
+  Quote,
+  Users,
+  Info,
+} from 'lucide-react';
 import { usePublicServiceBySlug, usePublicServices } from '@/queries/usePublicServices';
 import { usePublicCompany } from '../hooks';
-import { PageHero } from '../components/PageHero';
+import { cn } from '@/lib/utils';
+import { ServiceCard } from '../components/ServiceCard';
+import { ServiceGallery } from '../components/ServiceGallery';
+import { SubServiceNav } from '../components/SubServiceNav';
+import { FAQAccordion } from '../components/FAQAccordion';
+import { TestimonialCard } from '../components/TestimonialCard';
+import { FadeIn, ScaleIn, StaggerGroup, StaggerItem } from '../components/motion';
+import { getServiceDetailConfig, buildDefaultServiceDetail } from '../config/serviceDetails';
+import type { ServiceDetailConfig } from '../config/serviceDetails';
+import { getSubService, getSubServices } from '../config/subServices';
+import type { SubServiceConfig } from '../config/subServices';
+
+const SECTION_NAV = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'gallery', label: 'Gallery' },
+  { id: 'features', label: 'Features' },
+  { id: 'process', label: 'Process' },
+  { id: 'faqs', label: 'FAQ' },
+  { id: 'reviews', label: 'Reviews' },
+] as const;
+
+const SECTION_IDS = SECTION_NAV.map((s) => s.id);
+
+/** Smooth-scroll to an on-page section, accounting for the fixed navbar. */
+function scrollToSection(id: string) {
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+/** Track which section is currently in view (runs after content has mounted). */
+function useActiveSection(ids: readonly string[]) {
+  const [active, setActive] = useState<string>(ids[0]);
+
+  useEffect(() => {
+    const onScroll = () => {
+      let current = ids[0];
+      for (const id of ids) {
+        const el = document.getElementById(id);
+        if (!el) continue;
+        if (el.getBoundingClientRect().top <= 180) current = id;
+      }
+      setActive(current);
+    };
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [ids]);
+
+  return active;
+}
+
+/** Build a WhatsApp deep-link from a phone number, or null if no real number exists. */
+function buildWhatsAppLink(phone: string, text: string): string | null {
+  const digits = phone.replace(/\D/g, '');
+  if (digits.length < 10) return null;
+  return `https://wa.me/${digits}?text=${encodeURIComponent(text)}`;
+}
+
+function SectionHeading({ tag, title, description }: { tag: string; title: string; description?: string }) {
+  return (
+    <div className="mb-10 max-w-2xl">
+      <span className="inline-flex items-center gap-2 rounded-full bg-accent-subtle px-3 py-1 text-xs font-semibold uppercase tracking-wider text-accent">
+        <Sparkles className="h-3 w-3" />
+        {tag}
+      </span>
+      <h2 className="mt-4 text-2xl font-bold tracking-tight text-ink sm:text-3xl">{title}</h2>
+      {description && <p className="mt-3 text-ink-muted leading-relaxed">{description}</p>}
+    </div>
+  );
+}
+
+function LoadingState() {
+  return (
+    <div className="min-h-[70vh]">
+      <div className="h-[52vh] animate-pulse bg-canvas" />
+      <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
+        <div className="h-8 w-64 animate-pulse rounded bg-canvas" />
+        <div className="mt-4 h-4 w-full max-w-xl animate-pulse rounded bg-canvas" />
+        <div className="mt-4 h-4 w-2/3 animate-pulse rounded bg-canvas" />
+        <div className="mt-12 grid gap-8 lg:grid-cols-3">
+          <div className="h-96 animate-pulse rounded-2xl bg-canvas lg:col-span-2" />
+          <div className="h-96 animate-pulse rounded-2xl bg-canvas" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** The content actually displayed for the current route (sub-service or main service). */
+interface ActiveContent {
+  name: string;
+  shortDescription: string;
+  heroImage?: string;
+  detail: ServiceDetailConfig;
+}
 
 export function ServiceDetailPage() {
-  const { slug } = useParams<{ slug: string }>();
+  const { slug, subSlug } = useParams<{ slug: string; subSlug?: string }>();
   const { data: service, isLoading } = usePublicServiceBySlug(slug);
   const { data: allServices = [] } = usePublicServices();
   const company = usePublicCompany();
+  const { scrollYProgress } = useScroll();
+  const progress = useSpring(scrollYProgress, { stiffness: 100, damping: 30, restDelta: 0.001 });
 
-  if (isLoading) {
+  const [showStickyCta, setShowStickyCta] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => setShowStickyCta(window.scrollY > 520);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  const subServices = getSubServices(slug);
+  const activeSub = getSubService(slug, subSlug);
+
+  let content: ActiveContent | null = null;
+  if (service) {
+    if (activeSub) {
+      content = {
+        name: activeSub.name,
+        shortDescription: activeSub.shortDescription,
+        heroImage: activeSub.heroImage,
+        detail: activeSub,
+      };
+    } else {
+      const detail = getServiceDetailConfig(service.slug) ?? buildDefaultServiceDetail(service);
+      content = {
+        name: service.name,
+        shortDescription: service.shortDescription,
+        heroImage: detail.gallery[0] ?? service.image,
+        detail,
+      };
+    }
+  }
+
+  const contentKey = subSlug ?? 'main';
+  const unknownSub = Boolean(subSlug) && !activeSub && subServices.length > 0;
+
+  // SEO: keep the document title in sync with the active (sub)service.
+  useEffect(() => {
+    if (content) {
+      document.title = `${content.name} | ${company.name}`;
+    }
+    return () => {
+      document.title = company.name;
+    };
+  }, [content, company.name]);
+
+  const activeSection = useActiveSection(SECTION_IDS);
+
+  if (isLoading) return <LoadingState />;
+
+  if (!service || !content) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-accent" />
+        <div className="max-w-md text-center">
+          <h1 className="text-2xl font-bold text-ink">Service Not Found</h1>
+          <p className="mt-3 text-ink-muted">The service you're looking for doesn't exist or is no longer available.</p>
+          <Link
+            to="/services"
+            className="mt-6 inline-flex items-center gap-2 rounded-xl bg-accent px-6 py-3 text-sm font-semibold text-white transition-all hover:bg-accent-hover"
+          >
+            View All Services <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
       </div>
     );
   }
 
-  if (!service) {
-    return (
-      <PageHero title="Service Not Found">
-        <p className="mt-4 text-ink-muted">The service you're looking for doesn't exist or is no longer available.</p>
-        <Link to="/services" className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-accent">
-          View All Services <ArrowRight className="h-4 w-4" />
-        </Link>
-      </PageHero>
-    );
-  }
-
-  const relatedServices = allServices
-    .filter((s) => s.id !== service.id)
-    .slice(0, 3);
+  const relatedServices = allServices.filter((s) => s.id !== service.id).slice(0, 3);
+  const whatsAppHref = buildWhatsAppLink(
+    company.whatsapp,
+    `Hi ${company.name}, I'm interested in your ${content.name} service. Can you share more details?`
+  );
 
   return (
-    <div>
-      <PageHero
-        title={service.name}
-        description={service.description}
+    <div className="relative pb-28">
+      {/* Scroll progress bar */}
+      <motion.div
+        style={{ scaleX: progress }}
+        className="fixed inset-x-0 top-0 z-[60] h-0.5 origin-left bg-accent"
       />
 
-      {service.image && (
-        <section className="pb-0">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="overflow-hidden rounded-2xl border border-border">
-              <img
-                src={service.image}
-                alt={service.name}
-                className="h-64 w-full object-cover sm:h-80"
-              />
-            </div>
-          </div>
-        </section>
-      )}
+      {/* ── Hero banner ─────────────────────────────────────────────── */}
+      <section className="relative overflow-hidden bg-dark">
+        <div className="relative h-[52vh] min-h-[400px] w-full sm:h-[58vh]">
+          {content.heroImage ? (
+            <img
+              src={content.heroImage}
+              alt={content.name}
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+          ) : (
+            <div className="absolute inset-0 bg-gradient-to-br from-accent/40 via-accent/20 to-dark" />
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-dark via-dark/60 to-dark/30" />
+          <div className="absolute inset-0 bg-gradient-to-r from-dark/70 to-transparent" />
 
-      <section className="py-16 sm:py-20">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="grid gap-12 lg:grid-cols-3">
-            <div className="lg:col-span-2">
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5 }}
-              >
-                <h2 className="text-2xl font-bold text-ink">What's Included</h2>
-                <p className="mt-3 text-ink-muted leading-relaxed">
-                  Our {service.name.toLowerCase()} service covers every aspect from initial planning to final delivery. Here's what's included:
-                </p>
-                {service.features.length > 0 ? (
-                  <ul className="mt-6 space-y-3">
-                    {service.features.map((feature, index) => (
-                      <motion.li
-                        key={index}
-                        initial={{ opacity: 0, x: -12 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ duration: 0.3, delay: index * 0.05 }}
-                        className="flex items-start gap-3"
-                      >
-                        <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent/10 mt-0.5">
-                          <Check className="h-3 w-3 text-accent" />
-                        </div>
-                        <span className="text-sm text-ink">{feature}</span>
-                      </motion.li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="mt-6 text-sm text-ink-muted">
-                    Contact us for a detailed breakdown of what's included in this service.
-                  </p>
-                )}
-              </motion.div>
-
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: 0.2 }}
-                className="mt-12 rounded-2xl border border-border bg-surface p-8"
-              >
-                <h3 className="text-lg font-semibold text-ink">Our Approach</h3>
-                <p className="mt-3 text-sm text-ink-muted leading-relaxed">
-                  Every {service.name.toLowerCase()} project at Nexus follows our proven 6-step process. We begin with understanding your requirements, conduct a site visit, prepare a detailed quotation, and then execute with our vetted vendor network. Throughout the process, you receive regular updates through our Client Portal.
-                </p>
-                <div className="mt-6 flex flex-col sm:flex-row gap-3">
-                  <Link
-                    to="/get-quote"
-                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-accent px-6 py-3 text-sm font-semibold text-white transition-all hover:bg-accent-hover"
-                  >
-                    Get Quote for {service.name}
-                    <ArrowRight className="h-4 w-4" />
-                  </Link>
-                  <Link
-                    to="/how-it-works"
-                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-border px-6 py-3 text-sm font-semibold text-ink transition-all hover:bg-canvas"
-                  >
-                    Learn How It Works
-                  </Link>
-                </div>
-              </motion.div>
-            </div>
-
-            <div className="lg:col-span-1">
-              <div className="sticky top-24 space-y-6">
-                <div className="rounded-2xl border border-border bg-surface p-6">
-                  <h3 className="text-base font-semibold text-ink">Quick Actions</h3>
-                  <div className="mt-4 space-y-3">
-                    <Link
-                      to="/get-quote"
-                      className="flex items-center gap-3 rounded-xl bg-accent px-5 py-3 text-sm font-semibold text-white transition-all hover:bg-accent-hover"
-                    >
-                      <ArrowRight className="h-4 w-4" />
-                      Get Free Quote
+          <div className="relative mx-auto flex h-full max-w-7xl flex-col justify-end px-4 pb-14 sm:px-6 lg:px-8">
+            <motion.div
+              key={contentKey}
+              initial={{ opacity: 0, y: 24 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, ease: [0.25, 0.1, 0.25, 1] }}
+            >
+              <nav className="mb-5 flex items-center gap-2 text-xs font-medium text-white/60">
+                <Link to="/" className="transition-colors hover:text-white">Home</Link>
+                <ChevronRight className="h-3 w-3" />
+                <Link to="/services" className="transition-colors hover:text-white">Services</Link>
+                <ChevronRight className="h-3 w-3" />
+                {activeSub && (
+                  <>
+                    <Link to={`/services/${service.slug}`} className="transition-colors hover:text-white">
+                      {service.name}
                     </Link>
-                    <a
-                      href={`tel:${company.phone}`}
-                      className="flex items-center gap-3 rounded-xl border border-border px-5 py-3 text-sm font-medium text-ink transition-all hover:bg-canvas"
-                    >
-                      <Phone className="h-4 w-4 text-accent" />
-                      Call for Consultation
-                    </a>
-                  </div>
-                </div>
+                    <ChevronRight className="h-3 w-3" />
+                  </>
+                )}
+                <span className="text-white">{content.name}</span>
+              </nav>
 
-                {relatedServices.length > 0 && (
-                  <div className="rounded-2xl border border-border bg-surface p-6">
-                    <h3 className="text-base font-semibold text-ink">Related Services</h3>
-                    <div className="mt-4 space-y-2">
-                      {relatedServices.map((s) => (
-                        <Link
-                          key={s.id}
-                          to={`/services/${s.slug}`}
-                          className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-ink-muted transition-colors hover:bg-accent-subtle hover:text-accent"
-                        >
-                          {s.name}
-                          <ArrowRight className="ml-auto h-3 w-3" />
-                        </Link>
-                      ))}
-                    </div>
-                  </div>
+              <div className="flex flex-wrap items-center gap-3">
+                {service.category && (
+                  <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-medium text-white backdrop-blur-sm">
+                    {service.category}
+                  </span>
+                )}
+                {content.detail.startingPrice && (
+                  <span className="rounded-full bg-accent px-3 py-1 text-xs font-semibold text-white">
+                    From {content.detail.startingPrice}
+                  </span>
                 )}
               </div>
-            </div>
+
+              <h1 className="mt-4 max-w-3xl text-4xl font-bold tracking-tight text-white sm:text-5xl lg:text-6xl">
+                {content.name}
+              </h1>
+              <p className="mt-4 max-w-2xl text-base leading-relaxed text-white/80 sm:text-lg">
+                {content.shortDescription}
+              </p>
+
+              <div className="mt-7 flex flex-wrap items-center gap-3">
+                <Link
+                  to="/get-quote"
+                  className="inline-flex items-center gap-2 rounded-xl bg-accent px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-accent/30 transition-all hover:bg-accent-hover"
+                >
+                  Request Quote
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+                {company.phone && (
+                  <a
+                    href={`tel:${company.phone}`}
+                    className="inline-flex items-center gap-2 rounded-xl border border-white/25 bg-white/10 px-6 py-3 text-sm font-semibold text-white backdrop-blur-sm transition-all hover:bg-white/20"
+                  >
+                    <Phone className="h-4 w-4" />
+                    Call Now
+                  </a>
+                )}
+              </div>
+            </motion.div>
           </div>
         </div>
       </section>
+
+      {/* ── Sticky section navigation ───────────────────────────────── */}
+      <div className="sticky top-18 z-40 border-b border-border bg-surface/90 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-7xl items-center gap-1 overflow-x-auto px-4 py-2 sm:px-6 lg:px-8">
+          {SECTION_NAV.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => scrollToSection(item.id)}
+              className={cn(
+                'shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition-all',
+                activeSection === item.id
+                  ? 'bg-accent text-white shadow-sm'
+                  : 'text-ink-muted hover:bg-ink/5 hover:text-ink'
+              )}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Main content ────────────────────────────────────────────── */}
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        {/* Sub-service family navigation (horizontal cards) */}
+        {subServices.length > 0 && (
+          <div className="pt-10">
+            <SubServiceNav
+              serviceSlug={service.slug}
+              serviceName={service.name}
+              subServices={subServices}
+              activeSubSlug={activeSub?.slug}
+            />
+            {unknownSub && (
+              <div className="mt-3 flex items-center gap-2 rounded-xl border border-warning/30 bg-warning-subtle px-4 py-3 text-sm text-warning">
+                <Info className="h-4 w-4 shrink-0" />
+                This service option isn't available yet — showing all options above.
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Content area — crossfades smoothly when the sub-service changes */}
+        <motion.div
+          key={contentKey}
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35, ease: [0.25, 0.1, 0.25, 1] }}
+        >
+          <div className="grid gap-12 lg:grid-cols-3">
+            {/* Left column */}
+            <div className="lg:col-span-2 space-y-20 py-14">
+              {/* Overview */}
+              <section id="overview" data-scrollspy className="scroll-mt-36">
+                <FadeIn>
+                  <SectionHeading tag="Overview" title={`About ${content.name}`} />
+                  <div className="space-y-5">
+                    {content.detail.overview.map((paragraph, index) => (
+                      <p key={index} className="text-[15px] leading-relaxed text-ink-muted">
+                        {paragraph}
+                      </p>
+                    ))}
+                  </div>
+
+                  <div className="mt-8 grid gap-4 sm:grid-cols-3">
+                    {content.detail.startingPrice && (
+                      <div className="rounded-2xl border border-border bg-surface p-5">
+                        <IndianRupee className="h-5 w-5 text-accent" />
+                        <p className="mt-3 text-xs font-medium uppercase tracking-wider text-ink-faint">Starting Price</p>
+                        <p className="mt-1 text-lg font-bold text-ink">{content.detail.startingPrice}</p>
+                      </div>
+                    )}
+                    <div className="rounded-2xl border border-border bg-surface p-5">
+                      <Clock className="h-5 w-5 text-accent" />
+                      <p className="mt-3 text-xs font-medium uppercase tracking-wider text-ink-faint">Completion Time</p>
+                      <p className="mt-1 text-lg font-bold text-ink">{content.detail.completionTime}</p>
+                    </div>
+                    <div className="rounded-2xl border border-border bg-surface p-5">
+                      <ShieldCheck className="h-5 w-5 text-accent" />
+                      <p className="mt-3 text-xs font-medium uppercase tracking-wider text-ink-faint">Quality</p>
+                      <p className="mt-1 text-lg font-bold text-ink">Warranty + Support</p>
+                    </div>
+                  </div>
+                </FadeIn>
+              </section>
+
+              {/* What's Included */}
+              <section className="scroll-mt-36">
+                <FadeIn>
+                  <div className="rounded-3xl border border-border bg-surface p-8 sm:p-10">
+                    <SectionHeading tag="What's Included" title="Everything We Handle For You" />
+                    <StaggerGroup className="grid gap-3 sm:grid-cols-2">
+                      {content.detail.whatsIncluded.map((item) => (
+                        <StaggerItem key={item} className="flex items-start gap-3 rounded-xl bg-canvas p-4">
+                          <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent-subtle">
+                            <Check className="h-3 w-3 text-accent" />
+                          </div>
+                          <span className="text-sm text-ink">{item}</span>
+                        </StaggerItem>
+                      ))}
+                    </StaggerGroup>
+                  </div>
+                </FadeIn>
+              </section>
+
+              {/* Gallery */}
+              <section id="gallery" data-scrollspy className="scroll-mt-36">
+                <FadeIn>
+                  <SectionHeading tag="Gallery" title="Project Gallery" description="A glimpse of the quality and finish you can expect with this service." />
+                  <ServiceGallery images={content.detail.gallery} alt={content.name} />
+                </FadeIn>
+              </section>
+
+              {/* Key Features */}
+              <section id="features" data-scrollspy className="scroll-mt-36">
+                <SectionHeading tag="Key Features" title="Why Businesses Choose This Service" />
+                <StaggerGroup className="grid gap-4 sm:grid-cols-2">
+                  {content.detail.features.map((feature) => (
+                    <StaggerItem key={feature}>
+                      <div className="group h-full rounded-2xl border border-border bg-surface p-6 transition-all duration-300 hover:-translate-y-1 hover:border-accent/30 hover:shadow-lg hover:shadow-accent/5">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-subtle text-accent transition-colors group-hover:bg-accent group-hover:text-white">
+                          <Layers className="h-5 w-5" />
+                        </div>
+                        <p className="mt-4 text-sm font-medium text-ink leading-relaxed">{feature}</p>
+                      </div>
+                    </StaggerItem>
+                  ))}
+                </StaggerGroup>
+              </section>
+
+              {/* Process */}
+              <section id="process" data-scrollspy className="scroll-mt-36">
+                <SectionHeading
+                  tag="Our Process"
+                  title={`How ${content.name} Is Delivered`}
+                  description="A transparent, step-by-step journey from your first enquiry to final handover."
+                />
+                <div className="relative">
+                  <div className="absolute left-5 top-2 bottom-2 w-px bg-border" />
+                  <div className="space-y-6">
+                    {content.detail.process.map((step, index) => (
+                      <motion.div
+                        key={step.title}
+                        initial={{ opacity: 0, x: -16 }}
+                        whileInView={{ opacity: 1, x: 0 }}
+                        viewport={{ once: true, margin: '-40px' }}
+                        transition={{ duration: 0.4, delay: index * 0.08 }}
+                        className="relative flex gap-5 pl-0"
+                      >
+                        <div className="relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 border-accent bg-surface text-sm font-bold text-accent shadow-sm">
+                          {index + 1}
+                        </div>
+                        <div className="flex-1 rounded-2xl border border-border bg-surface p-5 transition-all duration-300 hover:border-accent/25 hover:shadow-md">
+                          <h3 className="text-base font-semibold text-ink">{step.title}</h3>
+                          <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">{step.description}</p>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+              </section>
+
+              {/* FAQ */}
+              <section id="faqs" data-scrollspy className="scroll-mt-36">
+                <SectionHeading tag="FAQs" title="Frequently Asked Questions" />
+                <FAQAccordion
+                  items={content.detail.faqs.map((f, index) => ({
+                    id: `service-faq-${contentKey}-${index}`,
+                    question: f.question,
+                    answer: f.answer,
+                    category: service.name,
+                  }))}
+                />
+              </section>
+
+              {/* Reviews */}
+              <section id="reviews" data-scrollspy className="scroll-mt-36">
+                <SectionHeading tag="Customer Reviews" title="What Our Clients Say" />
+                {content.detail.reviews.length > 0 ? (
+                  <StaggerGroup className="grid gap-4 sm:grid-cols-2">
+                    {content.detail.reviews.map((review, index) => (
+                      <StaggerItem key={index}>
+                        <TestimonialCard
+                          testimonial={{
+                            id: `service-review-${contentKey}-${index}`,
+                            name: review.name,
+                            role: review.role,
+                            company: review.company,
+                            content: review.content,
+                            rating: review.rating,
+                          }}
+                        />
+                      </StaggerItem>
+                    ))}
+                  </StaggerGroup>
+                ) : (
+                  <ScaleIn>
+                    <div className="flex flex-col items-center rounded-2xl border border-dashed border-border bg-surface p-10 text-center">
+                      <div className="flex gap-1">
+                        {Array.from({ length: 5 }).map((_, i) => (
+                          <Star key={i} className="h-5 w-5 text-border-strong" />
+                        ))}
+                      </div>
+                      <p className="mt-4 text-lg font-semibold text-ink">No reviews yet</p>
+                      <p className="mt-2 max-w-sm text-sm text-ink-muted">
+                        Be the first to experience {content.name} and share your feedback after your project is delivered.
+                      </p>
+                      <Link
+                        to="/get-quote"
+                        className="mt-6 inline-flex items-center gap-2 rounded-xl bg-accent px-6 py-3 text-sm font-semibold text-white transition-all hover:bg-accent-hover"
+                      >
+                        Get Started Today <ArrowRight className="h-4 w-4" />
+                      </Link>
+                    </div>
+                  </ScaleIn>
+                )}
+              </section>
+            </div>
+
+            {/* Right column — sticky quick actions */}
+            <aside className="hidden lg:block">
+              <div className="sticky top-40 space-y-6 py-14">
+                <FadeIn direction="none">
+                  <div className="overflow-hidden rounded-3xl border border-border bg-surface shadow-sm">
+                    <div className="bg-gradient-to-br from-accent to-[#2d3abf] p-6 text-white">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-white/70">Get started</p>
+                      <h3 className="mt-2 text-xl font-bold">Interested in this service?</h3>
+                      <p className="mt-2 text-sm text-white/80">
+                        Get a free consultation and a detailed quotation within 24 hours.
+                      </p>
+                    </div>
+                    <div className="space-y-3 p-6">
+                      <Link
+                        to="/get-quote"
+                        className="flex items-center justify-center gap-2 rounded-xl bg-accent px-5 py-3.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-accent-hover"
+                      >
+                        Request Quote
+                        <ArrowRight className="h-4 w-4" />
+                      </Link>
+                      {company.phone && (
+                        <a
+                          href={`tel:${company.phone}`}
+                          className="flex items-center justify-center gap-2 rounded-xl border border-border px-5 py-3.5 text-sm font-semibold text-ink transition-all hover:bg-canvas"
+                        >
+                          <Phone className="h-4 w-4 text-accent" />
+                          Call Now
+                        </a>
+                      )}
+                      {whatsAppHref && (
+                        <a
+                          href={whatsAppHref}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center justify-center gap-2 rounded-xl bg-[#25D366]/10 px-5 py-3.5 text-sm font-semibold text-[#128C7E] transition-all hover:bg-[#25D366]/20"
+                        >
+                          <MessageCircle className="h-4 w-4" />
+                          WhatsApp Us
+                        </a>
+                      )}
+                      <div className="flex items-center gap-2 rounded-xl bg-canvas px-4 py-3 text-xs text-ink-muted">
+                        <Quote className="h-4 w-4 text-accent shrink-0" />
+                        Free consultation · No obligation · Response within 24 hrs
+                      </div>
+                    </div>
+                  </div>
+                </FadeIn>
+
+                <FadeIn direction="none" delay={0.15}>
+                  <div className="rounded-3xl border border-border bg-surface p-6">
+                    <div className="flex items-center gap-2">
+                      <Users className="h-4 w-4 text-accent" />
+                      <h3 className="text-sm font-semibold text-ink">Quick Service Facts</h3>
+                    </div>
+                    <dl className="mt-4 space-y-3 text-sm">
+                      <div className="flex items-center justify-between gap-3">
+                        <dt className="text-ink-muted">Service type</dt>
+                        <dd className="font-medium text-ink">{service.category || 'Managed'}</dd>
+                      </div>
+                      {content.detail.startingPrice && (
+                        <div className="flex items-center justify-between gap-3">
+                          <dt className="text-ink-muted">Starting price</dt>
+                          <dd className="font-medium text-ink">{content.detail.startingPrice}</dd>
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between gap-3">
+                        <dt className="text-ink-muted">Timeline</dt>
+                        <dd className="font-medium text-ink">{content.detail.completionTime.split('depending')[0]}</dd>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <dt className="text-ink-muted">Warranty</dt>
+                        <dd className="font-medium text-ink">Included</dd>
+                      </div>
+                    </dl>
+                  </div>
+                </FadeIn>
+              </div>
+            </aside>
+          </div>
+        </motion.div>
+
+        {/* Related services */}
+        {relatedServices.length > 0 && (
+          <section className="py-16">
+            <SectionHeading tag="Related Services" title="Explore More Services" />
+            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {relatedServices.map((related, index) => (
+                <ServiceCard
+                  key={related.id}
+                  name={related.name}
+                  slug={related.slug}
+                  description={related.shortDescription}
+                  icon={related.icon}
+                  image={related.image}
+                  index={index}
+                  variant="featured"
+                />
+              ))}
+            </div>
+          </section>
+        )}
+      </div>
+
+      {/* ── Sticky bottom CTA ───────────────────────────────────────── */}
+      <AnimatePresence>
+        {showStickyCta && (
+          <motion.div
+            initial={{ y: 100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 100, opacity: 0 }}
+            transition={{ duration: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
+            className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-surface/90 shadow-lg backdrop-blur-xl"
+          >
+            <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3 sm:px-6 lg:px-8">
+              <div className="hidden min-w-0 flex-1 sm:block">
+                <p className="truncate text-sm font-semibold text-ink">{content.name}</p>
+                {content.detail.startingPrice && <p className="text-xs text-ink-muted">From {content.detail.startingPrice}</p>}
+              </div>
+              <div className="flex flex-1 gap-2 sm:flex-none sm:gap-3">
+                <Link
+                  to="/get-quote"
+                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-accent px-5 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:bg-accent-hover sm:flex-none"
+                >
+                  Request Quote
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+                {company.phone && (
+                  <a
+                    href={`tel:${company.phone}`}
+                    aria-label="Call now"
+                    className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-border px-4 py-3 text-sm font-semibold text-ink transition-all hover:bg-canvas sm:flex-none"
+                  >
+                    <Phone className="h-4 w-4 text-accent" />
+                    <span className="sm:hidden">Call</span>
+                    <span className="hidden sm:inline">Call Now</span>
+                  </a>
+                )}
+                {whatsAppHref && (
+                  <a
+                    href={whatsAppHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="Chat on WhatsApp"
+                    className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-[#25D366]/10 px-4 py-3 text-sm font-semibold text-[#128C7E] transition-all hover:bg-[#25D366]/20 sm:flex-none"
+                  >
+                    <MessageCircle className="h-4 w-4" />
+                    <span className="sm:hidden">WhatsApp</span>
+                    <span className="hidden sm:inline">WhatsApp</span>
+                  </a>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
+
+export type { SubServiceConfig };

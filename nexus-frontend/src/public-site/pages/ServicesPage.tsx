@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
 import { usePublicServices } from '@/queries/usePublicServices';
@@ -7,6 +7,8 @@ import { ServiceCard } from '../components/ServiceCard';
 
 export function ServicesPage() {
   const { data: services = [], isLoading } = usePublicServices();
+  const { pathname } = useLocation();
+  const activeSlug = pathname.split('/').pop() ?? '';
 
   return (
     <div>
@@ -42,6 +44,7 @@ export function ServicesPage() {
                   image={service.image}
                   index={index}
                   variant="featured"
+                  active={service.slug === activeSlug}
                 />
               ))}
             </div>

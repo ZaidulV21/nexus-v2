@@ -1,8 +1,9 @@
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { ArrowRight, Palette, Sun, Zap, Camera, Monitor, Globe, ShoppingCart, ShieldCheck } from 'lucide-react';
 import { usePublicServices } from '@/queries/usePublicServices';
 import { SectionHeader } from '../components/SectionHeader';
 import { FadeIn } from '../components/motion';
+import { cn } from '@/lib/utils';
 
 const iconMap: Record<string, React.ElementType> = {
   Palette, Sun, Zap, Camera, Monitor, Globe, ShoppingCart, ShieldCheck,
@@ -16,6 +17,8 @@ function ServiceImage({ src, alt, className }: { src: string; alt: string; class
 
 export function ServicesSection() {
   const { data: services = [], isLoading } = usePublicServices();
+  const { pathname } = useLocation();
+  const activeSlug = pathname.split('/').pop() ?? '';
 
   if (isLoading || services.length === 0) return null;
 
@@ -43,8 +46,14 @@ export function ServicesSection() {
                   <FadeIn key={service.id} delay={index * 0.1}>
                     <Link
                       to={`/services/${service.slug}`}
-                      className="group block h-full rounded-2xl border border-border bg-canvas overflow-hidden transition-all duration-300 hover:border-accent/25 hover:shadow-lg hover:shadow-accent/5"
+                      className={cn(
+                        'group relative block h-full rounded-2xl border border-border bg-canvas overflow-hidden transition-all duration-300 hover:border-accent/25 hover:shadow-lg hover:shadow-accent/5',
+                        activeSlug === service.slug && 'border-accent ring-2 ring-accent/30 shadow-lg shadow-accent/10'
+                      )}
                     >
+                      {activeSlug === service.slug && (
+                        <span className="absolute top-3 right-3 z-10 rounded-full bg-accent px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-white shadow-sm">Viewing</span>
+                      )}
                       {service.image ? (
                         <div className="relative h-48 overflow-hidden">
                           <ServiceImage src={service.image} alt={service.name} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
@@ -97,8 +106,14 @@ export function ServicesSection() {
                   <FadeIn key={service.id} delay={0.1 + index * 0.08}>
                     <Link
                       to={`/services/${service.slug}`}
-                      className="group block h-full rounded-2xl border border-border bg-surface overflow-hidden transition-all duration-300 hover:border-accent/25 hover:shadow-md hover:-translate-y-0.5"
+                      className={cn(
+                        'group relative block h-full rounded-2xl border border-border bg-surface overflow-hidden transition-all duration-300 hover:border-accent/25 hover:shadow-md hover:-translate-y-0.5',
+                        activeSlug === service.slug && 'border-accent ring-2 ring-accent/30 shadow-md shadow-accent/10'
+                      )}
                     >
+                      {activeSlug === service.slug && (
+                        <span className="absolute top-3 right-3 z-10 rounded-full bg-accent px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-white shadow-sm">Viewing</span>
+                      )}
                       {service.image ? (
                         <div className="relative h-32 overflow-hidden">
                           <ServiceImage src={service.image} alt={service.name} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
@@ -132,8 +147,14 @@ export function ServicesSection() {
                   <FadeIn key={service.id} delay={0.2 + index * 0.1}>
                     <Link
                       to={`/services/${service.slug}`}
-                      className="group block h-full rounded-2xl border border-border bg-canvas overflow-hidden transition-all duration-300 hover:border-accent/25 hover:shadow-lg hover:shadow-accent/5"
+                      className={cn(
+                        'group relative block h-full rounded-2xl border border-border bg-canvas overflow-hidden transition-all duration-300 hover:border-accent/25 hover:shadow-lg hover:shadow-accent/5',
+                        activeSlug === service.slug && 'border-accent ring-2 ring-accent/30 shadow-lg shadow-accent/10'
+                      )}
                     >
+                      {activeSlug === service.slug && (
+                        <span className="absolute top-3 right-3 z-10 rounded-full bg-accent px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-white shadow-sm">Viewing</span>
+                      )}
                       {service.image ? (
                         <div className="relative h-44 overflow-hidden">
                           <ServiceImage src={service.image} alt={service.name} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />

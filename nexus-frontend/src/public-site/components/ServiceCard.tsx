@@ -11,6 +11,8 @@ interface ServiceCardProps {
   image?: string;
   index?: number;
   variant?: 'default' | 'featured';
+  /** Highlights the card as the currently selected/active service. */
+  active?: boolean;
 }
 
 const iconMap: Record<string, string> = {
@@ -24,7 +26,7 @@ const iconMap: Record<string, string> = {
   ShieldCheck: '🛡️',
 };
 
-export function ServiceCard({ name, slug, description, icon, image, index = 0, variant = 'default' }: ServiceCardProps) {
+export function ServiceCard({ name, slug, description, icon, image, index = 0, variant = 'default', active = false }: ServiceCardProps) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 24 }}
@@ -35,11 +37,19 @@ export function ServiceCard({ name, slug, description, icon, image, index = 0, v
       <Link
         to={`/services/${slug}`}
         className={cn(
-          'group block h-full rounded-2xl border border-border bg-surface overflow-hidden transition-all duration-300',
+          'group relative block h-full rounded-2xl border bg-surface overflow-hidden transition-all duration-300',
           'hover:border-accent/30 hover:shadow-lg hover:shadow-accent/5 hover:-translate-y-1',
-          variant === 'featured' && 'sm:p-0'
+          variant === 'featured' && 'sm:p-0',
+          active
+            ? 'border-accent ring-2 ring-accent/30 shadow-lg shadow-accent/10'
+            : 'border-border'
         )}
       >
+        {active && (
+          <span className="absolute top-3 right-3 z-10 rounded-full bg-accent px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-white shadow-sm">
+            Viewing
+          </span>
+        )}
         {image ? (
           <div className="relative h-44 overflow-hidden bg-canvas">
             <img
