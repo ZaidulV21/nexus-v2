@@ -435,6 +435,12 @@ export const clientService = {
     return clientRepository.listLeads(id);
   },
 
+  async getServices(id: string) {
+    const client = await clientRepository.findById(id);
+    if (!client) throw new NotFoundError('Client not found');
+    return (await clientRepository.listServices(id)) ?? [];
+  },
+
   async list(pagination: any) {
     return clientRepository.list(pagination);
   },

@@ -3,6 +3,7 @@ import { z } from 'zod';
 const itemSchema = z.object({
   description: z.string().min(1),
   quantity: z.number().positive(),
+  unit: z.string().optional(),
   unitPrice: z.number().nonnegative(),
   hsnSacCode: z.string().min(1),
   taxRate: z.number().min(0).max(100),

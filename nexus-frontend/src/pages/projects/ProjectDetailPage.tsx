@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ChevronRight, CreditCard, Download, ExternalLink, FilePlus2, FileText, FolderKanban, Mail, Plus, Trash2 } from 'lucide-react';
+import { ChevronRight, CreditCard, Download, ExternalLink, FilePlus2, FileText, FolderKanban, Mail } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
@@ -12,6 +12,8 @@ import { Modal, ModalClose, ModalContent } from '@/components/ui/Modal';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
+import { LineItemsEditor, newBuilderLine, type BuilderLine, type BuilderLineField, type BuilderLineErrors } from '@/components/documents/LineItemsEditor';
+import { DocumentTotalsSummary } from '@/components/documents/DocumentTotalsSummary';
 import { EntityAuditLog } from '@/components/common/EntityAuditLog';
 import { EntityTimeline } from '@/components/common/EntityTimeline';
 import { useToast } from '@/hooks/useToast';
@@ -200,20 +202,13 @@ function ProjectQuotation({ project }: { project: Project }) {
   );
 }
 
-interface InvoiceItemForm {
-  description: string;
-  quantity: string;
-  unitPrice: string;
+interface InvoiceItemForm extends BuilderLine {
   hsnSacCode: string;
-  taxRate: string;
 }
 
 const emptyInvoiceItem: InvoiceItemForm = {
-  description: '',
-  quantity: '1',
-  unitPrice: '',
+  ...newBuilderLine(),
   hsnSacCode: '',
-  taxRate: '',
 };
 
 function GenerateInvoiceModal({
@@ -239,6 +234,7 @@ function GenerateInvoiceModal({
         items: items.map((item) => ({
           description: item.description,
           quantity: Number(item.quantity),
+          unit: item.unit || 'None',
           unitPrice: Number(item.unitPrice),
           hsnSacCode: item.hsnSacCode,
           taxRate: Number(item.taxRate),
@@ -257,14 +253,24 @@ function GenerateInvoiceModal({
     }
   }
 
-  function updateItem(index: number, key: keyof InvoiceItemForm, value: string) {
-    setItems((current) => current.map((item, itemIndex) => (itemIndex === index ? { ...item, [key]: value } : item)));
+  function updateItem(index: number, field: BuilderLineField, value: string) {
+    setItems((current) => current.map((item, itemIndex) => (itemIndex === index ? { ...item, [field]: value } : item)));
   }
+
+  function addItem() {
+    setItems((current) => [...current, { ...emptyInvoiceItem }]);
+  }
+
+  function removeItem(index: number) {
+    setItems((current) => (current.length === 1 ? current : current.filter((_, itemIndex) => itemIndex !== index)));
+  }
+
+  const itemErrors: BuilderLineErrors[] = items.map(() => ({}));
 
   return (
     <Modal open={open} onOpenChange={onOpenChange}>
       <ModalContent title="Generate invoice" description={`Project ${project.projectNumber}`} className="max-w-2xl">
-        <div className="flex flex-col gap-4">
+        <div className="flex max-h-[75vh] flex-col gap-4">
           <FormField label="Invoice label" htmlFor="invoice-label">
             <Input
               id="invoice-label"
@@ -274,87 +280,37 @@ function GenerateInvoiceModal({
             />
           </FormField>
 
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium text-ink">Line items</p>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => setItems((current) => [...current, { ...emptyInvoiceItem }])}
-              >
-                <Plus className="h-3.5 w-3.5" /> Add item
-              </Button>
-            </div>
-            {items.map((item, index) => (
-              <div key={index} className="grid gap-3 rounded border border-border bg-canvas p-3 sm:grid-cols-2">
-                <FormField label="Description" htmlFor={`invoice-item-description-${index}`}>
-                  <Input
-                    id={`invoice-item-description-${index}`}
-                    value={item.description}
-                    onChange={(event) => updateItem(index, 'description', event.target.value)}
-                  />
-                </FormField>
-                <FormField label="HSN/SAC" htmlFor={`invoice-item-hsn-${index}`}>
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
+            <LineItemsEditor
+              items={items}
+              onUpdate={updateItem}
+              onAdd={addItem}
+              onRemove={removeItem}
+              errors={itemErrors}
+              renderExtraColumn={(index) => (
+                <FormField label="HSN/SAC" error={itemErrors[index]?.hsnSacCode}>
                   <Input
                     id={`invoice-item-hsn-${index}`}
-                    value={item.hsnSacCode}
+                    value={items[index]?.hsnSacCode ?? ''}
                     onChange={(event) => updateItem(index, 'hsnSacCode', event.target.value)}
                   />
                 </FormField>
-                <FormField label="Quantity" htmlFor={`invoice-item-quantity-${index}`}>
-                  <Input
-                    id={`invoice-item-quantity-${index}`}
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={item.quantity}
-                    onChange={(event) => updateItem(index, 'quantity', event.target.value)}
-                  />
-                </FormField>
-                <FormField label="Unit price" htmlFor={`invoice-item-price-${index}`}>
-                  <Input
-                    id={`invoice-item-price-${index}`}
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={item.unitPrice}
-                    onChange={(event) => updateItem(index, 'unitPrice', event.target.value)}
-                  />
-                </FormField>
-                <FormField label="Tax rate" htmlFor={`invoice-item-tax-${index}`}>
-                  <Input
-                    id={`invoice-item-tax-${index}`}
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="0.01"
-                    value={item.taxRate}
-                    onChange={(event) => updateItem(index, 'taxRate', event.target.value)}
-                  />
-                </FormField>
-                <div className="flex items-end justify-end">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={items.length === 1}
-                    onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" /> Remove
-                  </Button>
-                </div>
-              </div>
-            ))}
+              )}
+            />
           </div>
 
-          <div className="flex justify-end gap-2">
-            <ModalClose asChild>
-              <Button variant="secondary" size="sm">
-                Cancel
+          <div className="space-y-3 border-t border-border pt-3">
+            <DocumentTotalsSummary items={items} />
+            <div className="flex justify-end gap-2">
+              <ModalClose asChild>
+                <Button variant="secondary" size="sm">
+                  Cancel
+                </Button>
+              </ModalClose>
+              <Button size="sm" loading={createInvoice.isPending} onClick={handleSubmit}>
+                Generate Invoice
               </Button>
-            </ModalClose>
-            <Button size="sm" loading={createInvoice.isPending} onClick={handleSubmit}>
-              Generate Invoice
-            </Button>
+            </div>
           </div>
         </div>
       </ModalContent>

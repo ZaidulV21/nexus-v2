@@ -147,6 +147,44 @@ export const clientRepository = {
     });
   },
 
+  // Distinct catalog services that belong to the Client's account: every
+  // Lead Service across the Client's Leads that has actually been attached
+  // (convertedAt set). Powers the quotation builder's client-scoped service
+  // dropdown - a Client only ever picks from their own active service history.
+  async listServices(clientId: string) {
+    const client = await prisma.client.findFirst({
+      where: { id: clientId, deletedAt: null },
+      select: { sourceLeadId: true },
+    });
+    if (!client) return null;
+
+    const leads = await prisma.lead.findMany({
+      where: { OR: [{ clientId }, { id: client.sourceLeadId }], deletedAt: null },
+      select: {
+        leadServices: {
+          where: { convertedAt: { not: null } },
+          select: {
+            service: {
+              select: {
+                id: true,
+                name: true,
+                category: { select: { name: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const seen = new Map<string, { id: string; name: string; category: { name: string } | null }>();
+    leads.forEach((lead) =>
+      lead.leadServices.forEach((ls) => {
+        if (!seen.has(ls.service.id)) seen.set(ls.service.id, ls.service);
+      })
+    );
+    return Array.from(seen.values());
+  },
+
   async list(pagination: PaginationParams) {
     const where: any = { deletedAt: null };
     if (pagination.search) {

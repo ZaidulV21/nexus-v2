@@ -201,6 +201,7 @@ export interface QuotationItem {
   serviceId: string;
   description: string;
   quantity: string;
+  unit?: string;
   unitPrice: string;
   taxRate: string;
   taxAmount: string;
@@ -272,6 +273,7 @@ export interface InvoiceItem {
   id: string;
   description: string;
   quantity: string;
+  unit?: string;
   unitPrice: string;
   hsnSacCode: string;
   taxRate: string;

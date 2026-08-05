@@ -34,6 +34,14 @@ export function useClientLeads(clientId: string | undefined) {
   });
 }
 
+export function useClientServices(clientId: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.clients.services(clientId ?? ''),
+    queryFn: () => clientService.getServices(clientId as string),
+    enabled: !!clientId,
+  });
+}
+
 export function useUpdateClient(clientId: string) {
   const queryClient = useQueryClient();
   return useMutation({

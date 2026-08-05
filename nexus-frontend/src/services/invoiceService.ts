@@ -23,6 +23,7 @@ export interface CreateInvoiceInput {
   items: Array<{
     description: string;
     quantity: number;
+    unit?: string;
     unitPrice: number;
     hsnSacCode: string;
     taxRate: number;

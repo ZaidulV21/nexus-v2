@@ -17,7 +17,7 @@ function computeInvoiceTotals(items: InvoiceItemInput[]) {
     const taxAmount = (lineBase * item.taxRate) / 100;
     subtotal += lineBase;
     gstAmount += taxAmount;
-    return { ...item, taxAmount, lineTotal: lineBase + taxAmount };
+    return { ...item, unit: item.unit || 'None', taxAmount, lineTotal: lineBase + taxAmount };
   });
   return { computedItems, subtotal, gstAmount, grandTotal: subtotal + gstAmount };
 }

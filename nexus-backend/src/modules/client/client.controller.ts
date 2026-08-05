@@ -92,6 +92,15 @@ export const clientController = {
     }
   },
 
+  async getServices(req: Request, res: Response, next: NextFunction) {
+    try {
+      const services = await clientService.getServices(req.params.id);
+      return ok(res, services);
+    } catch (err) {
+      next(err);
+    }
+  },
+
   async list(req: Request, res: Response, next: NextFunction) {
     try {
       const pagination = parsePagination(req);

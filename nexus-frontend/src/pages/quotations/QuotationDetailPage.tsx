@@ -210,7 +210,7 @@ export function QuotationDetailPage() {
                                 <div key={item.id} className="flex items-start justify-between gap-3 px-3 py-2">
                                   <div>
                                     <p className="text-sm font-medium text-ink">{item.description}</p>
-                                    <p className="text-xs text-ink-muted">{item.quantity} × {formatCurrency(item.unitPrice)} · Tax {item.taxRate}%</p>
+                                    <p className="text-xs text-ink-muted">{item.quantity} {item.unit ?? 'None'} × {formatCurrency(item.unitPrice)} · Tax {item.taxRate}%</p>
                                   </div>
                                   <span className="text-sm font-medium text-ink">{formatCurrency(item.lineTotal)}</span>
                                 </div>

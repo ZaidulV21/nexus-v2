@@ -86,6 +86,31 @@ describe('quotationService.create - Client-only workflow', () => {
     expect(createCall.grandTotal).toBe(1770);
   });
 
+  it('persists the measurement unit on each line item, defaulting to None when omitted', async () => {
+    const { clientRepository } = jest.requireMock('../../client/client.repository');
+    (clientRepository.findById as jest.Mock).mockResolvedValue({ id: 'client1', sourceLeadId: 'lead1' });
+    (quotationRepository.create as jest.Mock).mockResolvedValue({ id: 'quo1', quotationNumber: 'Q-00001' });
+    (quotationVersionRepository.create as jest.Mock).mockResolvedValue({ id: 'ver1', versionNumber: 1 });
+    (quotationRepository.findById as jest.Mock).mockResolvedValue({ id: 'quo1', clientId: 'client1', client: {} });
+
+    await quotationService.create(
+      {
+        clientId: 'client1',
+        leadId: 'lead1',
+        items: [
+          { serviceId: 'svc1', description: 'Ceramic Tiles', quantity: 150, unit: 'Sq Ft', unitPrice: 80, taxRate: 18 },
+          { serviceId: 'svc2', description: 'Design Fee', quantity: 1, unitPrice: 10000, taxRate: 18 },
+        ],
+      },
+      'admin1'
+    );
+
+    const createItemsCall = (quotationVersionRepository.createItems as jest.Mock).mock.calls[0];
+    expect(createItemsCall[1][0].unit).toBe('Sq Ft');
+    expect(createItemsCall[1][1].unit).toBe('None');
+    expect(createItemsCall[1].every((item: any) => item.lineTotal === item.quantity * item.unitPrice * 1.18)).toBe(true);
+  });
+
   it('advances QUOTE PREPARING services to QUOTE SENT when the first quotation for a Client is created', async () => {
     const { clientRepository } = jest.requireMock('../../client/client.repository');
     (clientRepository.findById as jest.Mock).mockResolvedValue({ id: 'client1', sourceLeadId: 'lead1' });

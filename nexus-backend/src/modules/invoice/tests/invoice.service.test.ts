@@ -48,6 +48,10 @@ import { auditService } from '../../audit/audit.service';
 import { notificationsService } from '../../notifications/notifications.service';
 
 describe('invoiceService.create - GST totals', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   it('computes GST correctly across line items with different tax rates', async () => {
     (projectRepository.findById as jest.Mock).mockResolvedValue({
       id: 'proj1',
@@ -75,6 +79,35 @@ describe('invoiceService.create - GST totals', () => {
     expect(createCall.subtotal).toBe(15000);
     expect(createCall.gstAmount).toBe(2400);
     expect(createCall.grandTotal).toBe(17400);
+  });
+
+  it('persists the measurement unit on each line item, defaulting to None when omitted', async () => {
+    (projectRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'proj1',
+      clientId: 'client1',
+      projectServices: [{ assignedQuotationVersion: { quotation: { status: 'APPROVED' }, approvals: [] } }],
+    });
+    (invoiceRepository.create as jest.Mock).mockResolvedValue({ id: 'inv1', invoiceNumber: 'INV/2026-27/00001' });
+    (invoiceRepository.findById as jest.Mock).mockResolvedValue({ id: 'inv1' });
+
+    await invoiceService.create(
+      {
+        projectId: 'proj1',
+        clientId: 'client1',
+        label: 'Advance',
+        items: [
+          { description: 'Ceramic Tiles', quantity: 150, unit: 'Sq Ft', unitPrice: 80, hsnSacCode: '6907', taxRate: 18 },
+          { description: 'Design Fee', quantity: 1, unitPrice: 10000, hsnSacCode: '9954', taxRate: 18 },
+        ],
+      },
+      'admin1'
+    );
+
+    const createItemsCall = (invoiceRepository.createItems as jest.Mock).mock.calls[0];
+    const items = createItemsCall[1] as any[];
+    expect(items[0].unit).toBe('Sq Ft');
+    expect(items[1].unit).toBe('None');
+    expect(items.every((item) => item.lineTotal === item.quantity * item.unitPrice * 1.18)).toBe(true);
   });
 });
 

@@ -27,6 +27,7 @@ function computeTotals(items: QuotationItemInput[], discount: number, transporta
       serviceName: item.serviceName ?? null,
       description: item.description,
       quantity: item.quantity,
+      unit: item.unit || 'None',
       unitPrice: item.unitPrice,
       taxRate: item.taxRate,
       taxAmount,

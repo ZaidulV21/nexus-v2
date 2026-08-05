@@ -12,6 +12,7 @@ jest.mock('../client.repository', () => ({
     updateAccountStatus: jest.fn(),
     list: jest.fn(),
     getSummary: jest.fn(),
+    listServices: jest.fn(),
   },
 }));
 jest.mock('../../lead/lead.repository', () => ({
@@ -467,5 +468,38 @@ describe('clientService.getSummary', () => {
     (clientRepository.getSummary as jest.Mock).mockResolvedValue(null);
 
     await expect(clientService.getSummary('nonexistent')).rejects.toThrow('Client not found');
+  });
+});
+
+describe('clientService.getServices', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('returns the distinct services attached to a client', async () => {
+    (clientRepository.findById as jest.Mock).mockResolvedValue({ id: 'client1', sourceLeadId: 'lead1' });
+    (clientRepository.listServices as jest.Mock).mockResolvedValue([
+      { id: 'svc1', name: 'Interior Design', category: { name: 'Design' } },
+      { id: 'svc2', name: 'Electrical', category: null },
+    ]);
+
+    const services = await clientService.getServices('client1');
+    expect(services).toHaveLength(2);
+    expect(services[0].name).toBe('Interior Design');
+    expect(clientRepository.listServices).toHaveBeenCalledWith('client1');
+  });
+
+  it('returns an empty list when the client has no attached services', async () => {
+    (clientRepository.findById as jest.Mock).mockResolvedValue({ id: 'client1', sourceLeadId: 'lead1' });
+    (clientRepository.listServices as jest.Mock).mockResolvedValue([]);
+
+    const services = await clientService.getServices('client1');
+    expect(services).toEqual([]);
+  });
+
+  it('throws NotFoundError for a non-existent client', async () => {
+    (clientRepository.findById as jest.Mock).mockResolvedValue(null);
+
+    await expect(clientService.getServices('nonexistent')).rejects.toThrow('Client not found');
   });
 });

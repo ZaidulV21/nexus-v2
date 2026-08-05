@@ -16,6 +16,7 @@ router.post('/:id/send-welcome', authenticate, authorize('client.edit'), clientC
 router.patch('/:id/active', authenticate, authorize('client.edit'), clientController.toggleActive);
 router.get('/:id/summary', authenticate, authorize('client.view'), clientController.getSummary);
 router.get('/:id/leads', authenticate, authorize('client.view'), clientController.listLeads);
+router.get('/:id/services', authenticate, authorize('client.view'), clientController.getServices);
 router.get('/:id', authenticate, authorize('client.view'), clientController.getById);
 router.patch('/:id', authenticate, authorize('client.edit'), clientController.update);
 

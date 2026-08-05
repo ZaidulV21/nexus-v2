@@ -4,6 +4,7 @@ const itemSchema = z.object({
   serviceId: z.string().uuid(),
   description: z.string().min(1),
   quantity: z.number().positive(),
+  unit: z.string().optional(),
   unitPrice: z.number().nonnegative(),
   taxRate: z.number().min(0).max(100),
 });

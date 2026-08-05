@@ -141,7 +141,7 @@ function InvoiceOverview({ invoice }: { invoice: Invoice }) {
                   <div>
                     <p className="text-sm font-medium text-ink">{item.description}</p>
                     <p className="text-xs text-ink-faint">
-                      HSN/SAC {item.hsnSacCode} | {item.quantity} x {formatCurrency(item.unitPrice)} | GST {item.taxRate}%
+                      HSN/SAC {item.hsnSacCode} | {item.quantity} {item.unit ?? 'None'} x {formatCurrency(item.unitPrice)} | GST {item.taxRate}%
                     </p>
                   </div>
                   <div className="text-sm text-ink-muted">

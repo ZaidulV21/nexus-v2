@@ -14,6 +14,7 @@ export const queryKeys = {
     detail: (id: string) => ['clients', 'detail', id] as const,
     summary: (id: string) => ['clients', 'summary', id] as const,
     leads: (id: string) => ['clients', 'leads', id] as const,
+    services: (id: string) => ['clients', 'services', id] as const,
   },
   services: {
     all: ['services'] as const,

@@ -127,7 +127,7 @@ function InvoiceSummary({ invoice }: { invoice: Invoice }) {
                   <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-ink-faint">
                     <th className="pb-2 pr-4 font-medium">Description</th>
                     <th className="pb-2 pr-4 font-medium">HSN/SAC</th>
-                    <th className="pb-2 pr-4 text-right font-medium">Qty</th>
+                    <th className="pb-2 pr-4 text-right font-medium">Qty / Unit</th>
                     <th className="pb-2 pr-4 text-right font-medium">Unit price</th>
                     <th className="pb-2 pr-4 text-right font-medium">Tax</th>
                     <th className="pb-2 text-right font-medium">Total</th>
@@ -138,7 +138,10 @@ function InvoiceSummary({ invoice }: { invoice: Invoice }) {
                     <tr key={item.id}>
                       <td className="py-2.5 pr-4 text-ink">{item.description}</td>
                       <td className="py-2.5 pr-4 font-mono text-ink-muted">{item.hsnSacCode}</td>
-                      <td className="py-2.5 pr-4 text-right text-ink-muted">{Number(item.quantity)}</td>
+                      <td className="py-2.5 pr-4 text-right text-ink-muted">
+                        {Number(item.quantity)}
+                        {item.unit && item.unit !== 'None' ? ` ${item.unit}` : ''}
+                      </td>
                       <td className="py-2.5 pr-4 text-right text-ink-muted">{formatCurrency(item.unitPrice)}</td>
                       <td className="py-2.5 pr-4 text-right text-ink-muted">
                         {Number(item.taxRate)}% ({formatCurrency(item.taxAmount)})

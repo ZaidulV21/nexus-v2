@@ -42,6 +42,12 @@ export interface ClientSummaryData {
   serviceHistory: ClientServiceHistoryItem[];
 }
 
+export interface ClientService {
+  id: string;
+  name: string;
+  category: { name: string } | null;
+}
+
 // Convert-to-Client is exposed here (rather than deferred to the Clients
 // module build) because it is triggered from the Lead workflow itself -
 // PRD: "normally occurs when the quotation is accepted and the project is
@@ -64,4 +70,5 @@ export const clientService = {
   toggleActive: (id: string, isActive: boolean) => api.patch<Client>(`/clients/${id}/active`, { isActive }),
   getSummary: (id: string) => api.get<ClientSummaryData>(`/clients/${id}/summary`),
   getLeads: (id: string) => api.get<Array<{ id: string; leadNumber: string; contactName: string; companyName: string | null; createdAt: string }>>(`/clients/${id}/leads`),
+  getServices: (id: string) => api.get<ClientService[]>(`/clients/${id}/services`),
 };

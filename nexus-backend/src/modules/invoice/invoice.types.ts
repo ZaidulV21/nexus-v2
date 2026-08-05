@@ -1,6 +1,7 @@
 export interface InvoiceItemInput {
   description: string;
   quantity: number;
+  unit?: string;
   unitPrice: number;
   hsnSacCode: string;
   taxRate: number;
