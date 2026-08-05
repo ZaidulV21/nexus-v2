@@ -168,7 +168,18 @@ export function QuotationFormDrawer({
 
   const itemErrorList = errors.items;
   const itemErrors: BuilderLineErrors[] = Array.isArray(itemErrorList)
-    ? itemErrorList.map((entry) => ((entry as BuilderLineErrors | undefined) ?? {}))
+    ? itemErrorList.map((entry) => {
+        const fieldErrors = (entry ?? {}) as Record<string, { message?: string } | undefined>;
+        return {
+          description: fieldErrors.description?.message,
+          quantity: fieldErrors.quantity?.message,
+          unit: fieldErrors.unit?.message,
+          unitPrice: fieldErrors.unitPrice?.message,
+          taxRate: fieldErrors.taxRate?.message,
+          serviceId: fieldErrors.serviceId?.message,
+          hsnSacCode: fieldErrors.hsnSacCode?.message,
+        };
+      })
     : [];
 
   async function onSubmit(values: QuotationFormValues) {
