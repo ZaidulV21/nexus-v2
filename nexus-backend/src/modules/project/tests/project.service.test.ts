@@ -11,6 +11,8 @@ jest.mock('../project.repository', () => ({
     list: jest.fn(),
     listForClient: jest.fn(),
     generateProjectNumber: jest.fn().mockResolvedValue('P-00001'),
+    setCompleted: jest.fn(),
+    update: jest.fn(),
   },
   projectServiceRepository: {
     createMany: jest.fn(),
@@ -111,6 +113,10 @@ describe('projectService.create', () => {
 });
 
 describe('projectService.complete', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   it('rejects completion while any Project Service is not COMPLETED', async () => {
     (projectRepository.findById as jest.Mock).mockResolvedValue({
       id: 'proj1',
@@ -130,7 +136,33 @@ describe('projectService.complete', () => {
     (projectRepository.listStatusHistoryForServiceIds as jest.Mock).mockResolvedValue([]);
 
     const result = await projectService.complete('proj1', 'admin1');
+    expect(projectRepository.setCompleted).toHaveBeenCalledWith('proj1', 'admin1');
     expect(result.id).toBe('proj1');
+  });
+
+  it('refuses to complete a project that is already completed', async () => {
+    (projectRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'proj1',
+      projectNumber: 'P-00001',
+      completedAt: new Date().toISOString(),
+      projectServices: [{ status: 'COMPLETED' }],
+    });
+
+    await expect(projectService.complete('proj1', 'admin1')).rejects.toThrow('already completed');
+    expect(projectRepository.setCompleted).not.toHaveBeenCalled();
+  });
+
+  it('stamps completedAt and completedByUserId via the repository when completing', async () => {
+    (projectRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'proj1',
+      projectNumber: 'P-00001',
+      projectServices: [{ status: 'COMPLETED' }],
+    });
+    (projectRepository.listStatusHistoryForServiceIds as jest.Mock).mockResolvedValue([]);
+
+    await projectService.complete('proj1', 'admin1');
+
+    expect(projectRepository.setCompleted).toHaveBeenCalledWith('proj1', 'admin1');
   });
 });
 

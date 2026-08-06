@@ -311,10 +311,14 @@ export const projectService = {
   },
 
   // Blocked at the service layer unless every Project Service is COMPLETED -
-  // enforced by data, not developer discipline (PRD 9).
+  // enforced by data, not developer discipline (PRD 9). This is the single
+  // moment a Project "becomes Completed": it stamps `completedAt`, which makes
+  // the Project appear on the public portfolio automatically and unlocks the
+  // completion-gallery uploads (images, videos, documents).
   async complete(projectId: string, actorUserId?: string) {
     const project = await projectRepository.findById(projectId);
     if (!project) throw new NotFoundError('Project not found');
+    if (project.completedAt) throw new ConflictError('Project is already completed');
 
     const services = project.projectServices;
     const active = services.filter((ps: any) => ps.status !== 'CANCELLED');
@@ -323,11 +327,42 @@ export const projectService = {
       throw new ValidationError('All Project Services must be COMPLETED before the Project can be marked complete');
     }
 
+    await projectRepository.setCompleted(projectId, actorUserId);
+
     await timelineService.recordEvent({
       entityType: 'PROJECT',
       entityId: projectId,
       eventType: 'PROJECT_COMPLETED',
       description: `Project ${project.projectNumber} marked complete`,
+      actorUserId,
+    });
+
+    return this.getById(projectId);
+  },
+
+  // Portfolio title is the only free-form field on a Project an admin edits
+  // directly (used as the public project name). Mirrors the title/description
+  // style used elsewhere: updated in place, recorded in the timeline + audit.
+  async updateTitle(projectId: string, title: string, actorUserId?: string) {
+    const project = await projectRepository.findById(projectId);
+    if (!project) throw new NotFoundError('Project not found');
+
+    const updated = await projectRepository.update(projectId, { title: title.trim() || null });
+
+    await timelineService.recordEvent({
+      entityType: 'PROJECT',
+      entityId: projectId,
+      eventType: 'PROJECT_UPDATED',
+      description: `Project ${project.projectNumber} portfolio title ${updated.title ? `updated to "${updated.title}"` : 'cleared'}`,
+      actorUserId,
+    });
+
+    await auditService.recordAudit({
+      entityType: 'PROJECT',
+      entityId: projectId,
+      action: 'UPDATE',
+      beforeState: { title: project.title ?? null },
+      afterState: { title: updated.title ?? null },
       actorUserId,
     });
 

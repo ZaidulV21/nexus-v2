@@ -26,6 +26,7 @@ import { formatCurrency, formatDate, formatDateTime } from '@/lib/format';
 import { ROUTES } from '@/routes/routes';
 import type { Invoice, NexusDocument, Project, ProjectService } from '@/types';
 import { RecordPaymentModal } from '@/pages/invoices/components/RecordPaymentModal';
+import { ProjectCompletionTab } from './components/ProjectCompletionTab';
 import { ProjectServiceStatusModal } from './components/ProjectServiceStatusModal';
 
 function Field({ label, value }: { label: string; value: ReactNode }) {
@@ -488,6 +489,7 @@ export function ProjectDetailPage() {
               <TabsTrigger value="quotation">Quotation</TabsTrigger>
               <TabsTrigger value="invoices">Invoices</TabsTrigger>
               <TabsTrigger value="documents">Documents</TabsTrigger>
+              <TabsTrigger value="completion">Completion</TabsTrigger>
               <TabsTrigger value="timeline">Timeline</TabsTrigger>
               <TabsTrigger value="audit">Audit Log</TabsTrigger>
             </TabsList>
@@ -506,6 +508,9 @@ export function ProjectDetailPage() {
             </TabsContent>
             <TabsContent value="documents" className="pt-5">
               <ProjectDocuments projectId={project.id} />
+            </TabsContent>
+            <TabsContent value="completion" className="pt-5">
+              <ProjectCompletionTab project={project} />
             </TabsContent>
             <TabsContent value="timeline" className="pt-5">
               <EntityTimeline entityType="PROJECT" entityId={project.id} />

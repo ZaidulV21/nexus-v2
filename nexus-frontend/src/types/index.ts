@@ -22,6 +22,48 @@ export type SiteVisitRequirement = 'YES' | 'NO' | 'OPTIONAL';
 
 export type ServiceMediaType = 'IMAGE' | 'VIDEO';
 
+export type ProjectMediaType = 'IMAGE' | 'VIDEO' | 'DOCUMENT';
+
+/**
+ * A single completion item attached to a finished Project (the public
+ * Portfolio gallery): images, videos and documents. Mirrored from the
+ * backend's `ProjectMedia` Prisma model. Completely independent from the
+ * Service marketing gallery (ServiceMedia).
+ */
+export interface ProjectMedia {
+  id: string;
+  projectId: string;
+  type: ProjectMediaType;
+  url: string;
+  posterUrl?: string | null;
+  title?: string | null;
+  altText?: string | null;
+  caption?: string | null;
+  fileName?: string | null;
+  mimeType?: string | null;
+  fileSize?: number | null;
+  sortOrder?: number;
+  isFeatured: boolean;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/**
+ * A completed project as surfaced on the public website (Portfolio page,
+ * Recent Projects, and a Service's "Related Completed Projects" section).
+ * Grows automatically as projects are marked complete.
+ */
+export interface PublicPortfolioProject {
+  id: string;
+  projectNumber: string;
+  title: string;
+  clientName: string;
+  completedAt: string;
+  services: Array<{ id: string; name: string; slug: string }>;
+  media: ProjectMedia[];
+}
+
 /**
  * A single item in a Service's marketing gallery (images + videos for the
  * website showcase). Mirrored from the backend's `ServiceMedia` Prisma model.
@@ -264,6 +306,9 @@ export interface Project {
   projectNumber: string;
   leadId: string;
   clientId: string;
+  title?: string | null;
+  completedAt?: string | null;
+  completedByUserId?: string | null;
   client?: Client;
   lead?: Lead;
   quotations?: ProjectQuotationSummary[];
@@ -272,6 +317,7 @@ export interface Project {
   totalServices?: number;
   completionPercentage?: number;
   projectServices?: ProjectService[];
+  media?: ProjectMedia[];
   createdAt: string;
   updatedAt?: string;
 }

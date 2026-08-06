@@ -492,6 +492,14 @@ model Project {
   projectNumber   String           @unique
   leadId          String
   clientId        String
+  // Human-friendly project name shown on the public portfolio. When empty the
+  // website falls back to the client's company/contact name.
+  title           String?
+  // Set once by the explicit "mark complete" action. This is the single
+  // moment a Project "becomes Completed" for the public portfolio: completed
+  // projects (and their completion media) appear automatically on the site.
+  completedAt     DateTime?
+  completedByUserId String?
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
   deletedAt       DateTime?
@@ -500,10 +508,44 @@ model Project {
   invoices        Invoice[]
   payments        Payment[]
   projectServices ProjectService[]
+  media           ProjectMedia[]
   client          Client           @relation(fields: [clientId], references: [id])
   lead            Lead             @relation(fields: [leadId], references: [id])
 
   @@map("projects")
+}
+
+// Completion media for a finished Project (the public Portfolio gallery). One
+// project can hold unlimited completion images, videos and documents. This is
+// completely independent from the Service marketing gallery (ServiceMedia) and
+// from a SubService's own gallery JSON. Items are hard-deleted (lightweight
+// records), and public callers only ever see isActive rows.
+model ProjectMedia {
+  id         String           @id @default(uuid())
+  projectId  String
+  type       ProjectMediaType
+  url        String
+  // Optional cover/poster image, used for videos (and documents that carry a
+  // preview) so the portfolio does not flash blank before media loads.
+  posterUrl  String?
+  // Short label; for documents this is the display name.
+  title      String?
+  altText    String?
+  caption    String?
+  // Document metadata (kept for IMAGE/VIDEO uploads too so the admin UI can
+  // render a sensible filename).
+  fileName   String?
+  mimeType   String?
+  fileSize   Int?
+  sortOrder  Int              @default(0)
+  isFeatured Boolean          @default(false)
+  isActive   Boolean          @default(true)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+  project    Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, type, isActive, sortOrder])
+  @@map("project_media")
 }
 
 model ProjectService {
@@ -742,6 +784,12 @@ enum SiteVisitRequirement {
 enum MediaType {
   IMAGE
   VIDEO
+}
+
+enum ProjectMediaType {
+  IMAGE
+  VIDEO
+  DOCUMENT
 }
 
 enum QuotationStatus {

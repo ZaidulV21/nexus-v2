@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { projectService } from './project.service';
-import { createProjectSchema, addServiceToProjectSchema, updateProjectServiceStatusSchema } from './project.validation';
+import { createProjectSchema, addServiceToProjectSchema, updateProjectServiceStatusSchema, updateProjectSchema } from './project.validation';
 import { ok, created, paginated } from '../../core/utils/response';
 import { parsePagination } from '../../core/utils/pagination';
 import { ValidationError, UnauthorizedError } from '../../core/errors/AppError';
@@ -44,6 +44,18 @@ export const projectController = {
   async complete(req: Request, res: Response, next: NextFunction) {
     try {
       const project = await projectService.complete(req.params.id, req.user?.id);
+      return ok(res, project);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async updateTitle(req: Request, res: Response, next: NextFunction) {
+    try {
+      const parsed = updateProjectSchema.safeParse(req.body);
+      if (!parsed.success) throw new ValidationError('Invalid payload', parsed.error.flatten());
+      if (parsed.data.title === undefined) throw new ValidationError('No updatable fields provided');
+      const project = await projectService.updateTitle(req.params.id, parsed.data.title, req.user?.id);
       return ok(res, project);
     } catch (err) {
       next(err);

@@ -15,3 +15,7 @@ export const updateProjectServiceStatusSchema = z.object({
   toStatus: z.string().min(1),
   reason: z.string().optional(),
 });
+
+export const updateProjectSchema = z.object({
+  title: z.string().trim().max(200).optional(),
+});

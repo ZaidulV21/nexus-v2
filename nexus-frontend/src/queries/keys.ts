@@ -44,6 +44,13 @@ export const queryKeys = {
     invoices: (id: string) => ['projects', 'invoices', id] as const,
     financialSummary: (id: string) => ['projects', 'financial-summary', id] as const,
     documents: (id: string) => ['projects', 'documents', id] as const,
+    media: (id: string) => ['projects', 'media', id] as const,
+  },
+  portfolio: {
+    all: ['portfolio'] as const,
+    list: (params: unknown) => ['portfolio', 'list', params] as const,
+    byService: (serviceSlug: string) => ['portfolio', 'by-service', serviceSlug] as const,
+    summary: ['portfolio', 'summary'] as const,
   },
   invoices: {
     all: ['invoices'] as const,

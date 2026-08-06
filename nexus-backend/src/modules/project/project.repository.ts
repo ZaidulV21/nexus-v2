@@ -63,8 +63,23 @@ export const projectRepository = {
         },
         client: true,
         lead: true,
+        media: true,
       },
     });
+  },
+
+  // The single "Project became Completed" moment. `completedAt` drives the
+  // public portfolio (completed projects appear automatically) and unlocks the
+  // completion-gallery uploads.
+  setCompleted(id: string, actorUserId?: string) {
+    return prisma.project.update({
+      where: { id },
+      data: { completedAt: new Date(), completedByUserId: actorUserId ?? null },
+    });
+  },
+
+  update(id: string, data: Prisma.ProjectUpdateInput) {
+    return prisma.project.update({ where: { id }, data });
   },
 
   async list(pagination: PaginationParams) {
@@ -93,6 +108,7 @@ export const projectRepository = {
           },
           client: true,
           lead: true,
+          media: true,
         },
       }),
       prisma.project.count({ where }),

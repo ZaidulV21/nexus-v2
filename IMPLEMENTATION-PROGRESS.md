@@ -1777,3 +1777,73 @@ Every Service now has a CMS-managed **Marketing Gallery**: an unlimited, ordered
 | No regressions to auth, RBAC, leads, clients, quotations, projects, invoices, sub-services | ✅ |
 
 > **Note:** `prisma migrate dev` remains unusable (pre-existing P3006 drift). Any future schema changes must follow the Phase 2/3 pattern: hand-write the migration SQL under `prisma/migrations/<ts>_<name>/migration.sql` and apply with `npx prisma migrate deploy`.
+
+# Phase 4 — Project Portfolio Gallery (COMPLETE)
+
+## Summary
+
+Completed projects now appear **automatically on the public website** — Recent Projects, the Portfolio page, and each Service's "Recently Completed Projects" section — with admin-uploaded **completion images, videos and documents**. This is a completely separate gallery from the Phase 3 Service marketing gallery. The moment an admin marks a project complete (`completedAt` stamped), it enters the public portfolio with zero manual setup; media records are managed from a new **Completion** tab on the project detail page. Deleting a project or editing a non-completed project's media is rejected.
+
+## Backend Changes
+
+### Prisma Schema + Migration
+- `ProjectMediaType` enum (`IMAGE`/`VIDEO`/`DOCUMENT`) + `ProjectMedia` model: `projectId` FK (`onDelete: Cascade`), `type`, `url` (immutable), `posterUrl?` (video cover), `title?`, `altText?`, `caption?`, `fileName?`, `mimeType?`, `fileSize?`, `sortOrder`, `isFeatured` (at most one per project), `isActive`, timestamps; `@@index([projectId, type, isActive, sortOrder])`.
+- `Project` gained `title TEXT`, `completedAt TIMESTAMP(3)`, `completedByUserId TEXT`, and a `media ProjectMedia[]` relation.
+- Migration `20260806030000_project_portfolio_gallery/migration.sql` applied via `npx prisma migrate deploy` (client regenerated). Same hand-written-SQL pattern as Phases 2 & 3.
+
+### Project module (`src/modules/project/`)
+1. `project.repository.ts` — `findById`/`list` now `include` `media`; new `setCompleted(id, actorUserId?)` and `update(id, data)`.
+2. `project.service.ts` — `complete()` checks `project.completedAt` (throws `ConflictError('Project is already completed')`), calls `projectRepository.setCompleted`, keeps the timeline event. New `updateTitle()` (trims, records `PROJECT_UPDATED` timeline + `UPDATE` audit).
+3. `project.types.ts` / `project.validation.ts` — `ProjectMediaType`, `CreateProjectMediaInput`, `UpdateProjectMediaInput`, `updateProjectSchema` (`title` optional, max 200).
+4. `project.controller.ts` — new `updateTitle` handler.
+5. **`projectMedia` module** (new): `projectMedia.validation.ts`, `projectMedia.repository.ts` (CRUD, `reorder` via `$transaction`, `setFeatured` clear-first `$transaction`, `setActive`, `hardDelete`), `projectMedia.service.ts` (`PROJECT_MEDIA_ENTITY_TYPE`, `getProjectForMutation` gating on `completedAt`, timeline + audit on every action, fresh upload auto-featured when no featured item exists), `projectMedia.controller.ts`, and `tests/projectMedia.service.test.ts` (upload-type inference, completion gating, reorder, setFeatured, active toggle, hard delete).
+6. **`portfolio` module** (new): `portfolio.repository.ts` (`listCompleted({ take, serviceId })` newest-first with active media + services, `countCompleted()`), `portfolio.service.ts` (resolves `serviceSlug` via UUID-or-slug; maps to public shape `{ id, projectNumber, title, clientName, completedAt, services, media }`), `portfolio.controller.ts`, `portfolio.routes.ts` — public, no auth.
+7. `project.routes.ts` — `PATCH /:id` (title), `GET /:id/media`, `POST /:id/media/upload` (multer `.single('file')`), `POST /:id/media/:mediaId/poster`, `POST /:id/media` (by URL), `PATCH /:id/media/:mediaId`, `POST /:id/media/reorder`, `POST /:id/media/:mediaId/feature`, `DELETE /:id/media/:mediaId`. All `project.view`/`project.edit` gated.
+8. `app.ts` — `portfolioRoutes` mounted at `/api/portfolio`.
+
+### New endpoints
+- **Public (no auth):** `GET /api/portfolio` (`?limit=` for Recent Projects, `?serviceSlug=` for a service's related projects; `serviceSlug` resolves UUID or slug) and `GET /api/portfolio/summary` → `{ completedProjects }`.
+- **Admin:** all `/:id/media*` routes above + `PATCH /api/projects/:id` (title).
+
+### Media rules
+- **Upload types** (inferred from mimetype, never client-claimed): images 5MB (JPEG/PNG/WebP/SVG), videos 100MB (MP4/WebM/OGG/QuickTime), documents 20MB (PDF/DOC/DOCX/XLS/XLSX/PPT/PPTX/TXT). Storage: Cloudinary when `CLOUDINARY_CLOUD_NAME` set (it is), else `/uploads/<name>`.
+- Completion-media mutations are **gated on `completedAt`**; records are **hard-deleted**; `url` + `type` immutable after creation; at most one `isFeatured` per project; public callers only see `isActive` rows.
+
+## Frontend Changes — Data Layer
+1. `src/types/index.ts` — `ProjectMediaType`, `ProjectMedia`, `PublicPortfolioProject`; `Project` gained `title`/`completedAt`/`completedByUserId`/`media`.
+2. `src/services/projectService.ts` — `updateTitle` + 8 media methods (`listProjectMedia`, `uploadProjectMedia`, `uploadProjectMediaPoster`, `createProjectMedia`, `updateProjectMedia`, `setFeaturedProjectMedia`, `reorderProjectMedia`, `deleteProjectMedia`).
+3. `src/services/portfolioService.ts` — NEW: `list({ limit, serviceSlug })` + `summary()`.
+4. `src/queries/keys.ts` — `projects.media(id)` + `portfolio` key factory.
+5. `src/queries/useProjects.ts` — `useProjectMedia`, `useMarkProjectComplete`, `useUpdateProjectTitle`, `useCreateProjectMedia`, `useUpdateProjectMedia`, `useSetFeaturedProjectMedia`, `useReorderProjectMedia`, `useDeleteProjectMedia`; a shared invalidator refreshes project detail + `projects.all` + media + all portfolio keys + the media timeline.
+6. `src/queries/usePortfolio.ts` — NEW: `useRecentProjects(limit)`, `useServicePortfolio(slug)`, `usePortfolioSummary()`.
+
+## Frontend Changes — Admin
+1. `src/pages/projects/components/ProjectCompletionTab.tsx` — NEW: completion status banner ("Mark Project as Complete" with ConfirmDialog, or "Completed on …"), portfolio title editing, image/video/document upload buttons, add-from-URL modal (all 3 types), `ProjectMediaCard` grid (image/video previews with posters, document cards with Open links, featured badge, hidden overlay, reorder/feature/show-hide/delete actions, inline alt/caption blur-save). Not-completed projects show a locked empty state instead of the upload controls.
+2. `src/pages/projects/ProjectDetailPage.tsx` — added the **Completion** tab.
+
+## Frontend Changes — Public Site
+1. `src/public-site/components/PortfolioProjectCard.tsx` — NEW: card (featured/video/first-image cover, client, title, completed date, service chips) that opens a detail modal with the project's media grid + lightbox (keyboard navigable) and a documents list.
+2. `src/public-site/pages/ProjectsPage.tsx` — replaced static `FEATURED_PROJECTS` with `useRecentProjects(9)` + "Load More" pagination; skeleton loading + empty state.
+3. `src/public-site/sections/ProjectsSection.tsx` — home page "Featured Projects" now uses `useRecentProjects(4)` with skeleton + empty state.
+4. `src/public-site/pages/ServiceDetailPage.tsx` — new "Related Work / Recently Completed Projects" section (`useServicePortfolio(service.slug)`, up to 3 cards).
+
+## Key Design Decisions
+1. **`completedAt` is the single "becomes public" moment** — set only by the explicit complete action (blocked until every non-cancelled Project Service is COMPLETED). Portfolio queries filter `completedAt: { not: null }`, so the portfolio grows automatically with no manual publishing.
+2. **Hard delete, one featured item, `isActive` gating, url/type immutable** — mirrors the Phase 3 Service gallery decisions exactly, so the two galleries behave identically for admins.
+3. **Portfolio is fully separate from the Service marketing gallery** — different tables, different admin tabs, different public renderers; `PortfolioProjectCard` only ever consumes `/api/portfolio`.
+4. **Cloudinary 500 on invalid video uploads** is a pre-existing codebase-wide behavior (same in Phase 3 service-media uploads) and was left consistent rather than special-cased.
+
+## Verification
+
+| Check | Result |
+|-------|--------|
+| Backend tests: 397/397 (26 suites, incl. 30 project/projectMedia tests) | ✅ |
+| Backend `npm run build` (tsc) | ✅ 0 errors |
+| Frontend `npx tsc --noEmit` | ✅ 0 errors |
+| Frontend production build | ✅ clean (chunk-size warning pre-existing) |
+| Migration applied via `migrate deploy`; client regenerated | ✅ |
+| Live API: drove P-00010's services to COMPLETED → `POST /complete` stamped `completedAt` | ✅ |
+| Upload IMAGE + DOCUMENT (Cloudinary), VIDEO by URL; list, setFeatured, reorder, toggleActive | ✅ |
+| Re-complete guard → 409 "Project is already completed" | ✅ |
+| Media gating on non-completed project → ValidationError | ✅ |
+| Public `GET /api/portfolio` (limit + serviceSlug + UUID), `/api/portfolio/summary`, active-only media filtering | ✅ |

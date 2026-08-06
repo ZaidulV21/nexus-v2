@@ -1,5 +1,5 @@
 import { api } from '@/lib/api';
-import type { FinancialSummary, Invoice, NexusDocument, Project } from '@/types';
+import type { FinancialSummary, Invoice, NexusDocument, Project, ProjectMedia, ProjectMediaType } from '@/types';
 
 export interface ProjectListParams {
   page?: number;
@@ -12,6 +12,28 @@ export interface ProjectListParams {
 export interface UpdateProjectServiceStatusInput {
   toStatus: string;
   reason?: string;
+}
+
+export interface CreateProjectMediaInput {
+  type: ProjectMediaType;
+  url: string;
+  posterUrl?: string;
+  title?: string;
+  altText?: string;
+  caption?: string;
+  fileName?: string;
+  mimeType?: string;
+  fileSize?: number;
+}
+
+export interface UpdateProjectMediaInput {
+  posterUrl?: string;
+  title?: string;
+  altText?: string;
+  caption?: string;
+  fileName?: string;
+  isFeatured?: boolean;
+  isActive?: boolean;
 }
 
 export const projectService = {
@@ -35,6 +57,43 @@ export const projectService = {
     api.patch<{ id: string; status: string }>(`/projects/services/${projectServiceId}/status`, input),
 
   complete: (projectId: string) => api.post<Project>(`/projects/${projectId}/complete`),
+
+  /** Portfolio title (public project name). */
+  updateTitle: (projectId: string, title: string) => api.patch<Project>(`/projects/${projectId}`, { title }),
+
+  listProjectMedia: (projectId: string) => api.get<ProjectMedia[]>(`/projects/${projectId}/media`),
+
+  // Uploads an image, video or document; the backend infers the type from the
+  // file's mimetype.
+  uploadProjectMedia: (projectId: string, file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.upload<{ fileUrl: string; media: ProjectMedia }>(`/projects/${projectId}/media/upload`, formData);
+  },
+
+  uploadProjectMediaPoster: (projectId: string, mediaId: string, file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.upload<{ fileUrl: string; media: ProjectMedia }>(
+      `/projects/${projectId}/media/${mediaId}/poster`,
+      formData
+    );
+  },
+
+  createProjectMedia: (projectId: string, input: CreateProjectMediaInput) =>
+    api.post<ProjectMedia>(`/projects/${projectId}/media`, input),
+
+  updateProjectMedia: (projectId: string, mediaId: string, input: UpdateProjectMediaInput) =>
+    api.patch<ProjectMedia>(`/projects/${projectId}/media/${mediaId}`, input),
+
+  setFeaturedProjectMedia: (projectId: string, mediaId: string) =>
+    api.post<ProjectMedia>(`/projects/${projectId}/media/${mediaId}/feature`),
+
+  reorderProjectMedia: (projectId: string, orderedIds: string[]) =>
+    api.post<{ orderedIds: string[] }>(`/projects/${projectId}/media/reorder`, { orderedIds }),
+
+  deleteProjectMedia: (projectId: string, mediaId: string) =>
+    api.delete<{ id: string; removed: boolean }>(`/projects/${projectId}/media/${mediaId}`),
 
   listInvoices: (projectId: string) => api.get<Invoice[]>(`/invoices/project/${projectId}`),
 

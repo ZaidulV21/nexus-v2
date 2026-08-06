@@ -20,11 +20,13 @@ import {
 import { usePublicServiceBySlug, usePublicServices } from '@/queries/usePublicServices';
 import { usePublicSubServices } from '@/queries/usePublicSubServices';
 import { usePublicServiceMedia } from '@/queries/useServices';
+import { useServicePortfolio } from '@/queries/usePortfolio';
 import { usePublicCompany } from '../hooks';
 import { cn } from '@/lib/utils';
 import { ServiceCard } from '../components/ServiceCard';
 import { ServiceGallery } from '../components/ServiceGallery';
 import { MarketingGallery } from '../components/MarketingGallery';
+import { PortfolioProjectCard } from '../components/PortfolioProjectCard';
 import { SubServiceNav } from '../components/SubServiceNav';
 import { VerticalSubServiceNav } from '../components/VerticalSubServiceNav';
 import { FAQAccordion } from '../components/FAQAccordion';
@@ -404,6 +406,7 @@ export function ServiceDetailPage() {
   const { data: allServices = [] } = usePublicServices();
   const { data: cmsSubs = [] } = usePublicSubServices(slug);
   const { data: mediaItems = [] } = usePublicServiceMedia(slug);
+  const { data: serviceProjects = [] } = useServicePortfolio(service?.slug);
   const company = usePublicCompany();
   const { scrollYProgress } = useScroll();
   const progress = useSpring(scrollYProgress, { stiffness: 100, damping: 30, restDelta: 0.001 });
@@ -675,6 +678,22 @@ export function ServiceDetailPage() {
             </div>
           )}
         </motion.div>
+
+        {/* Related completed projects */}
+        {serviceProjects.length > 0 && (
+          <section className="py-16">
+            <SectionHeading
+              tag="Related Work"
+              title="Recently Completed Projects"
+              description={`Real projects we've delivered for ${content.name}.`}
+            />
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {serviceProjects.slice(0, 3).map((project, index) => (
+                <PortfolioProjectCard key={project.id} project={project} index={index} />
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* Related services */}
         {relatedServices.length > 0 && (

@@ -12,6 +12,7 @@ import leadRoutes from './modules/lead/lead.routes';
 import clientRoutes from './modules/client/client.routes';
 import quotationRoutes from './modules/quotation/quotation.routes';
 import projectRoutes from './modules/project/project.routes';
+import portfolioRoutes from './modules/project/portfolio.routes';
 import invoiceRoutes from './modules/invoice/invoice.routes';
 import documentRoutes from './modules/documents/documents.routes';
 import conversationRoutes from './modules/messages/conversation.routes';
@@ -49,6 +50,7 @@ export function createApp(): Express {
   app.use('/api/clients', clientRoutes);
   app.use('/api/quotations', quotationRoutes);
   app.use('/api/projects', projectRoutes);
+  app.use('/api/portfolio', portfolioRoutes);
   app.use('/api/invoices', invoiceRoutes);
   app.use('/api/documents', documentRoutes);
   app.use('/api/conversations', conversationRoutes);
