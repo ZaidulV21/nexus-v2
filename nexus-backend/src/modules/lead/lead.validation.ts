@@ -2,6 +2,8 @@ import { z } from 'zod';
 
 const leadServiceSchema = z.object({
   serviceId: z.string().uuid(),
+  // Sub Service id, stored verbatim (never a text label).
+  subServiceId: z.string().uuid().optional(),
   questionnaireAnswers: z.record(z.any()).optional(),
 });
 

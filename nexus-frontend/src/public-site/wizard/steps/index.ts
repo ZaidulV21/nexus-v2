@@ -1,4 +1,5 @@
 export { StepServices } from './StepServices';
+export { StepServicesPreselected } from './StepServicesPreselected';
 export { StepQuestions } from './StepQuestions';
 export { StepUploads } from './StepUploads';
 export { StepReview } from './StepReview';

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, BadgeCheck } from 'lucide-react';
 import { usePublicServices } from '@/queries/usePublicServices';
 import { getQuestionsForService } from '../serviceQuestions';
 import { QuestionRenderer } from '../QuestionRenderer';
@@ -10,9 +10,20 @@ interface StepQuestionsProps {
   answers: Record<string, Record<string, string | string[]>>;
   onAnswer: (serviceId: string, questionId: string, value: string | string[]) => void;
   showErrors?: boolean;
+  /** Pinned sub-services: { serviceId: subServiceId } shown as chips under each service. */
+  selectedSubServices?: Record<string, string>;
+  /** subServiceId -> display name, resolved from the public sub-services API. */
+  subServiceNames?: Record<string, string>;
 }
 
-export function StepQuestions({ selectedServices, answers, onAnswer, showErrors }: StepQuestionsProps) {
+export function StepQuestions({
+  selectedServices,
+  answers,
+  onAnswer,
+  showErrors,
+  selectedSubServices = {},
+  subServiceNames = {},
+}: StepQuestionsProps) {
   const { data: services = [] } = usePublicServices();
   const selectedServiceData = services.filter((s) => selectedServices.includes(s.id));
   const firstInvalidRef = useRef<HTMLDivElement | null>(null);
@@ -60,6 +71,8 @@ export function StepQuestions({ selectedServices, answers, onAnswer, showErrors 
         {selectedServiceData.map((service, sIndex) => {
           const config = getQuestionsForService(service.slug);
           const serviceAnswers = answers[service.id] || {};
+          const subId = selectedSubServices[service.id];
+          const subName = subId ? subServiceNames[subId] : undefined;
 
           return (
             <motion.div
@@ -69,7 +82,15 @@ export function StepQuestions({ selectedServices, answers, onAnswer, showErrors 
               transition={{ duration: 0.35, delay: sIndex * 0.08 }}
               className="rounded-2xl border border-border bg-surface p-5 sm:p-6"
             >
-              <h3 className="text-base font-semibold text-ink">{service.name}</h3>
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-base font-semibold text-ink">{service.name}</h3>
+                {subName && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-accent px-2.5 py-0.5 text-xs font-medium text-white">
+                    <BadgeCheck className="h-3 w-3" />
+                    {subName}
+                  </span>
+                )}
+              </div>
 
               {config ? (
                 <div className="mt-5 space-y-5">

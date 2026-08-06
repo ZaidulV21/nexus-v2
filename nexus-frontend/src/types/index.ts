@@ -256,6 +256,9 @@ export interface LeadService {
   leadId: string;
   serviceId: string;
   service?: Service;
+  /** Specific Sub Service pinned at quote time (e.g. Signage -> Repair), stored as an id. */
+  subServiceId?: string | null;
+  subService?: SubService | null;
   status: WorkflowStatus;
   convertedAt?: string | null;
   questionnaireAnswers?: Record<string, unknown> | null;

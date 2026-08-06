@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Edit2, User, Mail, Phone, Building, MapPin, Clock, MessageSquare } from 'lucide-react';
+import { Edit2, User, Mail, Phone, Building, MapPin, Clock, MessageSquare, BadgeCheck } from 'lucide-react';
 import { usePublicServices } from '@/queries/usePublicServices';
 import { getQuestionsForService } from '../serviceQuestions';
 import type { WizardState } from '../types';
@@ -7,6 +7,8 @@ import type { WizardState } from '../types';
 interface StepReviewProps {
   state: WizardState;
   goTo: (step: number) => void;
+  /** subServiceId -> display name, resolved from the public sub-services API. */
+  subServiceNames?: Record<string, string>;
 }
 
 const PREFERRED_CONTACT_LABELS: Record<string, string> = {
@@ -22,7 +24,7 @@ const PREFERRED_TIME_LABELS: Record<string, string> = {
   anytime: 'Anytime',
 };
 
-export function StepReview({ state, goTo }: StepReviewProps) {
+export function StepReview({ state, goTo, subServiceNames = {} }: StepReviewProps) {
   const { data: services = [] } = usePublicServices();
   const selectedServiceData = services.filter((s) => state.selectedServices.includes(s.id));
 
@@ -47,11 +49,21 @@ export function StepReview({ state, goTo }: StepReviewProps) {
             </button>
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
-            {selectedServiceData.map((s) => (
-              <span key={s.id} className="rounded-full bg-accent-subtle px-3 py-1 text-xs font-medium text-accent">
-                {s.name}
-              </span>
-            ))}
+            {selectedServiceData.map((s) => {
+              const subId = state.selectedSubServices[s.id];
+              const subName = subId ? subServiceNames[subId] : undefined;
+              return (
+                <span key={s.id} className="rounded-full bg-accent-subtle px-3 py-1 text-xs font-medium text-accent inline-flex items-center gap-1">
+                  {s.name}
+                  {subName && (
+                    <span className="inline-flex items-center gap-0.5 rounded-full bg-accent px-2 py-0.5 text-[11px] font-medium text-white">
+                      <BadgeCheck className="h-3 w-3" />
+                      {subName}
+                    </span>
+                  )}
+                </span>
+              );
+            })}
           </div>
         </motion.div>
 
@@ -60,6 +72,8 @@ export function StepReview({ state, goTo }: StepReviewProps) {
           const config = getQuestionsForService(service.slug);
           const serviceAnswers = state.answers[service.id] || {};
           const hasAnswers = Object.keys(serviceAnswers).length > 0;
+          const subId = state.selectedSubServices[service.id];
+          const subName = subId ? subServiceNames[subId] : undefined;
 
           return (
             <motion.div
@@ -70,7 +84,15 @@ export function StepReview({ state, goTo }: StepReviewProps) {
               className="rounded-2xl border border-border bg-surface p-5"
             >
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-ink">{service.name}</h3>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-sm font-semibold text-ink">{service.name}</h3>
+                  {subName && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-[11px] font-medium text-white">
+                      <BadgeCheck className="h-3 w-3" />
+                      {subName}
+                    </span>
+                  )}
+                </div>
                 <button onClick={() => goTo(1)} className="text-xs font-medium text-accent hover:text-accent-hover flex items-center gap-1">
                   <Edit2 className="h-3 w-3" /> Edit
                 </button>

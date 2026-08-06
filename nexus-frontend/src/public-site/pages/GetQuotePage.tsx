@@ -1,12 +1,13 @@
-import { useCallback, useMemo, useState, useEffect } from 'react';
+import { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowRight, CheckCircle, Send, User, Briefcase, FileText, AlertCircle } from 'lucide-react';
+import { ArrowRight, CheckCircle, Send, User, Briefcase, FileText, AlertCircle, BadgeCheck } from 'lucide-react';
 import { useWizardState } from '../wizard/useWizardState';
 import { WizardProgress } from '../wizard/WizardProgress';
 import { WizardNavigation } from '../wizard/WizardNavigation';
 import {
   StepServices,
+  StepServicesPreselected,
   StepQuestions,
   StepReview,
   StepContact,
@@ -17,6 +18,7 @@ import {
 } from '../wizard/steps';
 import { useCreateLead } from '@/queries/useLeads';
 import { usePublicServices } from '@/queries/usePublicServices';
+import { usePublicSubServices } from '@/queries/usePublicSubServices';
 import { getQuestionsForService } from '../wizard/serviceQuestions';
 import { publicAuthService } from '@/services/publicAuthService';
 import { useAuth } from '@/app/AuthContext';
@@ -26,7 +28,7 @@ import type { CreateLeadInput } from '@/services/leadService';
 const BASE_STEP_LABELS = ['Services', 'Details', 'Contact', 'Review', 'Account', 'Verify', 'Submit'];
 
 function buildLeadInput(wizard: ReturnType<typeof useWizardState>, isLoggedIn: boolean, clientId?: string): CreateLeadInput {
-  const { selectedServices, answers, contact, account } = wizard.state;
+  const { selectedServices, answers, contact, account, selectedSubServices } = wizard.state;
 
   return {
     contactName: contact.name,
@@ -36,6 +38,7 @@ function buildLeadInput(wizard: ReturnType<typeof useWizardState>, isLoggedIn: b
     source: 'WEBSITE',
     services: selectedServices.map((serviceId: string) => ({
       serviceId,
+      subServiceId: selectedSubServices[serviceId],
       questionnaireAnswers: answers[serviceId] || {},
     })),
     password: isLoggedIn ? undefined : (account.password || undefined),
@@ -84,6 +87,42 @@ export function GetQuotePage() {
   const [showAccountErrors, setShowAccountErrors] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const createLeadMutation = useCreateLead();
+
+  // Deep-linked preselection: /get-quote?service=<id|slug>[&subService=<id>]
+  // opens the wizard with the service (and specific sub-service) already
+  // pinned. The client picked their option on the service page - the Services
+  // step is skipped and rendered read-only, so they never select again.
+  const serviceParam = searchParams.get('service');
+  const subServiceParam = searchParams.get('subService');
+
+  const preselectedService = useMemo(
+    () => services.find((s) => s.id === serviceParam || s.slug === serviceParam),
+    [services, serviceParam]
+  );
+
+  const {
+    data: preselectedSubs = [],
+    isLoading: preselectedSubsLoading,
+  } = usePublicSubServices(preselectedService?.slug);
+
+  const subServiceNames = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const sub of preselectedSubs) map[sub.id] = sub.name;
+    return map;
+  }, [preselectedSubs]);
+
+  const appliedPreselection = useRef(false);
+  useEffect(() => {
+    if (appliedPreselection.current || !preselectedService) return;
+    // If a sub-service was requested, wait until its list has loaded so we
+    // can validate the id before pinning it (or fall back to service-only).
+    if (subServiceParam && preselectedSubsLoading) return;
+    appliedPreselection.current = true;
+    const subId = subServiceParam && preselectedSubs.some((sub) => sub.id === subServiceParam)
+      ? subServiceParam
+      : undefined;
+    wizard.preselect(preselectedService.id, subId);
+  }, [preselectedService, subServiceParam, preselectedSubs, preselectedSubsLoading, wizard]);
 
   // Check if we returned from forgot-password reset
   const returnedFromReset = searchParams.get('returned') === 'true';
@@ -333,11 +372,21 @@ export function GetQuotePage() {
                         <h3 className="text-sm font-semibold text-ink">Selected Services</h3>
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        {selectedServiceData.map((s) => (
-                          <span key={s.id} className="rounded-full bg-accent-subtle px-3 py-1 text-xs font-medium text-accent">
-                            {s.name}
-                          </span>
-                        ))}
+                        {selectedServiceData.map((s) => {
+                          const subId = state.selectedSubServices[s.id];
+                          const subName = subId ? subServiceNames[subId] : undefined;
+                          return (
+                            <span key={s.id} className="inline-flex items-center gap-1 rounded-full bg-accent-subtle px-3 py-1 text-xs font-medium text-accent">
+                              {s.name}
+                              {subName && (
+                                <span className="inline-flex items-center gap-0.5 rounded-full bg-accent px-2 py-0.5 text-[11px] font-medium text-white">
+                                  <BadgeCheck className="h-3 w-3" />
+                                  {subName}
+                                </span>
+                              )}
+                            </span>
+                          );
+                        })}
                         {selectedServiceData.length === 0 && (
                           <p className="text-sm text-ink-faint">No services selected</p>
                         )}
@@ -418,19 +467,28 @@ export function GetQuotePage() {
               ) : (
                 <>
                   {/* Normal wizard steps */}
-                  {state.currentStep === 0 && (
+                  {state.currentStep === 0 && (state.preselected ? (
+                    <StepServicesPreselected
+                      services={services}
+                      selectedServices={state.selectedServices}
+                      selectedSubServices={state.selectedSubServices}
+                      subServiceNames={subServiceNames}
+                    />
+                  ) : (
                     <StepServices
                       selectedServices={state.selectedServices}
                       onToggle={wizard.toggleService}
                       showError={showServicesError}
                     />
-                  )}
+                  ))}
                   {state.currentStep === 1 && (
                     <StepQuestions
                       selectedServices={state.selectedServices}
                       answers={state.answers}
                       onAnswer={wizard.setAnswer}
                       showErrors={showQuestionsError}
+                      selectedSubServices={state.selectedSubServices}
+                      subServiceNames={subServiceNames}
                     />
                   )}
                   {state.currentStep === 2 && (
@@ -441,7 +499,7 @@ export function GetQuotePage() {
                     />
                   )}
                   {state.currentStep === 3 && (
-                    <StepReview state={state} goTo={wizard.goTo} />
+                    <StepReview state={state} goTo={wizard.goTo} subServiceNames={subServiceNames} />
                   )}
                   {state.currentStep === 4 && state.emailExists === false && (
                     <StepAccount

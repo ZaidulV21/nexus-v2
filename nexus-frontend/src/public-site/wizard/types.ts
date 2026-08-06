@@ -60,6 +60,15 @@ export interface WizardState {
   currentStep: number;
   /** Selected service IDs */
   selectedServices: string[];
+  /** Pinned sub-service per selected service: { serviceId: subServiceId }. */
+  selectedSubServices: Record<string, string>;
+  /**
+   * True when the wizard was opened from a service/sub-service deep link
+   * (?service=...&subService=...). The Services step is then replaced with a
+   * read-only summary - the client picked their option once, they never
+   * select again.
+   */
+  preselected: boolean;
   /** Dynamic question answers: { serviceId: { questionId: value } } */
   answers: Record<string, Record<string, string | string[]>>;
   /** Uploaded files grouped by serviceId */
@@ -77,6 +86,8 @@ export interface WizardState {
 export const INITIAL_WIZARD_STATE: WizardState = {
   currentStep: 0,
   selectedServices: [],
+  selectedSubServices: {},
+  preselected: false,
   answers: {},
   files: [],
   contact: {

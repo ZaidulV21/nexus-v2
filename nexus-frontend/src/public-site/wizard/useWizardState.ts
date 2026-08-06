@@ -25,14 +25,43 @@ export function useWizardState() {
       const selectedServices = exists
         ? s.selectedServices.filter((id) => id !== serviceId)
         : [...s.selectedServices, serviceId];
-      // Clean up answers and files for deselected services
+      // Clean up answers, files and pinned sub-services for deselected services
       const answers = { ...s.answers };
       const files = s.files;
+      const selectedSubServices = { ...s.selectedSubServices };
       if (exists) {
         delete answers[serviceId];
+        delete selectedSubServices[serviceId];
       }
-      return { ...s, selectedServices, answers, files };
+      return { ...s, selectedServices, answers, files, selectedSubServices };
     });
+  }, []);
+
+  const setSubService = useCallback((serviceId: string, subServiceId: string) => {
+    setState((s) => ({
+      ...s,
+      selectedSubServices: {
+        ...s.selectedSubServices,
+        [serviceId]: subServiceId,
+      },
+    }));
+  }, []);
+
+  /**
+   * Opens the wizard with a service (and optionally a specific sub-service)
+   * already pinned, skipping the Services step. Used by the service detail
+   * page deep links so the client never re-selects what they already chose.
+   */
+  const preselect = useCallback((serviceId: string, subServiceId?: string) => {
+    setState((s) => ({
+      ...s,
+      currentStep: 1,
+      preselected: true,
+      selectedServices: [serviceId],
+      selectedSubServices: subServiceId
+        ? { ...s.selectedSubServices, [serviceId]: subServiceId }
+        : s.selectedSubServices,
+    }));
   }, []);
 
   const setAnswer = useCallback((serviceId: string, questionId: string, value: string | string[]) => {
@@ -118,6 +147,8 @@ export function useWizardState() {
     next,
     prev,
     toggleService,
+    setSubService,
+    preselect,
     setAnswer,
     addFiles,
     removeFile,

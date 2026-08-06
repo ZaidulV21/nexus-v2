@@ -1,5 +1,7 @@
 export interface CreateLeadServiceInput {
   serviceId: string;
+  /** Optional Sub Service (public wizard picks a specific option, e.g. Signage -> Repair). Stored as an id. */
+  subServiceId?: string;
   questionnaireAnswers?: Record<string, unknown>;
 }
 
@@ -18,6 +20,7 @@ export interface CreateLeadInput {
 
 export interface AddServiceToLeadInput {
   serviceId: string;
+  subServiceId?: string;
   questionnaireAnswers?: Record<string, unknown>;
 }
 

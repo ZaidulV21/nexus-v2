@@ -3,6 +3,7 @@ import { runInTransaction } from '../../core/utils/transaction';
 import { leadRepository, leadServiceRepository, leadActivityNoteRepository } from './lead.repository';
 import { clientRepository } from '../client/client.repository';
 import { serviceRepository } from '../catalog/service.repository';
+import { subServiceRepository } from '../catalog/subService.repository';
 import { otpService } from '../otp/otp.service';
 import { timelineService } from '../timeline/timeline.service';
 import { auditService } from '../audit/audit.service';
@@ -15,6 +16,22 @@ import { env } from '../../config/env';
 
 function attachLeadAggregateStatus<T extends { leadServices: LeadServiceLike[] }>(entity: T): T & { aggregateStatus: string } {
   return { ...entity, aggregateStatus: computeLeadAggregateStatus(entity.leadServices) };
+}
+
+// Validates a Sub Service reference and returns the id to store (or null when
+// none was provided). The Sub Service must exist, be publicly selectable and
+// belong to the same Service it is attached to - a Lead Service never carries
+// a sub-service that contradicts its parent service.
+async function resolveSubServiceId(subServiceId: string | undefined, serviceId: string): Promise<string | null> {
+  if (!subServiceId) return null;
+  const sub = await subServiceRepository.findById(subServiceId);
+  if (!sub || !sub.isActive || sub.archivedAt || sub.deletedAt) {
+    throw new ValidationError(`Sub Service ${subServiceId} is not available`);
+  }
+  if (sub.serviceId !== serviceId) {
+    throw new ValidationError('The selected Sub Service does not belong to the selected Service');
+  }
+  return sub.id;
 }
 
 export const leadService = {
@@ -65,8 +82,10 @@ export const leadService = {
           throw new ValidationError(`Service ${s.serviceId} is not available`);
         }
         const questionnaire = await serviceRepository.getActiveQuestionnaire(s.serviceId);
+        const subServiceId = await resolveSubServiceId(s.subServiceId, s.serviceId);
         serviceRecords.push({
           serviceId: s.serviceId,
+          subServiceId: subServiceId ?? undefined,
           questionnaireVersionId: questionnaire?.id,
           questionnaireAnswers: s.questionnaireAnswers,
         });
@@ -174,9 +193,11 @@ export const leadService = {
     if (!service || !service.isActive || service.archivedAt) throw new ValidationError('Service is not available');
 
     const questionnaire = await serviceRepository.getActiveQuestionnaire(input.serviceId);
+    const subServiceId = await resolveSubServiceId(input.subServiceId, input.serviceId);
 
     const leadService = await leadServiceRepository.create(leadId, {
       serviceId: input.serviceId,
+      subServiceId: subServiceId ?? undefined,
       questionnaireVersionId: questionnaire?.id,
       questionnaireAnswers: input.questionnaireAnswers,
     });

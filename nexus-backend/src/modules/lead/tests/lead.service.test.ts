@@ -7,6 +7,11 @@ jest.mock('../../catalog/service.repository', () => ({
     getActiveQuestionnaire: jest.fn().mockResolvedValue(null),
   },
 }));
+jest.mock('../../catalog/subService.repository', () => ({
+  subServiceRepository: {
+    findById: jest.fn(),
+  },
+}));
 jest.mock('../../client/client.repository', () => ({
   clientRepository: {
     findById: jest.fn(),
@@ -55,6 +60,7 @@ jest.mock('../../otp/otp.service', () => ({
 import { leadRepository, leadServiceRepository } from '../lead.repository';
 import { clientRepository } from '../../client/client.repository';
 import { serviceRepository } from '../../catalog/service.repository';
+import { subServiceRepository } from '../../catalog/subService.repository';
 import { statusEngineService } from '../../status-engine/statusEngine.service';
 import { ValidationError } from '../../../core/errors/AppError';
 import { leadService } from '../lead.service';
@@ -391,5 +397,131 @@ describe('leadService.createLead - existing client (clientId)', () => {
     expect(result.lead.id).toBe('lead3');
     // clientId takes precedence — no new Client created
     expect(clientRepository.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('leadService.createLead - sub-service pinning (Signage -> Repair)', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('stores the Sub Service id on the Lead Service when it belongs to the Service', async () => {
+    (leadRepository.create as jest.Mock).mockResolvedValue({ id: 'lead1', leadNumber: 'L-00001' });
+    (serviceRepository.findById as jest.Mock).mockResolvedValue({ id: 'svc-signage', isActive: true, name: 'Branding & Signage' });
+    (subServiceRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'sub-repair',
+      serviceId: 'svc-signage',
+      name: 'Repair',
+      isActive: true,
+      archivedAt: null,
+      deletedAt: null,
+    });
+    (leadServiceRepository.createMany as jest.Mock).mockResolvedValue([{ id: 'ls1', serviceId: 'svc-signage', subServiceId: 'sub-repair' }]);
+
+    const result = await leadService.createLead({
+      contactName: 'John Doe',
+      phone: '9999999999',
+      services: [{ serviceId: 'svc-signage', subServiceId: 'sub-repair' }],
+    });
+
+    expect(result.leadServices).toHaveLength(1);
+    expect(leadServiceRepository.createMany).toHaveBeenCalledWith(
+      'lead1',
+      expect.arrayContaining([expect.objectContaining({ serviceId: 'svc-signage', subServiceId: 'sub-repair' })]),
+      {}
+    );
+  });
+
+  it('rejects a Sub Service that does not belong to the selected Service', async () => {
+    (leadRepository.create as jest.Mock).mockResolvedValue({ id: 'lead1', leadNumber: 'L-00001' });
+    (serviceRepository.findById as jest.Mock).mockResolvedValue({ id: 'svc-signage', isActive: true, name: 'Branding & Signage' });
+    (subServiceRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'sub-repair',
+      serviceId: 'svc-interior', // belongs to a different service
+      name: 'Repair',
+      isActive: true,
+      archivedAt: null,
+      deletedAt: null,
+    });
+
+    await expect(
+      leadService.createLead({
+        contactName: 'John Doe',
+        phone: '9999999999',
+        services: [{ serviceId: 'svc-signage', subServiceId: 'sub-repair' }],
+      })
+    ).rejects.toThrow('does not belong to the selected Service');
+    expect(leadServiceRepository.createMany).not.toHaveBeenCalled();
+  });
+
+  it('rejects an unavailable (inactive / archived / deleted) Sub Service', async () => {
+    (leadRepository.create as jest.Mock).mockResolvedValue({ id: 'lead1', leadNumber: 'L-00001' });
+    (serviceRepository.findById as jest.Mock).mockResolvedValue({ id: 'svc-signage', isActive: true, name: 'Branding & Signage' });
+    (subServiceRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'sub-repair',
+      serviceId: 'svc-signage',
+      name: 'Repair',
+      isActive: false,
+      archivedAt: null,
+      deletedAt: null,
+    });
+
+    await expect(
+      leadService.createLead({
+        contactName: 'John Doe',
+        phone: '9999999999',
+        services: [{ serviceId: 'svc-signage', subServiceId: 'sub-repair' }],
+      })
+    ).rejects.toThrow('is not available');
+    expect(leadServiceRepository.createMany).not.toHaveBeenCalled();
+  });
+
+  it('rejects a non-existent Sub Service', async () => {
+    (leadRepository.create as jest.Mock).mockResolvedValue({ id: 'lead1', leadNumber: 'L-00001' });
+    (serviceRepository.findById as jest.Mock).mockResolvedValue({ id: 'svc-signage', isActive: true, name: 'Branding & Signage' });
+    (subServiceRepository.findById as jest.Mock).mockResolvedValue(null);
+
+    await expect(
+      leadService.createLead({
+        contactName: 'John Doe',
+        phone: '9999999999',
+        services: [{ serviceId: 'svc-signage', subServiceId: 'missing-sub' }],
+      })
+    ).rejects.toThrow('is not available');
+  });
+});
+
+describe('leadService.addServiceToLead - sub-service pinning', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('validates and persists the Sub Service id', async () => {
+    (leadRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'lead1',
+      leadNumber: 'L-00001',
+      convertedAt: null,
+    });
+    (serviceRepository.findById as jest.Mock).mockResolvedValue({ id: 'svc-signage', isActive: true, name: 'Branding & Signage' });
+    (subServiceRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'sub-repair',
+      serviceId: 'svc-signage',
+      name: 'Repair',
+      isActive: true,
+      archivedAt: null,
+      deletedAt: null,
+    });
+    (leadServiceRepository.create as jest.Mock).mockResolvedValue({
+      id: 'ls1',
+      serviceId: 'svc-signage',
+      subServiceId: 'sub-repair',
+    });
+
+    const result = await leadService.addServiceToLead('lead1', {
+      serviceId: 'svc-signage',
+      subServiceId: 'sub-repair',
+    });
+
+    expect(leadServiceRepository.create).toHaveBeenCalledWith(
+      'lead1',
+      expect.objectContaining({ serviceId: 'svc-signage', subServiceId: 'sub-repair' })
+    );
+    expect(result.subServiceId).toBe('sub-repair');
   });
 });

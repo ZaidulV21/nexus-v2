@@ -166,21 +166,29 @@ function SubServicesSection({
             const isActive = sub.slug === activeSubSlug;
             return (
               <StaggerItem key={sub.slug}>
-                <Link
-                  to={`/services/${service.slug}/${sub.slug}`}
+                <div
                   className={cn(
-                    'group flex h-full flex-col gap-3 rounded-2xl border bg-surface p-6 transition-all duration-300 hover:-translate-y-1 hover:border-accent/30 hover:shadow-lg hover:shadow-accent/5',
+                    'group flex h-full flex-col rounded-2xl border bg-surface p-6 transition-all duration-300 hover:-translate-y-1 hover:border-accent/30 hover:shadow-lg hover:shadow-accent/5',
                     isActive ? 'border-accent ring-2 ring-accent/30 shadow-lg shadow-accent/10' : 'border-border'
                   )}
                 >
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-subtle text-accent transition-colors group-hover:bg-accent group-hover:text-white">
-                    <Icon className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-ink transition-colors group-hover:text-accent">{sub.name}</p>
-                    <p className="mt-1 text-xs text-ink-muted line-clamp-2">{sub.shortDescription ?? sub.name}</p>
-                  </div>
-                </Link>
+                  <Link to={`/services/${service.slug}/${sub.slug}`} className="flex-1">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-subtle text-accent transition-colors group-hover:bg-accent group-hover:text-white">
+                      <Icon className="h-5 w-5" />
+                    </div>
+                    <div className="mt-3">
+                      <p className="text-sm font-semibold text-ink transition-colors group-hover:text-accent">{sub.name}</p>
+                      <p className="mt-1 text-xs text-ink-muted line-clamp-2">{sub.shortDescription ?? sub.name}</p>
+                    </div>
+                  </Link>
+                  <Link
+                    to={`/get-quote?service=${service.id}&subService=${sub.id}`}
+                    className="mt-4 inline-flex items-center justify-center gap-1.5 rounded-xl bg-accent px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-accent-hover"
+                  >
+                    Get Quote
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </Link>
+                </div>
               </StaggerItem>
             );
           })}
@@ -192,9 +200,11 @@ function SubServicesSection({
 
 /** Gradient "get started" card with quote / call / WhatsApp actions. */
 function GetStartedCard({
+  quoteHref,
   whatsAppHref,
   company,
 }: {
+  quoteHref: string;
   whatsAppHref: string | null;
   company: { name: string; phone: string; whatsapp: string };
 }) {
@@ -209,7 +219,7 @@ function GetStartedCard({
       </div>
       <div className="space-y-3 p-6">
         <Link
-          to="/get-quote"
+          to={quoteHref}
           className="flex items-center justify-center gap-2 rounded-xl bg-accent px-5 py-3.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-accent-hover"
         >
           Request Quote
@@ -298,6 +308,18 @@ export function ServiceDetailPage() {
 
   const subServices = cmsSubs;
   const activeSub = subServices.find((sub) => sub.slug === subSlug);
+
+  // Phase 6: every "Request Quote" CTA on this page carries the current
+  // Service (and Sub Service) id, so the quote wizard opens pre-selected and
+  // the client never picks again. The backend stores these ids verbatim.
+  const quoteHref = useMemo(() => {
+    const params = new URLSearchParams();
+    if (service?.id) params.set('service', service.id);
+    if (activeSub) params.set('subService', activeSub.id);
+    const qs = params.toString();
+    return qs ? `/get-quote?${qs}` : '/get-quote';
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [service?.id, activeSub?.id]);
 
   let content: ActiveContent | null = null;
   if (service) {
@@ -483,7 +505,7 @@ export function ServiceDetailPage() {
 
               <div className="mt-7 flex flex-wrap items-center gap-3">
                 <Link
-                  to="/get-quote"
+                  to={quoteHref}
                   className="inline-flex items-center gap-2 rounded-xl bg-accent px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-accent/30 transition-all hover:bg-accent-hover"
                 >
                   Request Quote
@@ -779,7 +801,7 @@ export function ServiceDetailPage() {
                   description="Share your requirements and get a free consultation with a detailed quotation."
                 />
                 <div className="grid gap-6 lg:grid-cols-2">
-                  <GetStartedCard whatsAppHref={whatsAppHref} company={company} />
+                  <GetStartedCard quoteHref={quoteHref} whatsAppHref={whatsAppHref} company={company} />
                   <QuickFacts content={content} service={service} />
                 </div>
               </FadeIn>
@@ -805,7 +827,7 @@ export function ServiceDetailPage() {
               </div>
               <div className="flex flex-1 gap-2 sm:flex-none sm:gap-3">
                 <Link
-                  to="/get-quote"
+                  to={quoteHref}
                   className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-accent px-5 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:bg-accent-hover sm:flex-none"
                 >
                   Request Quote

@@ -1907,3 +1907,54 @@ Restructured the public Service Details page to the exact section order **Hero /
 | No regressions to auth, RBAC, leads, clients, quotations, projects, invoices, portfolio | ✅ |
 
 > **Note:** the backend dev server was started for the live smoke test. Disk space on C: was critical during this phase (ENOSPC on `prisma generate`); `npm cache clean --force` + stale `.prisma/client/*.tmp*` cleanup freed ~5.6 GB before the regenerate succeeded.
+
+---
+
+# Phase 6 — Get Quote Deep-Link Preselection (Service + Sub Service)
+
+**Date**: 2026-08-07
+**Status**: ✅ PHASE 6 COMPLETE
+
+## Summary
+
+Get Quote is now deep-link aware. Any "Get Quote" CTA — the Service Details hero/request-quote/sticky buttons, or a specific sub-service card — carries the Service and (where applicable) Sub Service **IDs** in the URL (`/get-quote?service=<id>&subService=<id>`). The wizard opens with that Service/Sub Service pre-selected and locked: the client sees a read-only "Your Selection" summary and **never selects again**. The backend receives and stores `serviceId` + `subServiceId` (not text labels) on each `LeadService`, guarded so the sub-service must be active and belong to the service.
+
+## Backend Changes
+
+1. `prisma/schema.prisma` — `LeadService` gained `subServiceId String?` + `subService SubService? @relation(fields: [subServiceId], references: [id], onDelete: SetNull)` + `@@index([subServiceId])`; `SubService` gained `leadServices LeadService[]`.
+2. `prisma/migrations/20260807000000_lead_service_sub_service/migration.sql` — NEW: ALTER TABLE `lead_services` ADD COLUMN `subServiceId` + FK (`ON DELETE SET NULL`) + index. Applied via `npx prisma migrate deploy` (30 migrations total; client regenerated; hand-written-SQL pattern as Phases 2–5).
+3. `src/modules/lead/lead.types.ts` — `subServiceId?: string` on `CreateLeadServiceInput` and `AddServiceToLeadInput`.
+4. `src/modules/lead/lead.validation.ts` — `subServiceId: z.string().uuid().optional()`.
+5. `src/modules/lead/lead.service.ts` — new `resolveSubServiceId()` guard: sub-service must exist, be `isActive`, not archived/deleted, and `sub.serviceId === serviceId`, else `ValidationError` ("does not belong to the selected Service" / "is not available"). Wired into `createLead` (per-service loop) and `addServiceToLead`.
+6. `src/modules/lead/lead.repository.ts` — `create`/`createMany` persist `subServiceId`; lead `findById` + list, and `leadServiceRepository.findById`/`listForLead` include `subService: true`.
+7. `src/modules/lead/tests/lead.service.test.ts` — 18→24 tests: +4 for `createLead` (persists sub id / rejects mismatch / rejects inactive / rejects non-existent), +2 for `addServiceToLead` (passes sub id to repository / rejects mismatch).
+
+## Frontend Changes
+
+1. **Data layer** — `src/types/index.ts`: `LeadService` gained `subServiceId?` + `subService?`; `src/services/leadService.ts`: `CreateLeadServiceInput.subServiceId?`.
+2. **Wizard state** — `src/public-site/wizard/types.ts`: `WizardState` gained `selectedSubServices: Record<string,string>` (serviceId→subServiceId) + `preselected: boolean`; `src/public-site/wizard/useWizardState.ts`: new `setSubService(serviceId, subServiceId)` and `preselect(serviceId, subServiceId?)` (sets step 1, `preselected`, single service), `toggleService` cleanup removes the sub entry.
+3. **`StepServicesPreselected.tsx`** — NEW locked read-only "Your Selection" card (pinned service + sub-service chip); rendered at step 0 when `preselected`.
+4. **`StepQuestions.tsx` / `StepReview.tsx`** — accept `selectedSubServices` + `subServiceNames`; render an accent `BadgeCheck` sub-service chip under the service heading / in review chips and answer blocks.
+5. **`GetQuotePage.tsx`** — reads `service` (id or public slug) + `subService` (strict id); resolves the service via `usePublicServices`, loads subs via `usePublicSubServices`, then applies `preselect()` once (ref guard; waits for the sub list when `subService` present; falls back to service-only if the id is invalid). `buildLeadInput` maps `subServiceId: selectedSubServices[serviceId]`.
+6. **`ServiceDetailPage.tsx`** — `quoteHref` memo builds `/get-quote?service=<id>[&subService=<id>]`; used by the hero CTA, `GetStartedCard` (new `quoteHref` prop), Request Quote section and sticky bottom CTA. Sub-service cards gained a dedicated "Get Quote" button carrying both IDs.
+7. **`LeadServicesPanel.tsx`** (admin) — shows `subService.name` as an accent badge next to the service name.
+
+## Verification
+
+| Check | Result |
+|-------|--------|
+| Backend tests: 403/403 (26 suites, +6 new sub-service tests) | ✅ |
+| Backend `npx tsc --noEmit` | ✅ 0 errors |
+| Frontend `npx tsc --noEmit` | ✅ 0 errors |
+| Frontend production build | ✅ clean (chunk-size warning pre-existing) |
+| Migration `20260807000000_lead_service_sub_service` applied (30 total) | ✅ |
+| Live: created "Repair" sub-service under Branding & Signage (id `3f9c1335…`) | ✅ |
+| Smoke lead L-00015: `subServiceId` persisted on `LeadService` | ✅ |
+| Guard: sub of another service → "does not belong to the selected Service" | ✅ |
+| Guard: inactive / missing sub → "is not available" | ✅ |
+| Lead detail + list resolve `subService.name` = "Repair" via relation | ✅ |
+| Vite dev: SPA + deep-link routes + all changed modules transform (200) | ✅ |
+| Smoke lead L-00015 archived after the test | ✅ |
+| No regressions to auth, RBAC, services, sub-services, leads, clients, quotations, projects, invoices, portfolio | ✅ |
+
+> **Note:** the backend (port 4000) and Vite (port 5173) dev servers were left running after the smoke test. C: had ~2.5 GB free during the frontend build.

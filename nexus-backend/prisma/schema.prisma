@@ -313,6 +313,7 @@ model SubService {
   // Soft delete, mirroring Service. A sub-service is never hard-deleted.
   deletedAt       DateTime?
   service         Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  leadServices    LeadService[]
 
   @@unique([serviceId, slug])
   @@index([serviceId, isActive, archivedAt, deletedAt])
@@ -363,6 +364,11 @@ model LeadService {
   id                        String                @id @default(uuid())
   leadId                    String
   serviceId                 String
+  // Optional Sub Service pinned at quote time (public wizard flow): the
+  // client picked a specific option (e.g. Signage -> Repair), so the Lead
+  // Service carries the SubService id, not a text label. SetNull keeps the
+  // historical row intact if a sub-service is ever hard-deleted.
+  subServiceId              String?
   status                    String                @default("NEW")
   // Timestamp when this service was converted/attached to the Lead's Client
   // (first conversion creates the Client, later conversions only attach the
@@ -380,8 +386,10 @@ model LeadService {
   lead                      Lead                  @relation(fields: [leadId], references: [id])
   questionnaireVersion      ServiceQuestionnaire? @relation(fields: [questionnaireVersionId], references: [id])
   service                   Service               @relation(fields: [serviceId], references: [id])
+  subService                SubService?           @relation(fields: [subServiceId], references: [id], onDelete: SetNull)
   projectServices           ProjectService[]
 
+  @@index([subServiceId])
   @@map("lead_services")
 }
 

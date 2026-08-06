@@ -38,7 +38,14 @@ export function LeadServicesPanel({ lead }: { lead: Lead }) {
               <li key={ls.id} className="flex items-center justify-between px-4 py-3">
                 <div className="flex items-center gap-3">
                   <div>
-                    <p className="text-sm font-medium text-ink">{ls.service?.name ?? 'Service'}</p>
+                    <p className="text-sm font-medium text-ink">
+                      {ls.service?.name ?? 'Service'}
+                      {ls.subService?.name && (
+                        <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-[11px] font-medium text-white">
+                          {ls.subService.name}
+                        </span>
+                      )}
+                    </p>
                     <p className="text-xs text-ink-faint">{ls.service?.category?.name}</p>
                   </div>
                 </div>
