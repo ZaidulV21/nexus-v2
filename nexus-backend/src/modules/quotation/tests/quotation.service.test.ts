@@ -34,6 +34,9 @@ jest.mock('../../lead/lead.service', () => ({
 jest.mock('../../catalog/service.repository', () => ({
   serviceRepository: { findById: jest.fn() },
 }));
+jest.mock('../../catalog/subService.repository', () => ({
+  subServiceRepository: { findById: jest.fn() },
+}));
 jest.mock('../../timeline/timeline.service', () => ({ timelineService: { recordEvent: jest.fn() } }));
 jest.mock('../../audit/audit.service', () => ({ auditService: { recordAudit: jest.fn() } }));
 jest.mock('../../notifications/notifications.service', () => ({ notificationsService: { emitEvent: jest.fn() } }));
@@ -42,6 +45,7 @@ jest.mock('../../project/project.service', () => ({ projectService: { create: je
 import { leadRepository } from '../../lead/lead.repository';
 import { leadService } from '../../lead/lead.service';
 import { serviceRepository } from '../../catalog/service.repository';
+import { subServiceRepository } from '../../catalog/subService.repository';
 import { quotationRepository, quotationVersionRepository } from '../quotation.repository';
 import { projectService } from '../../project/project.service';
 import { quotationService } from '../quotation.service';
@@ -50,6 +54,9 @@ beforeEach(() => {
   jest.clearAllMocks();
   (quotationRepository.countForLead as jest.Mock).mockResolvedValue(0);
   (quotationRepository.generateQuotationNumber as jest.Mock).mockResolvedValue('Q-00001');
+  // The Client the tests create quotations for is traced to lead1, so the
+  // lead-ownership guard (source Lead check) passes with this default lead.
+  (leadRepository.findById as jest.Mock).mockResolvedValue({ id: 'lead1', clientId: null });
   // Every quotation line item must reference a live catalog service.
   (serviceRepository.findById as jest.Mock).mockImplementation(async (id: string) => ({
     id,
@@ -170,6 +177,136 @@ describe('quotationService.create - Client-only workflow', () => {
         'admin1'
       )
     ).rejects.toThrow('Quotations must be created for Clients');
+  });
+});
+
+describe('quotationService.create - Lead Service derivation (Phase 8)', () => {
+  const { clientRepository } = jest.requireMock('../../client/client.repository');
+
+  function mockHappyPath() {
+    (clientRepository.findById as jest.Mock).mockResolvedValue({ id: 'client1', sourceLeadId: 'lead1' });
+    (quotationRepository.create as jest.Mock).mockResolvedValue({ id: 'quo1', quotationNumber: 'Q-00001' });
+    (quotationVersionRepository.create as jest.Mock).mockResolvedValue({ id: 'ver1', versionNumber: 1 });
+    (quotationRepository.findById as jest.Mock).mockResolvedValue({ id: 'quo1', clientId: 'client1', client: {} });
+  }
+
+  beforeEach(() => {
+    // Default: every sub-service resolves to Painting under Interior (svc1).
+    (subServiceRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'sub1',
+      serviceId: 'svc1',
+      name: 'Painting',
+      isActive: true,
+      archivedAt: null,
+      deletedAt: null,
+    });
+  });
+
+  it('persists the derived sub-service on each line item', async () => {
+    mockHappyPath();
+    await quotationService.create(
+      {
+        clientId: 'client1',
+        leadId: 'lead1',
+        items: [
+          { serviceId: 'svc1', subServiceId: 'sub1', description: 'Interior — Painting', quantity: 1, unitPrice: 1000, taxRate: 18 },
+          { serviceId: 'svc1', description: 'Design Fee', quantity: 1, unitPrice: 500, taxRate: 18 },
+        ],
+      },
+      'admin1'
+    );
+
+    const createItemsCall = (quotationVersionRepository.createItems as jest.Mock).mock.calls[0];
+    expect(createItemsCall[1][0].subServiceId).toBe('sub1');
+    expect(createItemsCall[1][0].serviceId).toBe('svc1');
+    // Service-only lines stay valid - no sub-service column required.
+    expect(createItemsCall[1][1].subServiceId).toBeNull();
+  });
+
+  it('rejects a sub-service that belongs to a different Service', async () => {
+    (subServiceRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'sub1',
+      serviceId: 'svc-other', // belongs to another service
+      name: 'Painting',
+      isActive: true,
+      archivedAt: null,
+      deletedAt: null,
+    });
+    mockHappyPath();
+
+    await expect(
+      quotationService.create(
+        {
+          clientId: 'client1',
+          leadId: 'lead1',
+          items: [{ serviceId: 'svc1', subServiceId: 'sub1', description: 'Interior — Painting', quantity: 1, unitPrice: 1000, taxRate: 18 }],
+        },
+        'admin1'
+      )
+    ).rejects.toThrow('does not belong to the selected Service');
+  });
+
+  it('rejects an unavailable (inactive / archived / deleted) sub-service', async () => {
+    (subServiceRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'sub1',
+      serviceId: 'svc1',
+      name: 'Painting',
+      isActive: false,
+      archivedAt: new Date(),
+      deletedAt: null,
+    });
+    mockHappyPath();
+
+    await expect(
+      quotationService.create(
+        {
+          clientId: 'client1',
+          leadId: 'lead1',
+          items: [{ serviceId: 'svc1', subServiceId: 'sub1', description: 'Interior — Painting', quantity: 1, unitPrice: 1000, taxRate: 18 }],
+        },
+        'admin1'
+      )
+    ).rejects.toThrow('is not available');
+  });
+
+  it('rejects a quotation whose Lead does not belong to the selected Client', async () => {
+    (clientRepository.findById as jest.Mock).mockResolvedValue({ id: 'client1', sourceLeadId: 'lead1' });
+    (leadRepository.findById as jest.Mock).mockResolvedValue({ id: 'leadX', clientId: 'clientOther' });
+    mockHappyPath();
+
+    await expect(
+      quotationService.create(
+        {
+          clientId: 'client1',
+          leadId: 'leadX',
+          items: [{ serviceId: 'svc1', description: 'Interior', quantity: 1, unitPrice: 1000, taxRate: 18 }],
+        },
+        'admin1'
+      )
+    ).rejects.toThrow('does not belong to the selected Client');
+  });
+
+  it('revise validates sub-services while keeping archived services quotable', async () => {
+    (quotationRepository.findById as jest.Mock).mockResolvedValue({ id: 'quo1' });
+    (quotationVersionRepository.countVersions as jest.Mock).mockResolvedValue(1);
+    (quotationVersionRepository.create as jest.Mock).mockResolvedValue({ id: 'ver2', versionNumber: 2 });
+    (subServiceRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'sub1',
+      serviceId: 'svc1',
+      name: 'Painting',
+      isActive: true,
+      archivedAt: null,
+      deletedAt: null,
+    });
+
+    await quotationService.revise(
+      'quo1',
+      { items: [{ serviceId: 'svc1', subServiceId: 'sub1', description: 'Interior — Painting v2', quantity: 1, unitPrice: 1200, taxRate: 18 }] },
+      'admin1'
+    );
+
+    const createItemsCall = (quotationVersionRepository.createItems as jest.Mock).mock.calls[0];
+    expect(createItemsCall[1][0].subServiceId).toBe('sub1');
   });
 });
 

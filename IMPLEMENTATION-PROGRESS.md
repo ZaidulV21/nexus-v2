@@ -2009,3 +2009,50 @@ The Lead flow (Lead → Lead Services → Lead Sub Services) now supports **one 
 | No regressions to auth, RBAC, services, sub-services, leads, clients, quotations, projects, invoices, portfolio | ✅ |
 
 > **Note:** the backend (port 4000, restarted after the migration) and Vite (port 5173) dev servers are running. Interior Design's Painting (`91d89094…`), Flooring (`68092941…`), Lighting (`61c6f50d…`) sub-services are live seed data matching the Phase 7 example; the existing Office Fit-out / Retail Store Design subs remain intact.
+
+---
+
+# Phase 8 — Quotation Flow: Service, Sub Service & Client Derived from the Parent Lead
+
+**Date**: 2026-08-07
+**Status**: ✅ PHASE 8 COMPLETE
+
+## Summary
+
+Quotations now automatically know **Service, Sub Service and Client from the parent Lead Service** — no duplicate service selection and no workflow change. The quotation drawer auto-derives **one line item per sub-service** of the Lead Service (e.g. Interior Design → Painting, Flooring, Lighting), pre-fills and **locks the parent Service by default**, and lets Admin/Super Admin **unlock** it when genuinely needed. The Client is validated to be the owner of the selected Lead. Every existing quotation, project-creation, invoice and lead workflow is preserved: project creation still dedupes by `serviceId` while the `subServiceId` relationship is retained per line for reporting and future automation.
+
+## Backend Changes
+
+1. `prisma/schema.prisma` — `QuotationItem` gained `subServiceId String?` + `@@index([subServiceId])` and `subService SubService? @relation(fields: [subServiceId], references: [id], onDelete: SetNull)`; `SubService` gained the back-relation `quotationItems QuotationItem[]`.
+2. `prisma/migrations/20260807020000_quotation_item_sub_service/migration.sql` — NEW: `ALTER TABLE` adds `subServiceId`, creates the index and FK (`ON DELETE SET NULL ON UPDATE CASCADE`). Applied via `npx prisma migrate deploy` (32 migrations total; backend stopped/restarted around it per the hand-written-SQL pattern).
+3. `src/modules/quotation/quotation.types.ts` — `QuotationItemInput.subServiceId?: string`.
+4. `src/modules/quotation/quotation.validation.ts` — item schema gained `subServiceId: z.string().uuid().optional()`.
+5. `src/modules/quotation/quotation.service.ts` — imported `subServiceRepository`; `computeTotals` returns `subServiceId: item.subServiceId ?? null`; NEW `assertItemSubServicesBelong(items, requireSelectable)` (each sub must exist, be `isActive`, not archived/deleted, and its `serviceId` must match the item's `serviceId`; when `requireSelectable` is false unavailable subs are skipped so archived services stay quotable during negotiation); NEW `assertLeadBelongsToClient(leadId, client)` (lead must be the client's `sourceLeadId` or have `clientId === client.id`, else `ValidationError('The selected Lead does not belong to the selected Client')`). Both wired into `create` (requireSelectable=true) and `revise` (false).
+6. `src/modules/quotation/quotation.repository.ts` — NEW `VERSION_ITEMS_INCLUDE = { items: { include: { subService: true } } }`; the three active-version include sites (findById detail, admin list, client `listForClient`) now resolve `items[].subService` so API responses carry it.
+7. `src/modules/quotation/tests/quotation.service.test.ts` — mocked `subServiceRepository`; `beforeEach` defaults `leadRepository.findById` to `{ id: 'lead1', clientId: null }` and the service mock to `archivedAt: null`; 5 new Phase 8 tests: persists the derived sub on each line, rejects a sub that belongs to a different Service, rejects an unavailable (inactive/archived/deleted) sub, rejects a Lead that does not belong to the selected Client, and `revise` validates subs while keeping archived services quotable. Full suite **410/410, 26 suites** (+5).
+
+## Frontend Changes
+
+1. `src/types/index.ts` — `QuotationItem` gained `subServiceId?: string | null` and `subService?: SubService | null`.
+2. `src/services/quotationService.ts` — `CreateQuotationInput.items[]` gained `subServiceId?: string`.
+3. `src/components/documents/LineItemsEditor.tsx` — `BuilderLine` gained `subServiceId?: string`; new optional prop `extraColumnDisabled` wraps the extra column in a `<fieldset disabled>` (shared editor untouched for invoices).
+4. `src/pages/quotations/components/QuotationFormDrawer.tsx` — items schema/form values include `subServiceId`; `isAdmin = actor?.type === 'ADMIN'`; create mode loads `leadDetail` via `useLead(selectedLeadId)` and **auto-derives one line per sub-service** (`buildDerivedLines` → description `"Service — SubService"`, guarded by a ref so it runs once per Lead); `servicesUnlocked` state lets Admin/Super Admin toggle **"Unlock services to change" / "Re-lock services to Lead"**; locked mode renders a read-only chip `Service · SubService` with a Lock icon; manual service change clears `subServiceId`; revise mode preserves `subServiceId` when mapping active-version items; `onSubmit` sends `subServiceId: item.subServiceId || undefined`; name lookups via `serviceNameById` (client services) and `subServiceNameById` (lead detail sub-services).
+
+## Verification
+
+| Check | Result |
+|-------|--------|
+| Backend tests: 410/410 (26 suites, +5 new Phase 8 tests) | ✅ |
+| Backend `npx tsc --noEmit` | ✅ 0 errors |
+| Frontend `npx tsc --noEmit` | ✅ 0 errors |
+| Frontend production build | ✅ clean (chunk-size warning pre-existing) |
+| Migration `20260807020000_quotation_item_sub_service` applied (32 total) | ✅ |
+| Live: lead L-00017 = Interior Design with Painting/Flooring/Lighting via junction (public POST) | ✅ |
+| Live: converted to client C-00009 (`0e868f93…`, sourceLead = L-00017) | ✅ |
+| Live: quotation Q-00011 created with **3 line items**, each carrying `subServiceId` + resolved `subService.name` (Painting/Flooring/Lighting), totals 3203.7 | ✅ |
+| Live: LeadService auto-advanced QUOTE PREPARING → QUOTE SENT on first quotation | ✅ |
+| Guard: sub of another Service (Repair under Interior) → "does not belong to the selected Service" | ✅ |
+| Guard: Lead not belonging to the selected Client → "The selected Lead does not belong to the selected Client" | ✅ |
+| No regressions to auth, RBAC, services, sub-services, leads, clients, quotations, projects, invoices, portfolio | ✅ |
+
+> **Note:** the backend (port 4000) and Vite (port 5173) dev servers are running. Smoke artifacts: lead L-00017, client C-00009, quotation Q-00011 remain in the DB (L-00016/L-00015 from Phase 7 are archived).

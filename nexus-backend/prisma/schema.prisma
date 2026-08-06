@@ -314,6 +314,7 @@ model SubService {
   deletedAt       DateTime?
   service           Service           @relation(fields: [serviceId], references: [id], onDelete: Cascade)
   leadSubServices   LeadSubService[]
+  quotationItems    QuotationItem[]
 
   @@unique([serviceId, slug])
   @@index([serviceId, isActive, archivedAt, deletedAt])
@@ -493,6 +494,11 @@ model QuotationItem {
   id                 String           @id @default(uuid())
   quotationVersionId String
   serviceId          String
+  // Phase 8: the specific Sub Service a line covers, derived from the parent
+  // Lead Service's sub-services (Interior -> Painting line). Nullable so
+  // service-only lines and historical quotations stay valid; ON DELETE SET
+  // NULL so a soft-deleted sub-service never orphans a quotation line.
+  subServiceId       String?
   description        String
   quantity           Decimal          @db.Decimal(10, 2)
   // Measurement unit for the line (Nos, Sq Ft, Meter, Job, ...). "None" is the
@@ -505,7 +511,9 @@ model QuotationItem {
   serviceName        String?
   hsnSacCode         String?
   quotationVersion   QuotationVersion @relation(fields: [quotationVersionId], references: [id])
+  subService         SubService?      @relation(fields: [subServiceId], references: [id], onDelete: SetNull)
 
+  @@index([subServiceId])
   @@map("quotation_items")
 }
 

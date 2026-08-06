@@ -1,6 +1,10 @@
 export interface QuotationItemInput {
   serviceId: string;
   serviceName?: string;
+  // Phase 8: the specific Sub Service this line covers, derived from the
+  // parent Lead Service's sub-services. Optional so service-only lines and
+  // historical quotations remain valid.
+  subServiceId?: string;
   description: string;
   quantity: number;
   unit?: string;

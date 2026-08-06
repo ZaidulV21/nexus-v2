@@ -4,6 +4,7 @@ import { leadRepository } from '../lead/lead.repository';
 import { leadService } from '../lead/lead.service';
 import { clientRepository } from '../client/client.repository';
 import { serviceRepository } from '../catalog/service.repository';
+import { subServiceRepository } from '../catalog/subService.repository';
 import { timelineService } from '../timeline/timeline.service';
 import { auditService } from '../audit/audit.service';
 import { notificationsService } from '../notifications/notifications.service';
@@ -25,6 +26,7 @@ function computeTotals(items: QuotationItemInput[], discount: number, transporta
     return {
       serviceId: item.serviceId,
       serviceName: item.serviceName ?? null,
+      subServiceId: item.subServiceId ?? null,
       description: item.description,
       quantity: item.quantity,
       unit: item.unit || 'None',
@@ -56,6 +58,40 @@ async function assertItemServicesExist(items: QuotationItemInput[], requireSelec
     if (requireSelectable && (!service.isActive || service.archivedAt)) {
       throw new ValidationError(`Service "${service.name}" is not available for new quotations`);
     }
+  }
+}
+
+// Phase 8: a line's Sub Service must derive from the same catalog lineage as
+// its Service - the sub must exist, be available, and belong to the item's
+// serviceId (mirrors the Lead flow's resolveSubServiceIds guard). A line
+// without a sub-service is always valid.
+async function assertItemSubServicesBelong(items: QuotationItemInput[], requireSelectable: boolean) {
+  for (const item of items) {
+    if (!item.subServiceId) continue;
+    const sub = await subServiceRepository.findById(item.subServiceId);
+    if (!sub || !sub.isActive || sub.archivedAt || sub.deletedAt) {
+      throw new ValidationError(`Sub Service ${item.subServiceId} is not available`);
+    }
+    if (sub.serviceId !== item.serviceId) {
+      throw new ValidationError(`Sub Service "${sub.name}" does not belong to the selected Service`);
+    }
+    if (requireSelectable && !sub.isActive) {
+      throw new ValidationError(`Sub Service "${sub.name}" is not available for new quotations`);
+    }
+  }
+}
+
+// The Client and Lead must be the same lineage: the Lead is either the
+// Client's source Lead (first conversion) or a Lead attached to the Client
+// (repeat conversion). Mirrors clientRepository.listLeads' ownership rule so a
+// mismatched pair is rejected instead of creating a mis-owned quotation.
+async function assertLeadBelongsToClient(leadId: string, client: { id: string; sourceLeadId?: string | null }) {
+  const lead = await leadRepository.findById(leadId);
+  if (!lead) throw new NotFoundError('Lead not found');
+  const belongs =
+    lead.id === client.sourceLeadId || (lead.clientId != null && lead.clientId === client.id);
+  if (!belongs) {
+    throw new ValidationError('The selected Lead does not belong to the selected Client');
   }
 }
 
@@ -119,7 +155,11 @@ export const quotationService = {
       throw new ValidationError('Client has no source Lead - cannot create quotation');
     }
 
+    // Client and Lead must be the same lineage (source Lead or attached Lead).
+    await assertLeadBelongsToClient(input.leadId, client);
+
     await assertItemServicesExist(input.items, true);
+    await assertItemSubServicesBelong(input.items, true);
 
     const enrichedItems = await enrichItemsWithServiceNames(input.items);
     const discount = input.discount || 0;
@@ -209,6 +249,7 @@ export const quotationService = {
     if (!quotation) throw new NotFoundError('Quotation not found');
 
     await assertItemServicesExist(input.items, false);
+    await assertItemSubServicesBelong(input.items, false);
 
     const enrichedItems = await enrichItemsWithServiceNames(input.items);
     const discount = input.discount || 0;

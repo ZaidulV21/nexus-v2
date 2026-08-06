@@ -17,6 +17,7 @@ export interface CreateQuotationInput {
   installation?: number;
   items: Array<{
     serviceId: string;
+    subServiceId?: string;
     description: string;
     quantity: number;
     unit?: string;

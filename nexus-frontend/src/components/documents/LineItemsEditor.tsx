@@ -17,6 +17,7 @@ export interface BuilderLine {
   unitPrice: string;
   taxRate: string;
   serviceId?: string;
+  subServiceId?: string;
   hsnSacCode?: string;
 }
 
@@ -61,6 +62,7 @@ export function LineItemsEditor({
   renderExtraColumn,
   extraColumnLabel,
   listError,
+  extraColumnDisabled = false,
 }: {
   items: BuilderLine[];
   onUpdate: (index: number, field: BuilderLineField, value: string) => void;
@@ -72,6 +74,12 @@ export function LineItemsEditor({
   extraColumnLabel?: string;
   /** Form-level error such as "Add at least one item". */
   listError?: string;
+  /**
+   * Locks the document-specific column (Service picker) while still letting
+   * the row's pricing fields stay editable. Used by the quotation builder when
+   * lines are auto-derived from the Lead Service lineage (Phase 8).
+   */
+  extraColumnDisabled?: boolean;
 }) {
   return (
     <div className="flex flex-col gap-3">
@@ -103,7 +111,9 @@ export function LineItemsEditor({
             <div className="grid gap-3 lg:grid-cols-12">
               <div className="lg:col-span-6">
                 {renderExtraColumn ? (
-                  renderExtraColumn(index)
+                  <fieldset disabled={extraColumnDisabled}>
+                    {renderExtraColumn(index)}
+                  </fieldset>
                 ) : (
                   <FormField label={extraColumnLabel ?? 'Details'} error={itemError.description}>
                     <Input

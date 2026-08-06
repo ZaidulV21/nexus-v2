@@ -2,6 +2,8 @@ import { z } from 'zod';
 
 const itemSchema = z.object({
   serviceId: z.string().uuid(),
+  // Phase 8: sub-service this line covers (derived from the Lead Service).
+  subServiceId: z.string().uuid().optional(),
   description: z.string().min(1),
   quantity: z.number().positive(),
   unit: z.string().optional(),

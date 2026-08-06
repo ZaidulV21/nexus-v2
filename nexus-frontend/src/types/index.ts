@@ -365,6 +365,9 @@ export interface Project {
 export interface QuotationItem {
   id: string;
   serviceId: string;
+  /** Phase 8: the derived Sub Service this line covers (nullable for service-only lines). */
+  subServiceId?: string | null;
+  subService?: SubService | null;
   description: string;
   quantity: string;
   unit?: string;

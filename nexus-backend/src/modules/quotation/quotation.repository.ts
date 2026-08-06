@@ -55,6 +55,10 @@ const CLIENT_SUMMARY_SELECT = {
   sourceLead: { select: { id: true, leadNumber: true, contactName: true } },
 } as const;
 
+// Include the Sub Service relation on every quotation line read so clients of
+// the API see the derived sub-service (name, id) without a second lookup.
+const VERSION_ITEMS_INCLUDE = { items: { include: { subService: true } } } as const;
+
 export const quotationRepository = {
   create(data: { quotationNumber: string; leadId: string; clientId: string }, tx: Prisma.TransactionClient) {
     return tx.quotation.create({ data });
@@ -102,7 +106,7 @@ export const quotationRepository = {
         client: { select: CLIENT_SUMMARY_SELECT },
         versions: {
           include: {
-            items: true,
+            ...VERSION_ITEMS_INCLUDE,
             approvals: true,
           },
           orderBy: { versionNumber: 'desc' },
@@ -133,7 +137,7 @@ export const quotationRepository = {
           client: { select: CLIENT_SUMMARY_SELECT },
           versions: {
             where: { isActive: true },
-            include: { items: true },
+            include: VERSION_ITEMS_INCLUDE,
           },
         },
       }),
@@ -179,7 +183,7 @@ export const quotationRepository = {
           client: { select: { sourceLead: { select: { id: true, leadNumber: true } } } },
           versions: {
             where: { isActive: true },
-            include: { items: true },
+            include: VERSION_ITEMS_INCLUDE,
           },
         },
       }),
