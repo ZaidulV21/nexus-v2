@@ -72,3 +72,35 @@ export function useRestoreService(serviceId: string) {
     },
   });
 }
+
+export function useDuplicateService() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (serviceId: string) => serviceCatalogService.duplicate(serviceId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.services.all });
+    },
+  });
+}
+
+export function useSoftDeleteService(serviceId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => serviceCatalogService.softDelete(serviceId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.services.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.timeline('SERVICE', serviceId) });
+    },
+  });
+}
+
+export function useUndeleteService(serviceId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => serviceCatalogService.undelete(serviceId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.services.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.timeline('SERVICE', serviceId) });
+    },
+  });
+}

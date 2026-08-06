@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ServiceIcon } from '@/components/common/ServiceIcon';
 
 interface ServiceCardProps {
   name: string;
@@ -14,17 +15,6 @@ interface ServiceCardProps {
   /** Highlights the card as the currently selected/active service. */
   active?: boolean;
 }
-
-const iconMap: Record<string, string> = {
-  Palette: '🎨',
-  Sun: '☀️',
-  Zap: '⚡',
-  Camera: '📷',
-  Monitor: '🖥️',
-  Globe: '🌐',
-  ShoppingCart: '🛒',
-  ShieldCheck: '🛡️',
-};
 
 export function ServiceCard({ name, slug, description, icon, image, index = 0, variant = 'default', active = false }: ServiceCardProps) {
   return (
@@ -61,10 +51,10 @@ export function ServiceCard({ name, slug, description, icon, image, index = 0, v
           </div>
         ) : (
           <div className={cn(
-            'flex h-12 w-12 items-center justify-center rounded-xl bg-accent-subtle text-2xl transition-colors group-hover:bg-accent group-hover:text-white',
+            'flex h-12 w-12 items-center justify-center rounded-xl bg-accent-subtle transition-colors group-hover:bg-accent group-hover:text-white',
             variant === 'featured' ? 'm-6' : 'm-5'
           )}>
-            {iconMap[icon] || '📋'}
+            <ServiceIcon name={icon} className="h-6 w-6" />
           </div>
         )}
         <div className={cn('p-6', variant === 'featured' && 'sm:px-8 sm:pb-8')}>

@@ -3,6 +3,30 @@ import bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
+// Mirrors src/modules/catalog/service.service.ts slugify() so seeded services
+// get the same SEO-friendly URLs the app would generate on creation.
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s-]/g, '')
+    .replace(/[\s_]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+async function ensureUniqueSlug(baseSlug: string): Promise<string> {
+  const clean = baseSlug || 'service';
+  let candidate = clean;
+  let suffix = 2;
+  for (;;) {
+    const existing = await prisma.service.findFirst({ where: { slug: candidate } });
+    if (!existing) return candidate;
+    candidate = `${clean}-${suffix}`;
+    suffix += 1;
+  }
+}
+
 // Every permission key referenced by an authorize('...') call anywhere in
 // the codebase must exist here, or that route becomes permanently
 // inaccessible to the ADMIN role until this list is updated.
@@ -84,10 +108,12 @@ async function main() {
     for (const svc of cat.services) {
       const existing = await prisma.service.findFirst({ where: { name: svc.name } });
       if (!existing) {
+        const slug = await ensureUniqueSlug(slugify(svc.name));
         const service = await prisma.service.create({
           data: {
             categoryId: category.id,
             name: svc.name,
+            slug,
             requiresSiteVisit: svc.requiresSiteVisit,
             isActive: true,
           },

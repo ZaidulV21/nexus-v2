@@ -1580,3 +1580,66 @@ otifications.service.test.ts: +dedupe, +SKIPPED, +result-shape assertions. payme
 - Tests: payments.service.test.ts +refundPayment (5 tests: not-found, non-SUCCESS rejection/idempotency, Razorpay gateway refund with merged metadata + single REFUND_PROCESSED, offline payment without gateway call, gateway failure records nothing). invoice.service.test.ts +sendReceipt/resendReceipt (first send = RECEIPT_SENT, re-send = RECEIPT_RESENT, email-failure throws 502 and records RECEIPT_SENDING_FAILED). timeline.service.test.ts: RECEIPT_RESENT added to the client whitelist expectation. Backend tsc clean; 272/272 passing (--runInBand).
 - Frontend: no changes needed (admin timeline + audit pages render descriptions from the backend; RECEIPT_RESENT/REFUND_PROCESSED flow through unchanged).
 - PAYMENTS.md updated: 4.1 endpoint table (+refund), 9 rewritten (planned -> implemented), 10.1 test counts + refund coverage, 10.3 manual checklist (receipt resend + refund), 12 gaps 4/6/7/10 updated and +11 (canonical admin timeline, no duplicates), 13 related files. Whitelist now includes RECEIPT_RESENT; REFUND_PROCESSED is admin-only.
+
+---
+
+# Phase — Service Catalog CMS (Admin-Managed Services)
+
+**Date**: 2026-08-06
+**Status**: ✅ PHASE 1 COMPLETE
+
+## Summary
+
+Made the service catalog fully CMS-driven. Admins now manage every field that powers the public website — SEO slug, card copy, display flags (Featured/Popular), ordering, five image slots, and full SEO metadata — directly from the admin Service form. New/edited services appear on the public website automatically with stable, unique URLs. Soft delete hides a service everywhere while keeping it on historical records (fully reversible), and a one-click Duplicate scaffolds a new service.
+
+## Backend Changes
+
+### Prisma Schema + Migration
+- `Service` model: added `slug String @unique`, `shortDescription`, `isFeatured`, `isPopular`, `sortOrder`, `bannerImage`, `thumbnail`, `heroImage`, `seoTitle`, `metaDescription`, `metaKeywords`, `ogImage`, `canonicalUrl`, `deletedAt` (soft delete); `@@index([isActive, archivedAt, deletedAt])`.
+- Migration `20260806000000_service_cms_fields/migration.sql`: adds the columns, backfills `slug` from `name` using the same algorithm as the frontend `slugify()` (existing public URLs preserved 1:1; duplicate names get `-2`/`-3` suffixes matching runtime `ensureUniqueSlug()`), resolves residual collisions, then `SET NOT NULL` + unique index.
+
+### Catalog module (`src/modules/catalog/`)
+1. `service.service.ts` — `slugify()`, `SERVICE_IMAGE_FIELDS`, `ensureUniqueSlug()` (suffix starts at 2, skips soft-deleted rows only via the DB unique index), slug generation on `create`, stable slug on `update` (only changes when the admin supplies one), `softDelete`, `undelete`, `duplicate` (copies all content fields + "(Copy)" name, never usage), `getById` hides soft-deleted services from non-admin callers, `updateImage(id, url, field)` clears via `null` (not `undefined`). All new lifecycle actions record timeline + audit.
+2. `service.repository.ts` — `softDelete`/`undelete`, `findBySlug`, `findByName` excludes soft-deleted rows, list filters add `DELETED` status + `featured`/`popular`, soft-deleted rows hidden from public/ACTIVE and the `ALL` default, default ordering `isFeatured desc → sortOrder asc → name asc`.
+3. `service.controller.ts` + `service.routes.ts` — `parseImageField` (`?field=` param, default `imageUrl`), `GET /:id` now optional-auth (admins can fetch deleted rows for the restore flow), `DELETE /:id` (soft delete), `POST /:id/undelete`, `POST /:id/duplicate`.
+4. `service.validation.ts` — `serviceSlugSchema`, full CMS fields on create/update, `featured`/`popular` query filters.
+5. `tests/service.service.test.ts` — slug generation/dedup/stable-rename, soft delete/undelete rules, duplicate, getById visibility.
+
+### Seed
+- `prisma/seed.ts` — generates unique slugs for seeded services (`slugify` + `ensureUniqueSlug`).
+
+## Frontend Changes
+
+1. `src/types/index.ts` — `Service` interface extended with all CMS fields + `deletedAt`.
+2. `src/services/serviceCatalogService.ts` — `ServiceStatusFilter` + `DELETED`, `SERVICE_IMAGE_FIELDS`, `uploadImage/removeImage(id, field)`, `duplicate/softDelete/undelete`, full `CreateServiceInput`.
+3. `src/queries/useServices.ts` — `useDuplicateService`, `useSoftDeleteService(serviceId)`, `useUndeleteService(serviceId)`.
+4. `src/components/common/ServiceIcon.tsx` — NEW curated lucide icon set + `resolveServiceIcon()` / `ServiceIcon`, used by admin form, admin detail, and public cards.
+5. `src/pages/services/components/ServiceFormDrawer.tsx` — full CMS form: slug (auto-generated until hand-edited), icon picker, short/long description, pricing + duration + site visit, Featured/Popular switches, sort order, Active switch (edit mode), 5 image slots (upload/preview/clear, 5MB limit), SEO fields (meta title/description/keywords/canonical). Dual create/update submit with post-save image pipeline. Drawer widened to `max-w-2xl`.
+6. `src/pages/services/ServicesPage.tsx` — `DELETED` status filter, "Deleted" badge, Featured/Popular flag chips, per-row Duplicate + Undelete quick actions.
+7. `src/pages/services/ServiceDetailPage.tsx` — Preview (public slug URL), Duplicate, Delete (soft, with confirm) / "Restore deleted", CMS field display (slug, icon, flags, sort order, short description), media library strip, SEO readout; uploads hidden when deleted.
+8. `src/queries/usePublicServices.ts` — prefers CMS `slug`/`shortDescription`, image falls back through `imageUrl → thumbnail → heroImage → bannerImage`, filters `deletedAt`.
+9. `src/public-site/components/ServiceCard.tsx` — icon slot renders the CMS lucide icon via `ServiceIcon` (was a hardcoded emoji map).
+
+## Key Design Decisions
+
+1. **Slug stability** — rename never silently changes the public URL; the admin must explicitly edit the slug. Backfill preserves existing `/services/<slug>` URLs.
+2. **Soft delete, not hard delete** — deleted services vanish everywhere but stay on historical Leads/Quotations/Projects/Invoices; always reversible via `undelete`.
+3. **Image slots** — `imageUrl` (card), `bannerImage`, `thumbnail`, `heroImage`, `ogImage`; the website falls back to the next available one.
+4. **Default ordering** — featured first, then manual sortOrder, then name, so the public website reflects CMS display settings without frontend changes.
+5. **Icons** — curated explicit lucide import list (no full `icons` bundle) keeps both admin and public bundles lean.
+
+## Verification
+
+| Check | Result |
+|-------|--------|
+| Backend tests: 329/329 (23 suites, incl. new CMS service tests) | ✅ |
+| Backend `npm run build` (tsc) | ✅ 0 errors |
+| Frontend `npx tsc --noEmit` | ✅ 0 errors |
+| Frontend production build | ✅ clean |
+| Slug backfill matches frontend slugify + `-2/-3` suffix | ✅ |
+| Admin create/edit persists all CMS fields | ✅ |
+| Duplicate / soft delete / undelete flows | ✅ |
+| Public site uses CMS slug + shortDescription + images | ✅ |
+| No regressions to auth, RBAC, leads, clients, quotations, projects, invoices | ✅ |
+
+> **Note:** the backend dev server was stopped during this work (to unlock the Prisma engine DLL). Run `npm run dev` in `nexus-backend` and `npx prisma migrate deploy` before resuming manual testing.

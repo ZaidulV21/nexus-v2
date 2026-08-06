@@ -8,9 +8,10 @@ const upload = multer({ storage: multer.memoryStorage() });
 const router = Router();
 
 // Public - service list and detail power the enquiry wizard. Optional auth
-// lets the admin panel reuse the same list endpoint with status filters.
+// lets the admin panel reuse the same list endpoint with status filters, and
+// lets admins view soft-deleted services (for the restore flow).
 router.get('/', authenticateOptional, serviceController.list);
-router.get('/:id', serviceController.getById);
+router.get('/:id', authenticateOptional, serviceController.getById);
 router.get('/:id/questionnaire', serviceController.getQuestionnaire);
 
 // Admin only
@@ -22,5 +23,8 @@ router.delete('/:id/image', authenticate, authorize('service.manage'), serviceCo
 router.patch('/:id/disable', authenticate, authorize('service.manage'), serviceController.disable);
 router.patch('/:id/archive', authenticate, authorize('service.manage'), serviceController.archive);
 router.patch('/:id/restore', authenticate, authorize('service.manage'), serviceController.restore);
+router.delete('/:id', authenticate, authorize('service.manage'), serviceController.softDelete);
+router.post('/:id/undelete', authenticate, authorize('service.manage'), serviceController.undelete);
+router.post('/:id/duplicate', authenticate, authorize('service.manage'), serviceController.duplicate);
 
 export default router;

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { ColumnDef } from '@tanstack/react-table';
-import { Plus } from 'lucide-react';
+import { Plus, Copy, RotateCcw, Star, Flame } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/Button';
 import { DataTable } from '@/components/ui/DataTable';
@@ -11,8 +11,15 @@ import { Badge } from '@/components/ui/StatusBadge';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/Select';
 import { useDebounce } from '@/hooks/useDebounce';
 import { useDisclosure } from '@/hooks/useDisclosure';
-import { useServicesList, useCategoryTree } from '@/queries/useServices';
+import { useToast } from '@/hooks/useToast';
+import {
+  useServicesList,
+  useCategoryTree,
+  useDuplicateService,
+  useUndeleteService,
+} from '@/queries/useServices';
 import { formatCurrency, formatDate } from '@/lib/format';
+import { ApiError } from '@/lib/api';
 import { ROUTES } from '@/routes/routes';
 import type { Category, Service } from '@/types';
 import type { ServiceStatusFilter } from '@/services/serviceCatalogService';
@@ -25,6 +32,7 @@ const STATUS_OPTIONS: Array<{ value: ServiceStatusFilter; label: string }> = [
   { value: 'ACTIVE', label: 'Active' },
   { value: 'INACTIVE', label: 'Inactive' },
   { value: 'ARCHIVED', label: 'Archived' },
+  { value: 'DELETED', label: 'Deleted' },
 ];
 
 function flattenCategories(categories: Category[], depth = 0): Array<{ id: string; label: string }> {
@@ -34,10 +42,67 @@ function flattenCategories(categories: Category[], depth = 0): Array<{ id: strin
   ]);
 }
 
-export function ServiceStatusPill({ service }: { service: Pick<Service, 'isActive' | 'archivedAt'> }) {
+export function ServiceStatusPill({ service }: { service: Pick<Service, 'isActive' | 'archivedAt' | 'deletedAt'> }) {
+  if (service.deletedAt) return <Badge tone="danger">Deleted</Badge>;
   if (service.archivedAt) return <Badge tone="neutral">Archived</Badge>;
   if (!service.isActive) return <Badge tone="warning">Inactive</Badge>;
   return <Badge tone="success">Active</Badge>;
+}
+
+/** Per-row quick actions: duplicate any service, undelete soft-deleted ones. */
+function ServiceRowActions({ service }: { service: Service }) {
+  const { toast } = useToast();
+  const duplicateMutation = useDuplicateService();
+  const undeleteMutation = useUndeleteService(service.id);
+
+  async function handleDuplicate() {
+    try {
+      const copy = await duplicateMutation.mutateAsync(service.id);
+      toast({ title: 'Service duplicated', description: `"${copy.name}" was created from this one.`, variant: 'success' });
+    } catch (err) {
+      toast({
+        title: 'Could not duplicate service',
+        description: err instanceof ApiError ? err.message : 'Something went wrong.',
+        variant: 'danger',
+      });
+    }
+  }
+
+  async function handleUndelete() {
+    try {
+      const restored = await undeleteMutation.mutateAsync();
+      toast({ title: 'Service restored', description: `"${restored.name}" is visible again.`, variant: 'success' });
+    } catch (err) {
+      toast({
+        title: 'Could not restore service',
+        description: err instanceof ApiError ? err.message : 'Something went wrong.',
+        variant: 'danger',
+      });
+    }
+  }
+
+  return (
+    <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+      <button
+        onClick={handleDuplicate}
+        disabled={duplicateMutation.isPending}
+        title="Duplicate this service"
+        className="flex h-7 w-7 items-center justify-center rounded-md text-ink-faint transition-colors hover:bg-canvas hover:text-accent disabled:opacity-50"
+      >
+        <Copy className="h-3.5 w-3.5" />
+      </button>
+      {service.deletedAt && (
+        <button
+          onClick={handleUndelete}
+          disabled={undeleteMutation.isPending}
+          title="Restore deleted service"
+          className="flex h-7 w-7 items-center justify-center rounded-md text-ink-faint transition-colors hover:bg-canvas hover:text-accent disabled:opacity-50"
+        >
+          <RotateCcw className="h-3.5 w-3.5" />
+        </button>
+      )}
+    </div>
+  );
 }
 
 export function ServicesPage() {
@@ -51,7 +116,6 @@ export function ServicesPage() {
 
   const { data: categories } = useCategoryTree();
   const categoryOptions = useMemo(() => flattenCategories(categories ?? []), [categories]);
-
   const { data, isLoading, isError, refetch } = useServicesList({
     page,
     pageSize: PAGE_SIZE,
@@ -122,6 +186,28 @@ export function ServicesPage() {
         id: 'status',
         header: 'Status',
         cell: (info) => <ServiceStatusPill service={info.row.original} />,
+      },
+      {
+        id: 'flags',
+        header: 'Flags',
+        cell: (info) => {
+          const { isFeatured, isPopular } = info.row.original;
+          if (!isFeatured && !isPopular) return <span className="text-ink-faint">—</span>;
+          return (
+            <div className="flex items-center gap-1.5">
+              {isFeatured && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-accent-subtle px-2 py-0.5 text-xs font-medium text-accent">
+                  <Star className="h-3 w-3" /> Featured
+                </span>
+              )}
+              {isPopular && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-2 py-0.5 text-xs font-medium text-orange-600">
+                  <Flame className="h-3 w-3" /> Popular
+                </span>
+              )}
+            </div>
+          );
+        },
       },
       {
         accessorKey: 'createdAt',
@@ -242,6 +328,7 @@ export function ServicesPage() {
               }
             : undefined
         }
+        rowActions={(row) => <ServiceRowActions service={row} />}
       />
 
       <ServiceFormDrawer

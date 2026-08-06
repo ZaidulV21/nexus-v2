@@ -188,21 +188,46 @@ model Service {
   id                String                 @id @default(uuid())
   categoryId        String
   name              String
+  // SEO-friendly URL segment. Backfilled from `name` on creation when the
+  // admin does not supply one, and enforced unique (with a -2/-3 suffix when
+  // a slug already exists). Existing public URLs stay stable because the
+  // backfill algorithm matches the frontend slugify() output.
+  slug              String                 @unique
   description       String?
+  // Card copy shown on the public website; `description` is the long form.
+  shortDescription  String?
   icon              String?
   basePrice         Decimal?               @db.Decimal(12, 2)
   requiresSiteVisit SiteVisitRequirement   @default(OPTIONAL)
   isActive          Boolean                @default(true)
+  // CMS display flags + ordering.
+  isFeatured        Boolean                @default(false)
+  isPopular         Boolean                @default(false)
+  sortOrder         Int                    @default(0)
+  // Images (all optional; the website falls back to the next available one).
+  imageUrl          String?
+  bannerImage       String?
+  thumbnail         String?
+  heroImage         String?
+  // SEO metadata.
+  seoTitle          String?
+  metaDescription   String?
+  metaKeywords      String?
+  ogImage           String?
+  canonicalUrl      String?
   createdAt         DateTime               @default(now())
   updatedAt         DateTime               @updatedAt
   archivedAt        DateTime?
+  // Soft delete: the service is hidden everywhere (public site + admin list)
+  // but stays attached to historical Leads/Quotations/Projects/Invoices.
+  deletedAt         DateTime?
   estimatedDuration String?
-  imageUrl          String?
   leadServices      LeadService[]
   projectServices   ProjectService[]
   questionnaires    ServiceQuestionnaire[]
   category          Category               @relation(fields: [categoryId], references: [id])
 
+  @@index([isActive, archivedAt, deletedAt])
   @@map("services")
 }
 

@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { serviceService } from './service.service';
+import { serviceService, SERVICE_IMAGE_FIELDS, ServiceImageField } from './service.service';
 import { createServiceSchema, updateServiceSchema, serviceListFiltersSchema } from './service.validation';
 import { ok, created, paginated } from '../../core/utils/response';
 import { parsePagination } from '../../core/utils/pagination';
@@ -11,6 +11,16 @@ import { env } from '../../config/env';
 const storageProvider = env.cloudinaryCloudName ? cloudinaryProvider : localStorageProvider;
 const ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/svg+xml']);
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+
+function parseImageField(query: unknown): ServiceImageField {
+  if (typeof query !== 'string' || query === '') return 'imageUrl';
+  if (!(SERVICE_IMAGE_FIELDS as readonly string[]).includes(query)) {
+    throw new ValidationError(
+      `Invalid image field "${query}". Expected one of: ${SERVICE_IMAGE_FIELDS.join(', ')}`,
+    );
+  }
+  return query as ServiceImageField;
+}
 
 export const serviceController = {
   async create(req: Request, res: Response, next: NextFunction) {
@@ -62,9 +72,38 @@ export const serviceController = {
     }
   },
 
+  async softDelete(req: Request, res: Response, next: NextFunction) {
+    try {
+      const service = await serviceService.softDelete(req.params.id, req.user?.id);
+      return ok(res, service);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async undelete(req: Request, res: Response, next: NextFunction) {
+    try {
+      const service = await serviceService.undelete(req.params.id, req.user?.id);
+      return ok(res, service);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async duplicate(req: Request, res: Response, next: NextFunction) {
+    try {
+      const service = await serviceService.duplicate(req.params.id, req.user?.id);
+      return created(res, service);
+    } catch (err) {
+      next(err);
+    }
+  },
+
   async getById(req: Request, res: Response, next: NextFunction) {
     try {
-      const service = await serviceService.getById(req.params.id);
+      // Admins may fetch soft-deleted services (restore flow); anonymous and
+      // public callers only get visible services.
+      const service = await serviceService.getById(req.params.id, req.user);
       return ok(res, service);
     } catch (err) {
       next(err);
@@ -80,6 +119,8 @@ export const serviceController = {
       const parsedFilters = serviceListFiltersSchema.safeParse({
         status: typeof req.query.status === 'string' ? req.query.status : undefined,
         categoryId: typeof req.query.categoryId === 'string' ? req.query.categoryId : undefined,
+        featured: typeof req.query.featured === 'string' ? req.query.featured : undefined,
+        popular: typeof req.query.popular === 'string' ? req.query.popular : undefined,
       });
       if (!parsedFilters.success) throw new ValidationError('Invalid service filters', parsedFilters.error.flatten());
 
@@ -120,7 +161,8 @@ export const serviceController = {
 
       const stored = await storageProvider.save(file.originalname, file.buffer, file.mimetype);
       const fileUrl = env.cloudinaryCloudName ? stored.fileUrl : `/uploads/${stored.fileUrl}`;
-      const service = await serviceService.updateImage(req.params.id, fileUrl, req.user.id);
+      const field = parseImageField(req.query.field);
+      const service = await serviceService.updateImage(req.params.id, fileUrl, field, req.user.id);
 
       return ok(res, { fileUrl, service });
     } catch (err) {
@@ -134,7 +176,8 @@ export const serviceController = {
         throw new UnauthorizedError('Only admins can remove service images');
       }
 
-      const service = await serviceService.updateImage(req.params.id, null, req.user.id);
+      const field = parseImageField(req.query.field);
+      const service = await serviceService.updateImage(req.params.id, null, field, req.user.id);
       return ok(res, { service });
     } catch (err) {
       next(err);

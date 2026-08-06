@@ -1,7 +1,18 @@
 import { api } from '@/lib/api';
 import type { Service, Category } from '@/types';
 
-export type ServiceStatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE' | 'ARCHIVED';
+export type ServiceStatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE' | 'ARCHIVED' | 'DELETED';
+
+export type ServiceImageField = 'imageUrl' | 'bannerImage' | 'thumbnail' | 'heroImage' | 'ogImage';
+
+/** Maps each CMS image slot to the URL field on the Service record. */
+export const SERVICE_IMAGE_FIELDS: ServiceImageField[] = [
+  'imageUrl',
+  'bannerImage',
+  'thumbnail',
+  'heroImage',
+  'ogImage',
+];
 
 export interface ServiceListParams {
   page?: number;
@@ -9,6 +20,8 @@ export interface ServiceListParams {
   search?: string;
   status?: ServiceStatusFilter;
   categoryId?: string;
+  featured?: boolean;
+  popular?: boolean;
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
 }
@@ -16,10 +29,26 @@ export interface ServiceListParams {
 export interface CreateServiceInput {
   categoryId: string;
   name: string;
+  /** SEO URL segment. Auto-generated from `name` when omitted. */
+  slug?: string;
   description?: string;
+  shortDescription?: string;
+  icon?: string;
+  imageUrl?: string;
+  bannerImage?: string;
+  thumbnail?: string;
+  heroImage?: string;
   basePrice?: number;
   estimatedDuration?: string;
   requiresSiteVisit: 'YES' | 'NO' | 'OPTIONAL';
+  isFeatured?: boolean;
+  isPopular?: boolean;
+  sortOrder?: number;
+  seoTitle?: string;
+  metaDescription?: string;
+  metaKeywords?: string;
+  ogImage?: string;
+  canonicalUrl?: string;
 }
 
 export interface UpdateServiceInput extends Partial<CreateServiceInput> {
@@ -36,8 +65,9 @@ export const serviceCatalogService = {
       search: params?.search,
       status: 'ACTIVE',
     }),
-  // Admin catalog list - authenticated, supports status/category filters and
-  // real pagination (unlike listServices, which powers selection dropdowns).
+  // Admin catalog list - authenticated, supports status/category/featured/
+  // popular filters and real pagination (unlike listServices, which powers
+  // selection dropdowns).
   listAdmin: (params: ServiceListParams) =>
     api.getPaginated<Service>('/services', {
       page: params.page,
@@ -45,19 +75,30 @@ export const serviceCatalogService = {
       search: params.search,
       status: params.status,
       categoryId: params.categoryId,
+      featured: params.featured,
+      popular: params.popular,
       sortBy: params.sortBy,
       sortOrder: params.sortOrder,
     }),
   getById: (id: string) => api.get<Service>(`/services/${id}`),
   create: (input: CreateServiceInput) => api.post<Service>('/services', input),
   update: (id: string, input: UpdateServiceInput) => api.patch<Service>(`/services/${id}`, input),
-  uploadImage: (id: string, file: File) => {
+  // Uploads an image into a specific CMS slot (defaults to imageUrl).
+  uploadImage: (id: string, file: File, field: ServiceImageField = 'imageUrl') => {
     const formData = new FormData();
     formData.append('file', file);
-    return api.upload<{ fileUrl: string; service: Service }>(`/services/${id}/image`, formData);
+    return api.upload<{ fileUrl: string; service: Service }>(
+      `/services/${id}/image?field=${encodeURIComponent(field)}`,
+      formData,
+    );
   },
-  removeImage: (id: string) => api.delete<{ service: Service }>(`/services/${id}/image`),
+  removeImage: (id: string, field: ServiceImageField = 'imageUrl') =>
+    api.delete<{ service: Service }>(`/services/${id}/image?field=${encodeURIComponent(field)}`),
   archive: (id: string) => api.patch<Service>(`/services/${id}/archive`),
   restore: (id: string) => api.patch<Service>(`/services/${id}/restore`),
+  // Soft delete: hidden everywhere but stays on historical records. Reversible.
+  softDelete: (id: string) => api.delete<Service>(`/services/${id}`),
+  undelete: (id: string) => api.post<Service>(`/services/${id}/undelete`),
+  duplicate: (id: string) => api.post<Service>(`/services/${id}/duplicate`),
   getCategoryTree: () => api.get<Category[]>('/categories'),
 };

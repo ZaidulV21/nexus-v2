@@ -7,16 +7,15 @@ import type { ServiceItem } from '@/public-site/types';
 
 /**
  * Map a backend Service to a public-facing ServiceItem.
- * The backend doesn't have `slug`, `shortDescription`, or `features`,
- * so we derive them from the available fields.
+ * Prefers the CMS-managed `slug` / `shortDescription`, falling back to
+ * derived values for rows seeded before the CMS fields existed.
  */
 function toServiceItem(service: Service): ServiceItem {
-  const slug = slugify(service.name);
+  const slug = service.slug || slugify(service.name);
   const description = service.description ?? '';
-  // Use first sentence as short description, or full description if short
-  const shortDescription = description.length > 120
-    ? description.split('.')[0].trim() + '.'
-    : description || service.name;
+  const shortDescription =
+    service.shortDescription?.trim() ||
+    (description.length > 120 ? description.split('.')[0].trim() + '.' : description || service.name);
 
   return {
     id: service.id,
@@ -25,7 +24,7 @@ function toServiceItem(service: Service): ServiceItem {
     description,
     shortDescription,
     icon: service.icon ?? 'Palette',
-    image: service.imageUrl ?? undefined,
+    image: service.imageUrl ?? service.thumbnail ?? service.heroImage ?? service.bannerImage ?? undefined,
     features: [],
     category: service.category?.name ?? '',
   };
@@ -38,7 +37,7 @@ export function usePublicServices() {
     queryFn: async () => {
       const result = await serviceCatalogService.listServices({ pageSize: 100 });
       return result.items
-        .filter((s) => s.isActive && !s.archivedAt)
+        .filter((s) => s.isActive && !s.archivedAt && !s.deletedAt)
         .map(toServiceItem);
     },
     staleTime: 30_000, // 30s — services don't change often

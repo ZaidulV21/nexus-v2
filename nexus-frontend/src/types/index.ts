@@ -32,14 +32,28 @@ export interface Service {
   categoryId: string;
   category?: Category;
   name: string;
+  slug: string;
   description?: string | null;
+  shortDescription?: string | null;
   icon?: string | null;
   imageUrl?: string | null;
+  bannerImage?: string | null;
+  thumbnail?: string | null;
+  heroImage?: string | null;
   basePrice?: string | null;
   estimatedDuration?: string | null;
   requiresSiteVisit: SiteVisitRequirement;
   isActive: boolean;
+  isFeatured?: boolean;
+  isPopular?: boolean;
+  sortOrder?: number;
+  seoTitle?: string | null;
+  metaDescription?: string | null;
+  metaKeywords?: string | null;
+  ogImage?: string | null;
+  canonicalUrl?: string | null;
   archivedAt?: string | null;
+  deletedAt?: string | null;
   createdAt?: string;
   updatedAt?: string;
   /** Present only on the service detail endpoint. */
