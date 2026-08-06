@@ -1710,3 +1710,70 @@ Every Service can now expose an unlimited number of CMS-managed Sub Services. Ea
 | No regressions to auth, RBAC, leads, clients, quotations, projects, invoices | ✅ |
 
 > **Note:** the backend dev server must be restarted (`npm run dev` in `nexus-backend`) — it was stopped during this work to unlock the Prisma engine DLL.
+
+---
+
+# Phase 3 — Service Marketing Gallery
+
+**Date**: 2026-08-06
+**Status**: ✅ PHASE 3 COMPLETE
+
+## Summary
+
+Every Service now has a CMS-managed **Marketing Gallery**: an unlimited, ordered set of images and videos (with a featured item, per-item alt text and captions, video posters, and hide/show toggles). Admins manage it from a new **Gallery** tab on the service detail page (upload, add by URL, reorder, feature, edit metadata, delete); the public site renders active items in a responsive `MarketingGallery` with a lightbox, falling back to the legacy static `ServiceGallery` when no CMS media exists. Independent from project photos and from Sub Service galleries.
+
+## Backend Changes
+
+### Prisma Schema + Migration
+- `ServiceMedia` model added to `schema.prisma`: `type` (`MediaType` enum: `IMAGE`/`VIDEO`), `url` (immutable), `posterUrl?` (video cover), `altText?`, `caption?`, `sortOrder`, `isFeatured` (at most one per service), `isActive`, `serviceId` FK `onDelete: Cascade`; `@@index([serviceId, isActive, sortOrder])`; `Service.media ServiceMedia[]` relation added.
+- Migration `20260806020000_service_marketing_gallery/migration.sql` — creates `media_type` enum + `service_media` table + index + FK. Applied via `npx prisma migrate deploy` (client regenerated).
+- **Note:** `prisma migrate dev` is broken in this repo (pre-existing P3006: shadow DB fails replaying `20260801000000_payment_duplicate_protection`). Worked around for Phases 2 & 3 by hand-writing the migration SQL and applying with `migrate deploy`. The live DB has additional pre-existing drift (quotation FK names, `idempotency_key`, index renames) deliberately left untouched.
+
+### Catalog module (`src/modules/catalog/`)
+1. `catalog.types.ts` — `ServiceMediaType`, `CreateServiceMediaInput`, `UpdateServiceMediaInput` (with `SubServiceListFilters` moved into the same block).
+2. `serviceMedia.validation.ts` — create/update/reorder schemas (url + type immutable, type/url required on create, url pattern, alt/caption lengths, reorder `orderedIds` array).
+3. `serviceMedia.repository.ts` — full CRUD, `listByService` (active-only for public), `reorder` (`$transaction` assigning sequential `sortOrder`), `setFeatured` (`$transaction` clearing the previous featured item), `setActive`, `hardDelete`.
+4. `serviceMedia.service.ts` — `SERVICE_MEDIA_ENTITY_TYPE = 'SERVICE_MEDIA'`, `resolveService`, `getServiceForMutation` (deleted-service galleries frozen), `create/update/setFeatured/toggleActive/remove/listByService/reorder`, timeline + audit on every action.
+5. `serviceMedia.controller.ts` — `GET /:id/media` (public = `isActive` only via `!req.user`), `POST /:id/media/upload` (`.single('file')`, type inferred from mimetype; image 5MB, video 100MB), `POST /:id/media/:mediaId/poster`, `POST /:id/media` (by URL), `PATCH /:id/media/:mediaId`, `POST /:id/media/reorder`, `POST /:id/media/:mediaId/feature`, `DELETE /:id/media/:mediaId`. Storage: Cloudinary when `CLOUDINARY_CLOUD_NAME` is set, else local `/uploads/<name>`.
+6. `service.routes.ts` — media routes nested under services (optional-auth list placed before the admin routes); `:id` resolves UUID or public slug via the shared `resolveService`. Admin routes require `service.manage` permission.
+7. `tests/serviceMedia.service.test.ts` — NEW: 19 tests (create by URL, upload type inference, update alt/caption, setFeatured clears previous, reorder, toggleActive, hard delete, deleted-service freeze, public active-only list, not-belonging-to-service guard).
+
+## Frontend Changes — Data Layer
+
+1. `src/types/index.ts` — `ServiceMediaType` + `ServiceMedia` interface.
+2. `src/services/serviceCatalogService.ts` — `CreateServiceMediaInput`/`UpdateServiceMediaInput` + 9 methods (`listPublicServiceMedia`, `listServiceMedia`, `uploadServiceMedia` via `api.upload` FormData, `uploadServiceMediaPoster`, `createServiceMedia`, `updateServiceMedia`, `setFeaturedServiceMedia`, `reorderServiceMedia`, `deleteServiceMedia`).
+3. `src/queries/keys.ts` + `src/queries/useServices.ts` — `media`/`publicMedia` query keys + 7 hooks (`useServiceMedia`, `usePublicServiceMedia` staleTime 30s, `useInvalidateServiceMedia`, `useCreateServiceMedia`, `useUpdateServiceMedia`, `useSetFeaturedServiceMedia`, `useReorderServiceMedia`, `useDeleteServiceMedia`); invalidation also refreshes `queryKeys.timeline('SERVICE_MEDIA', id)`.
+
+## Frontend Changes — Admin
+
+1. `src/pages/services/components/ServiceGalleryTab.tsx` — NEW: item count, upload image/video buttons, add-from-URL modal, `GalleryItemCard` grid (image/video preview, featured badge, hidden overlay, hover actions: reorder up/down, feature toggle, active toggle, delete), inline alt/caption edits with blur-save, poster upload for videos, ConfirmDialog delete. Uses `useToast` + cache refetch.
+2. `src/pages/services/ServiceDetailPage.tsx` — added the **Gallery** tab.
+
+## Frontend Changes — Public Site
+
+1. `src/public-site/components/MarketingGallery.tsx` — NEW: responsive grid (featured tile spans `col-span-2 row-span-2`), lightbox with keyboard navigation (Escape/arrows), video posters, captions.
+2. `src/public-site/pages/ServiceDetailPage.tsx` — fetches `usePublicServiceMedia(slug)`, passes `marketingMedia` into `DetailSections`; Gallery section renders `MarketingGallery` when CMS media exists, otherwise falls back to the legacy static `ServiceGallery`. CMS media rendered only on the parent service view (`!subSlug`).
+
+## Key Design Decisions
+
+1. **Hard delete, not soft delete** — gallery items are fully removed (unlike soft-deleted services/sub-services); destructive confirm dialog in the UI.
+2. **URL + type immutable after creation** — updates cover alt/caption/poster/sort/feature/active only.
+3. **One featured item per service** — enforced transactionally (clears the previous featured before setting a new one).
+4. **`isActive` gating** — public list returns active items only; admin can hide items without deleting.
+5. **Upload type from mimetype** — image (5MB) vs video (100MB); poster upload allowed for videos.
+6. **Public fallback** — no CMS media → the existing static `ServiceGallery` config drives the section, preserving the pre-Phase-3 look.
+
+## Verification
+
+| Check | Result |
+|-------|--------|
+| Backend tests: 381/381 (25 suites, incl. 19 new service-media tests) | ✅ |
+| Backend `npm run build` (tsc) | ✅ 0 errors |
+| Frontend `npx tsc --noEmit` | ✅ 0 errors |
+| Frontend production build | ✅ clean (chunk-size warning pre-existing) |
+| Migration applied via `migrate deploy`; client regenerated | ✅ |
+| Live API: upload (Cloudinary), create-video-by-URL, public list (active-only), PATCH alt/caption, setFeatured, reorder, DELETE ×2 | ✅ |
+| Cleanup — gallery empty after smoke test | ✅ |
+| No regressions to auth, RBAC, leads, clients, quotations, projects, invoices, sub-services | ✅ |
+
+> **Note:** `prisma migrate dev` remains unusable (pre-existing P3006 drift). Any future schema changes must follow the Phase 2/3 pattern: hand-write the migration SQL under `prisma/migrations/<ts>_<name>/migration.sql` and apply with `npx prisma migrate deploy`.

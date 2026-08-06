@@ -86,3 +86,30 @@ export interface SubServiceListFilters {
   status?: 'ALL' | 'ACTIVE' | 'INACTIVE' | 'ARCHIVED' | 'DELETED';
   search?: string;
 }
+
+export type ServiceMediaType = 'IMAGE' | 'VIDEO';
+
+// A single item in a Service's marketing gallery. Media is uploaded (image or
+// video file) or added by URL, then annotated with alt text / caption and
+// ordered. `isFeatured` marks the showcase highlight (at most one per service).
+export interface CreateServiceMediaInput {
+  type: ServiceMediaType;
+  url: string;
+  posterUrl?: string;
+  altText?: string;
+  caption?: string;
+  sortOrder?: number;
+  isFeatured?: boolean;
+  isActive?: boolean;
+}
+
+// URL and type are immutable after creation (the file/URL never changes); the
+// admin only edits presentation + visibility.
+export interface UpdateServiceMediaInput {
+  posterUrl?: string;
+  altText?: string;
+  caption?: string;
+  sortOrder?: number;
+  isFeatured?: boolean;
+  isActive?: boolean;
+}

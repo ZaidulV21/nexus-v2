@@ -40,6 +40,7 @@ import { ApiError } from '@/lib/api';
 import { ROUTES } from '@/routes/routes';
 import { ServiceFormDrawer } from './components/ServiceFormDrawer';
 import { SubServicesTab } from './components/SubServicesTab';
+import { ServiceGalleryTab } from './components/ServiceGalleryTab';
 import { ServiceStatusPill } from './ServicesPage';
 
 const SITE_VISIT_LABELS: Record<string, string> = {
@@ -290,6 +291,7 @@ export function ServiceDetailPage() {
             <TabsList>
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="sub-services">Sub Services</TabsTrigger>
+              <TabsTrigger value="gallery">Gallery</TabsTrigger>
               <TabsTrigger value="timeline">Timeline</TabsTrigger>
               <TabsTrigger value="audit">Audit Log</TabsTrigger>
             </TabsList>
@@ -464,6 +466,9 @@ export function ServiceDetailPage() {
 
             <TabsContent value="sub-services" className="pt-5">
               <SubServicesTab service={service} />
+            </TabsContent>
+            <TabsContent value="gallery" className="pt-5">
+              <ServiceGalleryTab service={service} />
             </TabsContent>
             <TabsContent value="timeline" className="pt-5">
               <EntityTimeline entityType="SERVICE" entityId={service.id} />

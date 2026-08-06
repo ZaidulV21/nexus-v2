@@ -25,6 +25,8 @@ export const queryKeys = {
     subServices: (serviceRef: string) => ['services', serviceRef, 'sub-services'] as const,
     subServicesList: (serviceRef: string, params: unknown) => ['services', serviceRef, 'sub-services', 'list', params] as const,
     publicSubServices: (serviceRef: string) => ['services', serviceRef, 'sub-services', 'public'] as const,
+    media: (serviceRef: string) => ['services', serviceRef, 'media'] as const,
+    publicMedia: (serviceRef: string) => ['services', serviceRef, 'media', 'public'] as const,
   },
   quotations: {
     all: ['quotations'] as const,

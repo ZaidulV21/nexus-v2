@@ -2,6 +2,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import { serviceController } from './service.controller';
 import { subServiceController } from './subService.controller';
+import { serviceMediaController } from './serviceMedia.controller';
 import { authenticate, authenticateOptional } from '../../core/middleware/authenticate';
 import { authorize } from '../../core/middleware/authorize';
 
@@ -20,6 +21,10 @@ router.get('/:id/questionnaire', serviceController.getQuestionnaire);
 // returns only ACTIVE sub-services for the /services/:slug/:subSlug pages.
 router.get('/:id/sub-services', authenticateOptional, subServiceController.listByService);
 
+// Service marketing gallery (images + videos for the website showcase). Same
+// `:id` resolution as sub-services; the public list returns only visible items.
+router.get('/:id/media', authenticateOptional, serviceMediaController.listByService);
+
 // Admin only
 router.post('/', authenticate, authorize('service.manage'), serviceController.create);
 router.put('/:id', authenticate, authorize('service.manage'), serviceController.update);
@@ -32,6 +37,15 @@ router.patch('/:id/restore', authenticate, authorize('service.manage'), serviceC
 router.delete('/:id', authenticate, authorize('service.manage'), serviceController.softDelete);
 router.post('/:id/undelete', authenticate, authorize('service.manage'), serviceController.undelete);
 router.post('/:id/duplicate', authenticate, authorize('service.manage'), serviceController.duplicate);
+
+// Service gallery admin routes
+router.post('/:id/media/upload', authenticate, authorize('service.manage'), upload.single('file'), serviceMediaController.upload);
+router.post('/:id/media/:mediaId/poster', authenticate, authorize('service.manage'), upload.single('file'), serviceMediaController.uploadPoster);
+router.post('/:id/media', authenticate, authorize('service.manage'), serviceMediaController.create);
+router.patch('/:id/media/:mediaId', authenticate, authorize('service.manage'), serviceMediaController.update);
+router.post('/:id/media/reorder', authenticate, authorize('service.manage'), serviceMediaController.reorder);
+router.post('/:id/media/:mediaId/feature', authenticate, authorize('service.manage'), serviceMediaController.setFeatured);
+router.delete('/:id/media/:mediaId', authenticate, authorize('service.manage'), serviceMediaController.remove);
 
 // Sub-service admin routes
 router.post('/:id/sub-services', authenticate, authorize('service.manage'), subServiceController.create);

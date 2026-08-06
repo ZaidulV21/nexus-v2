@@ -20,6 +20,28 @@ export interface Category {
 
 export type SiteVisitRequirement = 'YES' | 'NO' | 'OPTIONAL';
 
+export type ServiceMediaType = 'IMAGE' | 'VIDEO';
+
+/**
+ * A single item in a Service's marketing gallery (images + videos for the
+ * website showcase). Mirrored from the backend's `ServiceMedia` Prisma model.
+ * Independent from project photos and from a SubService's own gallery JSON.
+ */
+export interface ServiceMedia {
+  id: string;
+  serviceId: string;
+  type: ServiceMediaType;
+  url: string;
+  posterUrl?: string | null;
+  altText?: string | null;
+  caption?: string | null;
+  sortOrder?: number;
+  isFeatured: boolean;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface ServiceUsage {
   leadServices: number;
   projectServices: number;

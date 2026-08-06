@@ -226,10 +226,39 @@ model Service {
   projectServices   ProjectService[]
   questionnaires    ServiceQuestionnaire[]
   subServices       SubService[]
+  media             ServiceMedia[]
   category          Category               @relation(fields: [categoryId], references: [id])
 
   @@index([isActive, archivedAt, deletedAt])
   @@map("services")
+}
+
+// A Service's marketing gallery: an unlimited, ordered set of images and
+// videos used purely for the website showcase. Completely independent from
+// project photos and from a SubService's own gallery JSON. Each item carries
+// its own alt text, caption and a featured flag (at most one featured item per
+// service), so the admin can build a curated showcase without schema churn.
+model ServiceMedia {
+  id         String    @id @default(uuid())
+  serviceId  String
+  type       MediaType
+  url        String
+  // Optional cover/poster image, used for videos (and honoured by the public
+  // lightbox so a video does not flash black before playback starts).
+  posterUrl  String?
+  altText    String?
+  caption    String?
+  sortOrder  Int       @default(0)
+  isFeatured Boolean   @default(false)
+  // Hide/show toggle so the admin can pull an item off the public site
+  // without deleting it. Public callers only ever see isActive rows.
+  isActive   Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  service    Service   @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@index([serviceId, isActive, sortOrder])
+  @@map("service_media")
 }
 
 // A CMS-managed Sub Service: a distinct offer under a Service, exposed at a
@@ -708,6 +737,11 @@ enum SiteVisitRequirement {
   YES
   NO
   OPTIONAL
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
 }
 
 enum QuotationStatus {

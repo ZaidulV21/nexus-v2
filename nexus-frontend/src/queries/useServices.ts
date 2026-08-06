@@ -7,6 +7,8 @@ import {
   type SubServiceListParams,
   type CreateSubServiceInput,
   type UpdateSubServiceInput,
+  type CreateServiceMediaInput,
+  type UpdateServiceMediaInput,
 } from '@/services/serviceCatalogService';
 import { queryKeys } from './keys';
 
@@ -187,6 +189,74 @@ export function useReorderSubServices(serviceRef: string) {
   const invalidate = useInvalidateSubServices(serviceRef);
   return useMutation({
     mutationFn: (orderedIds: string[]) => serviceCatalogService.reorderSubServices(serviceRef, orderedIds),
+    onSuccess: () => invalidate(),
+  });
+}
+
+// ── Service Marketing Gallery ───────────────────────────────────────────────
+
+export function useServiceMedia(serviceRef: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.services.media(serviceRef ?? ''),
+    queryFn: () => serviceCatalogService.listServiceMedia(serviceRef as string),
+    enabled: !!serviceRef,
+  });
+}
+
+export function usePublicServiceMedia(serviceRef: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.services.publicMedia(serviceRef ?? ''),
+    queryFn: () => serviceCatalogService.listPublicServiceMedia(serviceRef as string),
+    enabled: !!serviceRef,
+    staleTime: 30_000,
+  });
+}
+
+function useInvalidateServiceMedia(serviceRef: string) {
+  const queryClient = useQueryClient();
+  return (mediaId?: string) => {
+    queryClient.invalidateQueries({ queryKey: queryKeys.services.media(serviceRef) });
+    queryClient.invalidateQueries({ queryKey: queryKeys.services.publicMedia(serviceRef) });
+    if (mediaId) queryClient.invalidateQueries({ queryKey: queryKeys.timeline('SERVICE_MEDIA', mediaId) });
+  };
+}
+
+export function useCreateServiceMedia(serviceRef: string) {
+  const invalidate = useInvalidateServiceMedia(serviceRef);
+  return useMutation({
+    mutationFn: (input: CreateServiceMediaInput) => serviceCatalogService.createServiceMedia(serviceRef, input),
+    onSuccess: (media) => invalidate(media.id),
+  });
+}
+
+export function useUpdateServiceMedia(serviceRef: string, mediaId: string) {
+  const invalidate = useInvalidateServiceMedia(serviceRef);
+  return useMutation({
+    mutationFn: (input: UpdateServiceMediaInput) => serviceCatalogService.updateServiceMedia(serviceRef, mediaId, input),
+    onSuccess: (media) => invalidate(media.id),
+  });
+}
+
+export function useSetFeaturedServiceMedia(serviceRef: string, mediaId: string) {
+  const invalidate = useInvalidateServiceMedia(serviceRef);
+  return useMutation({
+    mutationFn: () => serviceCatalogService.setFeaturedServiceMedia(serviceRef, mediaId),
+    onSuccess: (media) => invalidate(media.id),
+  });
+}
+
+export function useReorderServiceMedia(serviceRef: string) {
+  const invalidate = useInvalidateServiceMedia(serviceRef);
+  return useMutation({
+    mutationFn: (orderedIds: string[]) => serviceCatalogService.reorderServiceMedia(serviceRef, orderedIds),
+    onSuccess: () => invalidate(),
+  });
+}
+
+export function useDeleteServiceMedia(serviceRef: string, mediaId: string) {
+  const invalidate = useInvalidateServiceMedia(serviceRef);
+  return useMutation({
+    mutationFn: () => serviceCatalogService.deleteServiceMedia(serviceRef, mediaId),
     onSuccess: () => invalidate(),
   });
 }

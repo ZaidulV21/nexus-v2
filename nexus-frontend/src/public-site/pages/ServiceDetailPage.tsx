@@ -19,10 +19,12 @@ import {
 } from 'lucide-react';
 import { usePublicServiceBySlug, usePublicServices } from '@/queries/usePublicServices';
 import { usePublicSubServices } from '@/queries/usePublicSubServices';
+import { usePublicServiceMedia } from '@/queries/useServices';
 import { usePublicCompany } from '../hooks';
 import { cn } from '@/lib/utils';
 import { ServiceCard } from '../components/ServiceCard';
 import { ServiceGallery } from '../components/ServiceGallery';
+import { MarketingGallery } from '../components/MarketingGallery';
 import { SubServiceNav } from '../components/SubServiceNav';
 import { VerticalSubServiceNav } from '../components/VerticalSubServiceNav';
 import { FAQAccordion } from '../components/FAQAccordion';
@@ -33,6 +35,7 @@ import type { ServiceDetailConfig } from '../config/serviceDetails';
 import { getSubServices } from '../config/subServices';
 import type { SubServiceConfig } from '../config/subServices';
 import type { ServiceItem } from '../types';
+import type { ServiceMedia } from '@/types';
 
 const SECTION_NAV = [
   { id: 'overview', label: 'Overview' },
@@ -122,10 +125,12 @@ function DetailSections({
   content,
   contentKey,
   serviceName,
+  marketingMedia,
 }: {
   content: ActiveContent;
   contentKey: string;
   serviceName: string;
+  marketingMedia?: ServiceMedia[];
 }) {
   return (
     <>
@@ -185,8 +190,17 @@ function DetailSections({
       {/* Gallery */}
       <section id="gallery" data-scrollspy className="scroll-mt-36">
         <FadeIn>
-          <SectionHeading tag="Gallery" title="Project Gallery" description="A glimpse of the quality and finish you can expect with this service." />
-          <ServiceGallery images={content.detail.gallery} alt={content.name} />
+          {marketingMedia && marketingMedia.length > 0 ? (
+            <>
+              <SectionHeading tag="Gallery" title="Service Showcase" description="A look at the work we deliver for this service." />
+              <MarketingGallery items={marketingMedia} alt={content.name} />
+            </>
+          ) : (
+            <>
+              <SectionHeading tag="Gallery" title="Project Gallery" description="A glimpse of the quality and finish you can expect with this service." />
+              <ServiceGallery images={content.detail.gallery} alt={content.name} />
+            </>
+          )}
         </FadeIn>
       </section>
 
@@ -389,6 +403,7 @@ export function ServiceDetailPage() {
   const { data: service, isLoading } = usePublicServiceBySlug(slug);
   const { data: allServices = [] } = usePublicServices();
   const { data: cmsSubs = [] } = usePublicSubServices(slug);
+  const { data: mediaItems = [] } = usePublicServiceMedia(slug);
   const company = usePublicCompany();
   const { scrollYProgress } = useScroll();
   const progress = useSpring(scrollYProgress, { stiffness: 100, damping: 30, restDelta: 0.001 });
@@ -623,7 +638,12 @@ export function ServiceDetailPage() {
                     This service option isn't available yet — pick another option from the list.
                   </div>
                 )}
-                <DetailSections content={content} contentKey={contentKey} serviceName={service.name} />
+                <DetailSections
+                  content={content}
+                  contentKey={contentKey}
+                  serviceName={service.name}
+                  marketingMedia={subSlug ? undefined : mediaItems}
+                />
                 <div className="mt-16 grid gap-6 lg:grid-cols-2">
                   <GetStartedCard whatsAppHref={whatsAppHref} company={company} />
                   <QuickFacts content={content} service={service} />
@@ -634,7 +654,12 @@ export function ServiceDetailPage() {
             /* Original layout: full content + right sticky aside */
             <div className="grid gap-12 lg:grid-cols-3">
               <div className="lg:col-span-2 space-y-20 py-14">
-                <DetailSections content={content} contentKey={contentKey} serviceName={service.name} />
+                <DetailSections
+                  content={content}
+                  contentKey={contentKey}
+                  serviceName={service.name}
+                  marketingMedia={subSlug ? undefined : mediaItems}
+                />
               </div>
 
               <aside className="hidden lg:block">

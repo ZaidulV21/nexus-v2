@@ -1,5 +1,13 @@
 import { api } from '@/lib/api';
-import type { Service, Category, SubService, SubServiceFaq, SubServiceProcessStep } from '@/types';
+import type {
+  Service,
+  Category,
+  SubService,
+  SubServiceFaq,
+  SubServiceProcessStep,
+  ServiceMedia,
+  ServiceMediaType,
+} from '@/types';
 
 export type ServiceStatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE' | 'ARCHIVED' | 'DELETED';
 
@@ -94,6 +102,28 @@ export interface CreateSubServiceInput {
 
 export interface UpdateSubServiceInput extends Partial<CreateSubServiceInput> {}
 
+export interface CreateServiceMediaInput {
+  type: ServiceMediaType;
+  url: string;
+  posterUrl?: string;
+  altText?: string;
+  caption?: string;
+  sortOrder?: number;
+  isFeatured?: boolean;
+  isActive?: boolean;
+}
+
+/** URL and type are immutable after creation; only presentation + visibility
+ *  can change. */
+export interface UpdateServiceMediaInput {
+  posterUrl?: string;
+  altText?: string;
+  caption?: string;
+  sortOrder?: number;
+  isFeatured?: boolean;
+  isActive?: boolean;
+}
+
 export const serviceCatalogService = {
   // Selection dropdowns (lead/quotation forms) - only selectable services.
   // status=ACTIVE matters because authenticated admins would otherwise see
@@ -187,4 +217,40 @@ export const serviceCatalogService = {
     api.post<SubService>(`/services/${serviceRef}/sub-services/${subId}/duplicate`),
   reorderSubServices: (serviceRef: string, orderedIds: string[]) =>
     api.post<{ orderedIds: string[] }>(`/services/${serviceRef}/sub-services/reorder`, { orderedIds }),
+
+  // ── Service Marketing Gallery ────────────────────────────────────────────
+  // `serviceRef` is the parent service UUID (admin) or its public slug
+  // (public site) - the backend resolves both.
+  // Public site: returns only visible items, ordered by sortOrder.
+  listPublicServiceMedia: (serviceRef: string) => api.get<ServiceMedia[]>(`/services/${serviceRef}/media`),
+  // Admin: authenticated, includes hidden items.
+  listServiceMedia: (serviceRef: string) => api.get<ServiceMedia[]>(`/services/${serviceRef}/media`),
+  // Uploads an image or video file and creates a gallery item (the backend
+  // infers the media type from the file's mimetype).
+  uploadServiceMedia: (serviceRef: string, file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.upload<{ fileUrl: string; media: ServiceMedia }>(
+      `/services/${serviceRef}/media/upload`,
+      formData,
+    );
+  },
+  uploadServiceMediaPoster: (serviceRef: string, mediaId: string, file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.upload<{ fileUrl: string; media: ServiceMedia }>(
+      `/services/${serviceRef}/media/${mediaId}/poster`,
+      formData,
+    );
+  },
+  createServiceMedia: (serviceRef: string, input: CreateServiceMediaInput) =>
+    api.post<ServiceMedia>(`/services/${serviceRef}/media`, input),
+  updateServiceMedia: (serviceRef: string, mediaId: string, input: UpdateServiceMediaInput) =>
+    api.patch<ServiceMedia>(`/services/${serviceRef}/media/${mediaId}`, input),
+  setFeaturedServiceMedia: (serviceRef: string, mediaId: string) =>
+    api.post<ServiceMedia>(`/services/${serviceRef}/media/${mediaId}/feature`),
+  reorderServiceMedia: (serviceRef: string, orderedIds: string[]) =>
+    api.post<{ orderedIds: string[] }>(`/services/${serviceRef}/media/reorder`, { orderedIds }),
+  deleteServiceMedia: (serviceRef: string, mediaId: string) =>
+    api.delete<{ id: string; removed: boolean }>(`/services/${serviceRef}/media/${mediaId}`),
 };
