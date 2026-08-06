@@ -1,11 +1,30 @@
 import { z } from 'zod';
 
-// Lowercase letters, numbers and single hyphens — a clean, URL-safe segment.
+// Same rules as the service slug: lowercase letters, numbers, single hyphens.
 export const serviceSlugSchema = z
   .string()
   .min(1)
   .max(160)
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'Slug may only contain lowercase letters, numbers, and hyphens');
+
+const processStepSchema = z.object({
+  title: z.string().min(1).max(160),
+  description: z.string().max(2000),
+});
+
+const faqSchema = z.object({
+  question: z.string().min(1).max(500),
+  answer: z.string().min(1).max(5000),
+});
+
+const testimonialSchema = z.object({
+  name: z.string().min(1).max(200),
+  role: z.string().max(200),
+  company: z.string().max(200),
+  content: z.string().min(1).max(5000),
+  rating: z.number().int().min(1).max(5),
+  avatar: z.string().url().optional().or(z.literal('')),
+});
 
 export const createServiceSchema = z.object({
   // Not .uuid() - seeded categories use readable fixed ids ("seed-energy").
@@ -30,6 +49,11 @@ export const createServiceSchema = z.object({
   metaKeywords: z.string().max(300).optional(),
   ogImage: z.string().url().optional().or(z.literal('')),
   canonicalUrl: z.string().url().optional().or(z.literal('')),
+  features: z.array(z.string().min(1).max(500)).max(100).optional(),
+  whatsIncluded: z.array(z.string().min(1).max(500)).max(100).optional(),
+  process: z.array(processStepSchema).max(50).optional(),
+  faqs: z.array(faqSchema).max(100).optional(),
+  testimonials: z.array(testimonialSchema).max(100).optional(),
 });
 
 export const updateServiceSchema = createServiceSchema.partial().extend({

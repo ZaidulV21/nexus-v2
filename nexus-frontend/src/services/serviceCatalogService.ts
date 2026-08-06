@@ -7,6 +7,9 @@ import type {
   SubServiceProcessStep,
   ServiceMedia,
   ServiceMediaType,
+  ServiceProcessStep,
+  ServiceFaq,
+  ServiceTestimonial,
 } from '@/types';
 
 export type ServiceStatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE' | 'ARCHIVED' | 'DELETED';
@@ -57,6 +60,12 @@ export interface CreateServiceInput {
   metaKeywords?: string;
   ogImage?: string;
   canonicalUrl?: string;
+  /** Public detail-page content blocks (JSON arrays, mirroring SubService). */
+  features?: string[];
+  whatsIncluded?: string[];
+  process?: ServiceProcessStep[];
+  faqs?: ServiceFaq[];
+  testimonials?: ServiceTestimonial[];
 }
 
 export interface UpdateServiceInput extends Partial<CreateServiceInput> {

@@ -1847,3 +1847,63 @@ Completed projects now appear **automatically on the public website** — Recent
 | Re-complete guard → 409 "Project is already completed" | ✅ |
 | Media gating on non-completed project → ValidationError | ✅ |
 | Public `GET /api/portfolio` (limit + serviceSlug + UUID), `/api/portfolio/summary`, active-only media filtering | ✅ |
+
+---
+
+# Phase 5 — Service Details Page (Fully Backend-Driven)
+
+**Date**: 2026-08-07
+**Status**: ✅ PHASE 5 COMPLETE
+
+## Summary
+
+Restructured the public Service Details page to the exact section order **Hero / Overview / Sub Services / Gallery / Portfolio / Features / What's Included / Working Process / FAQs / Testimonials / Related Services / Request Quote**, with **every section rendered from backend data** — nothing hardcoded. The `Service` model now owns the detail-page content blocks (features, what's included, process steps, FAQs, testimonials) via the CMS, exactly like Sub Services. Static presentation configs (`config/serviceDetails.ts`, `config/subServices.ts`, the unused `SERVICES`/`FEATURED_PROJECTS` constants, and the two static sub-service nav components) were deleted.
+
+## Backend Changes
+
+1. `prisma/schema.prisma` — `Service` gained `features Json @default("[]")`, `whatsIncluded Json @default("[]")`, `process Json @default("[]")`, `faqs Json @default("[]")`, `testimonials Json @default("[]")` (JSONB columns, default `'[]'`).
+2. `prisma/migrations/20260806040000_service_detail_content_blocks/migration.sql` — NEW: adds the five JSONB columns. Applied via `npx prisma migrate deploy` (client regenerated; same hand-written-SQL pattern as Phases 2–4).
+3. `src/modules/catalog/catalog.types.ts` — `ServiceProcessStep`, `ServiceFaq`, `ServiceTestimonial` interfaces; `features?`/`whatsIncluded?`/`process?`/`faqs?`/`testimonials?` added to `CreateServiceInput`.
+4. `src/modules/catalog/service.validation.ts` — `processStepSchema`, `faqSchema`, `testimonialSchema` (`role`/`company` are required strings — made non-optional after a tsc incompatibility); the five content arrays added to `createServiceSchema`/`updateServiceSchema`.
+5. `src/modules/catalog/service.service.ts` — `duplicate()` now copies all five content blocks from the source service.
+6. `src/modules/catalog/tests/service.service.test.ts` — new test ("passes the detail-page content blocks straight through to the repository") + fixture extended with the content arrays.
+
+## Frontend Changes — Data Layer
+
+1. `src/types/index.ts` — `ServiceProcessStep`, `ServiceFaq`, `ServiceTestimonial` interfaces; `Service` gained `features?`/`whatsIncluded?`/`process?`/`faqs?`/`testimonials?`.
+2. `src/services/serviceCatalogService.ts` — `CreateServiceInput` extended with the five content fields.
+3. `src/public-site/types/index.ts` — `ServiceItem` extended with `categoryId`, `heroImage`, `gallery`, `whatsIncluded`, `process`, `faqs`, `testimonials`, `basePrice`, `estimatedDuration` (reusing the shared `@/types` shapes).
+4. `src/queries/usePublicServices.ts` — `toServiceItem()` now maps all new fields (gallery = `heroImage/bannerImage/imageUrl/thumbnail` fallback chain, `basePrice` → number).
+5. `src/queries/usePublicSubServices.ts` — REWRITTEN: returns raw `SubService[]` (no longer `SubServiceConfig[]`); `toSubServiceConfig` removed.
+6. `src/public-site/lib/serviceDetailContent.ts` — NEW: `ServiceDetailContent` render shape + `toServiceDetailContent(service)` (overview split on blank lines, `basePrice` → `formatCurrency`) and `toSubServiceDetailContent(sub)` mappers.
+
+## Frontend Changes — Admin
+
+1. `src/pages/services/components/contentEditors.tsx` — NEW: shared `StringListEditor`, `ProcessEditor`, `FaqEditor`, `TestimonialsEditor` (with shared `ProcessStepValue`/`FaqValue`/`TestimonialValue` interfaces).
+2. `src/pages/services/components/SubServiceFormDrawer.tsx` — imports the shared editors (inline duplicates deleted).
+3. `src/pages/services/components/ServiceFormDrawer.tsx` — NEW "Content" section (between Images and SEO): five `useState` arrays for features/whatsIncluded/process/faqs/testimonials, populated from `service` on open, sanitized in the submit payload.
+
+## Frontend Changes — Public Site
+
+1. `src/public-site/pages/ServiceDetailPage.tsx` — REWRITTEN: 12-section order; every section gated on data presence (a section with no content does not render, and does not appear in the sticky nav). Sub Services rendered as a "service family" grid (parent "All options" card + each sub-service card, active highlight, client-side links). Testimonials inherited onto sub-service routes from the parent Service. Related Services sorted same-category-first. Removed the static-config fallback, the split sidebar layout, `SubServiceNav`, and `VerticalSubServiceNav`. `QuickFacts` trimmed to dynamic rows only.
+2. Deleted static configs/components: `src/public-site/config/serviceDetails.ts`, `src/public-site/config/subServices.ts` (config dir removed), `src/public-site/components/SubServiceNav.tsx`, `src/public-site/components/VerticalSubServiceNav.tsx`, and the unused `SERVICES` + `FEATURED_PROJECTS` constants in `src/public-site/constants/index.ts`.
+3. `src/public-site/components/subServiceIcons.ts` — kept (icon map reused by the new Sub Services section).
+
+## Verification
+
+| Check | Result |
+|-------|--------|
+| Backend tests: 398/398 (26 suites, +1 new content-block test) | ✅ |
+| Backend `npm run build` (tsc) | ✅ 0 errors |
+| Frontend `npx tsc --noEmit` | ✅ 0 errors |
+| Frontend production build | ✅ clean (chunk-size warning pre-existing) |
+| Migration `20260806040000_service_detail_content_blocks` applied | ✅ |
+| Admin API: PUT service with all five content blocks persisted | ✅ |
+| Public list endpoint returns content blocks (desc, hero, price, duration) | ✅ |
+| Sub-service create + public ACTIVE-only list (2 sub-services) | ✅ |
+| Live: backfilled Interior Design + 2 sub-services; all page endpoints return data | ✅ |
+| Vite dev server: SPA + `/api` proxy + all changed modules transform | ✅ |
+| Static configs/components fully removed — no dead imports | ✅ |
+| No regressions to auth, RBAC, leads, clients, quotations, projects, invoices, portfolio | ✅ |
+
+> **Note:** the backend dev server was started for the live smoke test. Disk space on C: was critical during this phase (ENOSPC on `prisma generate`); `npm cache clean --force` + stale `.prisma/client/*.tmp*` cleanup freed ~5.6 GB before the regenerate succeeded.

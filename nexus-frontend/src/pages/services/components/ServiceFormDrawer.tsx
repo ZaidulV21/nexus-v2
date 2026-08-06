@@ -22,7 +22,8 @@ import { useToast } from '@/hooks/useToast';
 import { ApiError } from '@/lib/api';
 import { slugify } from '@/lib/utils';
 import { SERVICE_ICON_OPTIONS, ServiceIcon } from '@/components/common/ServiceIcon';
-import type { Category, Service } from '@/types';
+import { StringListEditor, ProcessEditor, FaqEditor, TestimonialsEditor } from './contentEditors';
+import type { Category, Service, ServiceProcessStep, ServiceFaq, ServiceTestimonial } from '@/types';
 
 const IMAGE_FIELD_META: Record<ServiceImageField, { label: string; hint: string }> = {
   imageUrl: { label: 'Service image', hint: 'Card thumbnail on the website' },
@@ -217,6 +218,11 @@ export function ServiceFormDrawer({
     ),
   );
   const [slugTouched, setSlugTouched] = useState(false);
+  const [features, setFeatures] = useState<string[]>([]);
+  const [whatsIncluded, setWhatsIncluded] = useState<string[]>([]);
+  const [process, setProcess] = useState<ServiceProcessStep[]>([]);
+  const [faqs, setFaqs] = useState<ServiceFaq[]>([]);
+  const [testimonials, setTestimonials] = useState<ServiceTestimonial[]>([]);
 
   const categoryOptions = useMemo(() => flattenCategories(categories ?? []), [categories]);
 
@@ -258,6 +264,11 @@ export function ServiceFormDrawer({
         ),
       );
       setSlugTouched(false);
+      setFeatures(service?.features ?? []);
+      setWhatsIncluded(service?.whatsIncluded ?? []);
+      setProcess(service?.process ?? []);
+      setFaqs(service?.faqs ?? []);
+      setTestimonials(service?.testimonials ?? []);
     }
   }, [open, service, reset]);
 
@@ -328,6 +339,20 @@ export function ServiceFormDrawer({
       isFeatured: values.isFeatured ?? false,
       isPopular: values.isPopular ?? false,
       sortOrder,
+      features: features.map((f) => f.trim()).filter(Boolean),
+      whatsIncluded: whatsIncluded.map((w) => w.trim()).filter(Boolean),
+      process: process.filter((s) => s.title.trim() && s.description.trim()),
+      faqs: faqs.filter((f) => f.question.trim() && f.answer.trim()),
+      testimonials: testimonials
+        .filter((t) => t.name.trim() && t.content.trim())
+        .map((t) => ({
+          name: t.name.trim(),
+          role: t.role.trim(),
+          company: t.company.trim(),
+          content: t.content.trim(),
+          rating: t.rating,
+          avatar: t.avatar?.trim() || undefined,
+        })),
       seoTitle: values.seoTitle?.trim() || undefined,
       metaDescription: values.metaDescription?.trim() || undefined,
       metaKeywords: values.metaKeywords?.trim() || undefined,
@@ -583,6 +608,30 @@ export function ServiceFormDrawer({
                 />
               ))}
             </div>
+          </section>
+
+          {/* ── Content ────────────────────────────────────────────── */}
+          <section className="space-y-5">
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-ink-faint">Content</h3>
+            <StringListEditor
+              label="Key features"
+              values={features}
+              onChange={setFeatures}
+              placeholder="e.g. Space planning and layout optimization"
+            />
+            <StringListEditor
+              label="What's included"
+              values={whatsIncluded}
+              onChange={setWhatsIncluded}
+              placeholder="e.g. Quality inspection before handover"
+            />
+            <ProcessEditor values={process} onChange={setProcess} />
+            <FaqEditor values={faqs} onChange={setFaqs} />
+            <TestimonialsEditor values={testimonials} onChange={setTestimonials} />
+            <p className="text-xs text-ink-muted">
+              These blocks power the public detail page. Sections stay hidden on the website until they have
+              content.
+            </p>
           </section>
 
           {/* ── SEO ───────────────────────────────────────────────── */}

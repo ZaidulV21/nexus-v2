@@ -17,6 +17,10 @@ function toServiceItem(service: Service): ServiceItem {
     service.shortDescription?.trim() ||
     (description.length > 120 ? description.split('.')[0].trim() + '.' : description || service.name);
 
+  const gallery = [service.heroImage, service.bannerImage, service.imageUrl, service.thumbnail].filter(
+    (url): url is string => Boolean(url)
+  );
+
   return {
     id: service.id,
     name: service.name,
@@ -25,8 +29,17 @@ function toServiceItem(service: Service): ServiceItem {
     shortDescription,
     icon: service.icon ?? 'Palette',
     image: service.imageUrl ?? service.thumbnail ?? service.heroImage ?? service.bannerImage ?? undefined,
-    features: [],
+    features: service.features ?? [],
     category: service.category?.name ?? '',
+    categoryId: service.categoryId,
+    heroImage: service.heroImage ?? service.bannerImage ?? service.imageUrl ?? undefined,
+    gallery,
+    whatsIncluded: service.whatsIncluded ?? [],
+    process: service.process ?? [],
+    faqs: service.faqs ?? [],
+    testimonials: service.testimonials ?? [],
+    basePrice: service.basePrice ? Number(service.basePrice) : undefined,
+    estimatedDuration: service.estimatedDuration ?? undefined,
   };
 }
 

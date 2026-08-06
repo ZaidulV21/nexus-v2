@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { motion, AnimatePresence, useScroll, useSpring } from 'framer-motion';
 import {
@@ -7,15 +7,14 @@ import {
   ChevronRight,
   Clock,
   IndianRupee,
+  Info,
   Layers,
   MessageCircle,
   Phone,
-  ShieldCheck,
-  Sparkles,
-  Star,
   Quote,
+  Sparkles,
   Users,
-  Info,
+  Wrench,
 } from 'lucide-react';
 import { usePublicServiceBySlug, usePublicServices } from '@/queries/usePublicServices';
 import { usePublicSubServices } from '@/queries/usePublicSubServices';
@@ -27,28 +26,29 @@ import { ServiceCard } from '../components/ServiceCard';
 import { ServiceGallery } from '../components/ServiceGallery';
 import { MarketingGallery } from '../components/MarketingGallery';
 import { PortfolioProjectCard } from '../components/PortfolioProjectCard';
-import { SubServiceNav } from '../components/SubServiceNav';
-import { VerticalSubServiceNav } from '../components/VerticalSubServiceNav';
 import { FAQAccordion } from '../components/FAQAccordion';
 import { TestimonialCard } from '../components/TestimonialCard';
-import { FadeIn, ScaleIn, StaggerGroup, StaggerItem } from '../components/motion';
-import { getServiceDetailConfig, buildDefaultServiceDetail } from '../config/serviceDetails';
-import type { ServiceDetailConfig } from '../config/serviceDetails';
-import { getSubServices } from '../config/subServices';
-import type { SubServiceConfig } from '../config/subServices';
+import { FadeIn, StaggerGroup, StaggerItem } from '../components/motion';
+import { subServiceIconMap } from '../components/subServiceIcons';
+import { toServiceDetailContent, toSubServiceDetailContent } from '../lib/serviceDetailContent';
+import type { ServiceDetailContent } from '../lib/serviceDetailContent';
 import type { ServiceItem } from '../types';
-import type { ServiceMedia } from '@/types';
+import type { SubService } from '@/types';
 
 const SECTION_NAV = [
   { id: 'overview', label: 'Overview' },
+  { id: 'sub-services', label: 'Sub Services' },
   { id: 'gallery', label: 'Gallery' },
+  { id: 'portfolio', label: 'Portfolio' },
   { id: 'features', label: 'Features' },
+  { id: 'whats-included', label: "What's Included" },
   { id: 'process', label: 'Process' },
   { id: 'faqs', label: 'FAQ' },
-  { id: 'reviews', label: 'Reviews' },
+  { id: 'testimonials', label: 'Reviews' },
+  { id: 'related', label: 'Related' },
 ] as const;
 
-const SECTION_IDS = SECTION_NAV.map((s) => s.id);
+type SectionId = (typeof SECTION_NAV)[number]['id'];
 
 /** Smooth-scroll to an on-page section, accounting for the fixed navbar. */
 function scrollToSection(id: string) {
@@ -119,198 +119,74 @@ interface ActiveContent {
   name: string;
   shortDescription: string;
   heroImage?: string;
-  detail: ServiceDetailConfig;
+  detail: ServiceDetailContent;
 }
 
-/** Shared detail-page sections (overview → reviews), re-rendered on switch. */
-function DetailSections({
-  content,
-  contentKey,
-  serviceName,
-  marketingMedia,
+/** The "service family" grid: the parent service plus every sub-service. */
+function SubServicesSection({
+  service,
+  subServices,
+  activeSubSlug,
 }: {
-  content: ActiveContent;
-  contentKey: string;
-  serviceName: string;
-  marketingMedia?: ServiceMedia[];
+  service: ServiceItem;
+  subServices: SubService[];
+  activeSubSlug?: string;
 }) {
+  if (subServices.length === 0) return null;
+
   return (
-    <>
-      {/* Overview */}
-      <section id="overview" data-scrollspy className="scroll-mt-36">
-        <FadeIn>
-          <SectionHeading tag="Overview" title={`About ${content.name}`} />
-          <div className="space-y-5">
-            {content.detail.overview.map((paragraph, index) => (
-              <p key={index} className="text-[15px] leading-relaxed text-ink-muted">
-                {paragraph}
-              </p>
-            ))}
-          </div>
-
-          <div className="mt-8 grid gap-4 sm:grid-cols-3">
-            {content.detail.startingPrice && (
-              <div className="rounded-2xl border border-border bg-surface p-5">
-                <IndianRupee className="h-5 w-5 text-accent" />
-                <p className="mt-3 text-xs font-medium uppercase tracking-wider text-ink-faint">Starting Price</p>
-                <p className="mt-1 text-lg font-bold text-ink">{content.detail.startingPrice}</p>
-              </div>
-            )}
-            <div className="rounded-2xl border border-border bg-surface p-5">
-              <Clock className="h-5 w-5 text-accent" />
-              <p className="mt-3 text-xs font-medium uppercase tracking-wider text-ink-faint">Completion Time</p>
-              <p className="mt-1 text-lg font-bold text-ink">{content.detail.completionTime}</p>
-            </div>
-            <div className="rounded-2xl border border-border bg-surface p-5">
-              <ShieldCheck className="h-5 w-5 text-accent" />
-              <p className="mt-3 text-xs font-medium uppercase tracking-wider text-ink-faint">Quality</p>
-              <p className="mt-1 text-lg font-bold text-ink">Warranty + Support</p>
-            </div>
-          </div>
-        </FadeIn>
-      </section>
-
-      {/* What's Included */}
-      <section className="scroll-mt-36">
-        <FadeIn>
-          <div className="rounded-3xl border border-border bg-surface p-8 sm:p-10">
-            <SectionHeading tag="What's Included" title="Everything We Handle For You" />
-            <StaggerGroup className="grid gap-3 sm:grid-cols-2">
-              {content.detail.whatsIncluded.map((item) => (
-                <StaggerItem key={item} className="flex items-start gap-3 rounded-xl bg-canvas p-4">
-                  <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent-subtle">
-                    <Check className="h-3 w-3 text-accent" />
-                  </div>
-                  <span className="text-sm text-ink">{item}</span>
-                </StaggerItem>
-              ))}
-            </StaggerGroup>
-          </div>
-        </FadeIn>
-      </section>
-
-      {/* Gallery */}
-      <section id="gallery" data-scrollspy className="scroll-mt-36">
-        <FadeIn>
-          {marketingMedia && marketingMedia.length > 0 ? (
-            <>
-              <SectionHeading tag="Gallery" title="Service Showcase" description="A look at the work we deliver for this service." />
-              <MarketingGallery items={marketingMedia} alt={content.name} />
-            </>
-          ) : (
-            <>
-              <SectionHeading tag="Gallery" title="Project Gallery" description="A glimpse of the quality and finish you can expect with this service." />
-              <ServiceGallery images={content.detail.gallery} alt={content.name} />
-            </>
-          )}
-        </FadeIn>
-      </section>
-
-      {/* Key Features */}
-      <section id="features" data-scrollspy className="scroll-mt-36">
-        <SectionHeading tag="Key Features" title="Why Businesses Choose This Service" />
-        <StaggerGroup className="grid gap-4 sm:grid-cols-2">
-          {content.detail.features.map((feature) => (
-            <StaggerItem key={feature}>
-              <div className="group h-full rounded-2xl border border-border bg-surface p-6 transition-all duration-300 hover:-translate-y-1 hover:border-accent/30 hover:shadow-lg hover:shadow-accent/5">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-subtle text-accent transition-colors group-hover:bg-accent group-hover:text-white">
-                  <Layers className="h-5 w-5" />
-                </div>
-                <p className="mt-4 text-sm font-medium text-ink leading-relaxed">{feature}</p>
-              </div>
-            </StaggerItem>
-          ))}
-        </StaggerGroup>
-      </section>
-
-      {/* Process */}
-      <section id="process" data-scrollspy className="scroll-mt-36">
+    <section id="sub-services" data-scrollspy className="scroll-mt-36">
+      <FadeIn>
         <SectionHeading
-          tag="Our Process"
-          title={`How ${content.name} Is Delivered`}
-          description="A transparent, step-by-step journey from your first enquiry to final handover."
+          tag="Service Options"
+          title={`${service.name} — Sub Services`}
+          description="Pick the specific option that fits your requirement. Each option has its own details, pricing and process."
         />
-        <div className="relative">
-          <div className="absolute left-5 top-2 bottom-2 w-px bg-border" />
-          <div className="space-y-6">
-            {content.detail.process.map((step, index) => (
-              <motion.div
-                key={step.title}
-                initial={{ opacity: 0, x: -16 }}
-                whileInView={{ opacity: 1, x: 0 }}
-                viewport={{ once: true, margin: '-40px' }}
-                transition={{ duration: 0.4, delay: index * 0.08 }}
-                className="relative flex gap-5 pl-0"
-              >
-                <div className="relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 border-accent bg-surface text-sm font-bold text-accent shadow-sm">
-                  {index + 1}
-                </div>
-                <div className="flex-1 rounded-2xl border border-border bg-surface p-5 transition-all duration-300 hover:border-accent/25 hover:shadow-md">
-                  <h3 className="text-base font-semibold text-ink">{step.title}</h3>
-                  <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">{step.description}</p>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* FAQ */}
-      <section id="faqs" data-scrollspy className="scroll-mt-36">
-        <SectionHeading tag="FAQs" title="Frequently Asked Questions" />
-        <FAQAccordion
-          items={content.detail.faqs.map((f, index) => ({
-            id: `service-faq-${contentKey}-${index}`,
-            question: f.question,
-            answer: f.answer,
-            category: serviceName,
-          }))}
-        />
-      </section>
-
-      {/* Reviews */}
-      <section id="reviews" data-scrollspy className="scroll-mt-36">
-        <SectionHeading tag="Customer Reviews" title="What Our Clients Say" />
-        {content.detail.reviews.length > 0 ? (
-          <StaggerGroup className="grid gap-4 sm:grid-cols-2">
-            {content.detail.reviews.map((review, index) => (
-              <StaggerItem key={index}>
-                <TestimonialCard
-                  testimonial={{
-                    id: `service-review-${contentKey}-${index}`,
-                    name: review.name,
-                    role: review.role,
-                    company: review.company,
-                    content: review.content,
-                    rating: review.rating,
-                  }}
-                />
-              </StaggerItem>
-            ))}
-          </StaggerGroup>
-        ) : (
-          <ScaleIn>
-            <div className="flex flex-col items-center rounded-2xl border border-dashed border-border bg-surface p-10 text-center">
-              <div className="flex gap-1">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <Star key={i} className="h-5 w-5 text-border-strong" />
-                ))}
+        <StaggerGroup className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <StaggerItem>
+            <Link
+              to={`/services/${service.slug}`}
+              className={cn(
+                'group flex h-full flex-col gap-3 rounded-2xl border bg-surface p-6 transition-all duration-300 hover:-translate-y-1 hover:border-accent/30 hover:shadow-lg hover:shadow-accent/5',
+                !activeSubSlug ? 'border-accent ring-2 ring-accent/30 shadow-lg shadow-accent/10' : 'border-border'
+              )}
+            >
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-subtle text-accent transition-colors group-hover:bg-accent group-hover:text-white">
+                <Layers className="h-5 w-5" />
               </div>
-              <p className="mt-4 text-lg font-semibold text-ink">No reviews yet</p>
-              <p className="mt-2 max-w-sm text-sm text-ink-muted">
-                Be the first to experience {content.name} and share your feedback after your project is delivered.
-              </p>
-              <Link
-                to="/get-quote"
-                className="mt-6 inline-flex items-center gap-2 rounded-xl bg-accent px-6 py-3 text-sm font-semibold text-white transition-all hover:bg-accent-hover"
-              >
-                Get Started Today <ArrowRight className="h-4 w-4" />
-              </Link>
-            </div>
-          </ScaleIn>
-        )}
-      </section>
-    </>
+              <div>
+                <p className="text-sm font-semibold text-ink">{service.name}</p>
+                <p className="mt-1 text-xs text-ink-muted">All options</p>
+              </div>
+            </Link>
+          </StaggerItem>
+
+          {subServices.map((sub) => {
+            const Icon = subServiceIconMap[sub.icon ?? 'Wrench'] ?? Wrench;
+            const isActive = sub.slug === activeSubSlug;
+            return (
+              <StaggerItem key={sub.slug}>
+                <Link
+                  to={`/services/${service.slug}/${sub.slug}`}
+                  className={cn(
+                    'group flex h-full flex-col gap-3 rounded-2xl border bg-surface p-6 transition-all duration-300 hover:-translate-y-1 hover:border-accent/30 hover:shadow-lg hover:shadow-accent/5',
+                    isActive ? 'border-accent ring-2 ring-accent/30 shadow-lg shadow-accent/10' : 'border-border'
+                  )}
+                >
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-subtle text-accent transition-colors group-hover:bg-accent group-hover:text-white">
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-ink transition-colors group-hover:text-accent">{sub.name}</p>
+                    <p className="mt-1 text-xs text-ink-muted line-clamp-2">{sub.shortDescription ?? sub.name}</p>
+                  </div>
+                </Link>
+              </StaggerItem>
+            );
+          })}
+        </StaggerGroup>
+      </FadeIn>
+    </section>
   );
 }
 
@@ -368,7 +244,7 @@ function GetStartedCard({
   );
 }
 
-/** Compact facts card shown next to the CTA. */
+/** Compact facts card shown next to the CTA. Only rows with data render. */
 function QuickFacts({ content, service }: { content: ActiveContent; service: ServiceItem }) {
   return (
     <div className="rounded-3xl border border-border bg-surface p-6">
@@ -377,24 +253,24 @@ function QuickFacts({ content, service }: { content: ActiveContent; service: Ser
         <h3 className="text-sm font-semibold text-ink">Quick Service Facts</h3>
       </div>
       <dl className="mt-4 space-y-3 text-sm">
-        <div className="flex items-center justify-between gap-3">
-          <dt className="text-ink-muted">Service type</dt>
-          <dd className="font-medium text-ink">{service.category || 'Managed'}</dd>
-        </div>
+        {service.category && (
+          <div className="flex items-center justify-between gap-3">
+            <dt className="text-ink-muted">Service type</dt>
+            <dd className="font-medium text-ink">{service.category}</dd>
+          </div>
+        )}
         {content.detail.startingPrice && (
           <div className="flex items-center justify-between gap-3">
             <dt className="text-ink-muted">Starting price</dt>
             <dd className="font-medium text-ink">{content.detail.startingPrice}</dd>
           </div>
         )}
-        <div className="flex items-center justify-between gap-3">
-          <dt className="text-ink-muted">Timeline</dt>
-          <dd className="font-medium text-ink">{content.detail.completionTime.split('depending')[0]}</dd>
-        </div>
-        <div className="flex items-center justify-between gap-3">
-          <dt className="text-ink-muted">Warranty</dt>
-          <dd className="font-medium text-ink">Included</dd>
-        </div>
+        {content.detail.completionTime && (
+          <div className="flex items-center justify-between gap-3">
+            <dt className="text-ink-muted">Timeline</dt>
+            <dd className="font-medium text-ink">{content.detail.completionTime}</dd>
+          </div>
+        )}
       </dl>
     </div>
   );
@@ -420,22 +296,22 @@ export function ServiceDetailPage() {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
-  // CMS sub-services win; static config is only a fallback until an admin
-  // adds sub-services through the CMS.
-  const subServices = cmsSubs.length > 0 ? cmsSubs : getSubServices(slug);
+  const subServices = cmsSubs;
   const activeSub = subServices.find((sub) => sub.slug === subSlug);
 
   let content: ActiveContent | null = null;
   if (service) {
     if (activeSub) {
+      const detail = toSubServiceDetailContent(activeSub);
+      detail.testimonials = service.testimonials ?? [];
       content = {
         name: activeSub.name,
-        shortDescription: activeSub.shortDescription,
-        heroImage: activeSub.heroImage,
-        detail: activeSub,
+        shortDescription: activeSub.shortDescription?.trim() || activeSub.name,
+        heroImage: activeSub.heroImage ?? detail.gallery[0] ?? service.image,
+        detail,
       };
     } else {
-      const detail = getServiceDetailConfig(service.slug) ?? buildDefaultServiceDetail(service);
+      const detail = toServiceDetailContent(service);
       content = {
         name: service.name,
         shortDescription: service.shortDescription,
@@ -448,6 +324,61 @@ export function ServiceDetailPage() {
   const contentKey = subSlug ?? 'main';
   const unknownSub = Boolean(subSlug) && !activeSub && subServices.length > 0;
 
+  const relatedServices = useMemo(() => {
+    if (!service) return [];
+    return allServices
+      .filter((s) => s.id !== service.id)
+      .sort((a, b) => {
+        const aSame = a.categoryId === service.categoryId ? 0 : 1;
+        const bSame = b.categoryId === service.categoryId ? 0 : 1;
+        return aSame - bSame;
+      })
+      .slice(0, 3);
+  }, [service, allServices]);
+
+  // Which sections actually have content — sections render (and appear in the
+  // sticky nav) only when their data is present.
+  const visible: Record<SectionId, boolean> = {
+    overview: content ? content.detail.overview.length > 0 : false,
+    'sub-services': subServices.length > 0,
+    gallery: content
+      ? activeSub
+        ? content.detail.gallery.length > 0
+        : mediaItems.length > 0 || content.detail.gallery.length > 0
+      : false,
+    portfolio: serviceProjects.length > 0,
+    features: content ? content.detail.features.length > 0 : false,
+    'whats-included': content ? content.detail.whatsIncluded.length > 0 : false,
+    process: content ? content.detail.process.length > 0 : false,
+    faqs: content ? content.detail.faqs.length > 0 : false,
+    testimonials: content ? content.detail.testimonials.length > 0 : false,
+    related: relatedServices.length > 0,
+  };
+
+  const sectionNav = useMemo(
+    () =>
+      SECTION_NAV.filter((s) => visible[s.id]).map((s) => ({
+        id: s.id,
+        label: s.label,
+      })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      visible.overview,
+      visible['sub-services'],
+      visible.gallery,
+      visible.portfolio,
+      visible.features,
+      visible['whats-included'],
+      visible.process,
+      visible.faqs,
+      visible.testimonials,
+      visible.related,
+    ]
+  );
+
+  const sectionIds = useMemo(() => sectionNav.map((s) => s.id), [sectionNav]);
+  const activeSection = useActiveSection(sectionIds);
+
   // SEO: keep the document title in sync with the active (sub)service.
   useEffect(() => {
     if (content) {
@@ -457,8 +388,6 @@ export function ServiceDetailPage() {
       document.title = company.name;
     };
   }, [content, company.name]);
-
-  const activeSection = useActiveSection(SECTION_IDS);
 
   if (isLoading) return <LoadingState />;
 
@@ -479,11 +408,12 @@ export function ServiceDetailPage() {
     );
   }
 
-  const relatedServices = allServices.filter((s) => s.id !== service.id).slice(0, 3);
   const whatsAppHref = buildWhatsAppLink(
     company.whatsapp,
     `Hi ${company.name}, I'm interested in your ${content.name} service. Can you share more details?`
   );
+
+  const marketingMedia = subSlug ? undefined : mediaItems;
 
   return (
     <div className="relative pb-28">
@@ -575,146 +505,287 @@ export function ServiceDetailPage() {
       </section>
 
       {/* ── Sticky section navigation ───────────────────────────────── */}
-      <div className="sticky top-18 z-40 border-b border-border bg-surface/90 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-7xl items-center gap-1 overflow-x-auto px-4 py-2 sm:px-6 lg:px-8">
-          {SECTION_NAV.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => scrollToSection(item.id)}
-              className={cn(
-                'shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition-all',
-                activeSection === item.id
-                  ? 'bg-accent text-white shadow-sm'
-                  : 'text-ink-muted hover:bg-ink/5 hover:text-ink'
-              )}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* ── Main content ────────────────────────────────────────────── */}
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        {/* Sub-service family navigation — horizontal cards on mobile only */}
-        {subServices.length > 0 && (
-          <div className="pt-10 lg:hidden">
-            <SubServiceNav
-              serviceSlug={service.slug}
-              serviceName={service.name}
-              subServices={subServices}
-              activeSubSlug={activeSub?.slug}
-            />
-            {unknownSub && (
-              <div className="mt-3 flex items-center gap-2 rounded-xl border border-warning/30 bg-warning-subtle px-4 py-3 text-sm text-warning">
-                <Info className="h-4 w-4 shrink-0" />
-                This service option isn't available yet — showing all options above.
-              </div>
-            )}
+      {sectionNav.length > 0 && (
+        <div className="sticky top-18 z-40 border-b border-border bg-surface/90 backdrop-blur-xl">
+          <div className="mx-auto flex max-w-7xl items-center gap-1 overflow-x-auto px-4 py-2 sm:px-6 lg:px-8">
+            {sectionNav.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => scrollToSection(item.id)}
+                className={cn(
+                  'shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition-all',
+                  activeSection === item.id
+                    ? 'bg-accent text-white shadow-sm'
+                    : 'text-ink-muted hover:bg-ink/5 hover:text-ink'
+                )}
+              >
+                {item.label}
+              </button>
+            ))}
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Content area — crossfades smoothly when the sub-service changes */}
+      {/* ── Main content — sections render only when their data exists ── */}
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <motion.div
           key={contentKey}
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35, ease: [0.25, 0.1, 0.25, 1] }}
         >
-          {subServices.length > 0 ? (
-            /* Split layout: left sub-service nav + right detail (no page reload) */
-            <div className="grid gap-10 py-10 lg:grid-cols-[260px_minmax(0,1fr)] lg:gap-14">
-              <div className="hidden lg:block">
-                <VerticalSubServiceNav
-                  serviceSlug={service.slug}
-                  serviceName={service.name}
-                  subServices={subServices}
-                  activeSubSlug={activeSub?.slug}
-                />
+          <div className="space-y-20 py-14">
+            {unknownSub && (
+              <div className="flex items-center gap-2 rounded-xl border border-warning/30 bg-warning-subtle px-4 py-3 text-sm text-warning">
+                <Info className="h-4 w-4 shrink-0" />
+                This service option isn't available yet — pick another option from the list below.
               </div>
+            )}
 
-              <div className="min-w-0">
-                {unknownSub && (
-                  <div className="mb-6 flex items-center gap-2 rounded-xl border border-warning/30 bg-warning-subtle px-4 py-3 text-sm text-warning">
-                    <Info className="h-4 w-4 shrink-0" />
-                    This service option isn't available yet — pick another option from the list.
+            {/* Overview */}
+            {visible.overview && (
+              <section id="overview" data-scrollspy className="scroll-mt-36">
+                <FadeIn>
+                  <SectionHeading tag="Overview" title={`About ${content.name}`} />
+                  <div className="space-y-5">
+                    {content.detail.overview.map((paragraph, index) => (
+                      <p key={index} className="text-[15px] leading-relaxed text-ink-muted">
+                        {paragraph}
+                      </p>
+                    ))}
                   </div>
-                )}
-                <DetailSections
-                  content={content}
-                  contentKey={contentKey}
-                  serviceName={service.name}
-                  marketingMedia={subSlug ? undefined : mediaItems}
+
+                  {(content.detail.startingPrice || content.detail.completionTime) && (
+                    <div className="mt-8 grid gap-4 sm:grid-cols-2">
+                      {content.detail.startingPrice && (
+                        <div className="rounded-2xl border border-border bg-surface p-5">
+                          <IndianRupee className="h-5 w-5 text-accent" />
+                          <p className="mt-3 text-xs font-medium uppercase tracking-wider text-ink-faint">Starting Price</p>
+                          <p className="mt-1 text-lg font-bold text-ink">{content.detail.startingPrice}</p>
+                        </div>
+                      )}
+                      {content.detail.completionTime && (
+                        <div className="rounded-2xl border border-border bg-surface p-5">
+                          <Clock className="h-5 w-5 text-accent" />
+                          <p className="mt-3 text-xs font-medium uppercase tracking-wider text-ink-faint">Completion Time</p>
+                          <p className="mt-1 text-lg font-bold text-ink">{content.detail.completionTime}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </FadeIn>
+              </section>
+            )}
+
+            {/* Sub Services */}
+            {visible['sub-services'] && (
+              <SubServicesSection service={service} subServices={subServices} activeSubSlug={activeSub?.slug} />
+            )}
+
+            {/* Gallery */}
+            {visible.gallery && (
+              <section id="gallery" data-scrollspy className="scroll-mt-36">
+                <FadeIn>
+                  {activeSub ? (
+                    <>
+                      <SectionHeading tag="Gallery" title="Service Showcase" description="A look at what this service option delivers." />
+                      <ServiceGallery images={content.detail.gallery} alt={content.name} />
+                    </>
+                  ) : marketingMedia && marketingMedia.length > 0 ? (
+                    <>
+                      <SectionHeading tag="Gallery" title="Service Showcase" description="A look at the work we deliver for this service." />
+                      <MarketingGallery items={marketingMedia} alt={content.name} />
+                    </>
+                  ) : (
+                    <>
+                      <SectionHeading tag="Gallery" title="Project Gallery" description="A glimpse of the quality and finish you can expect with this service." />
+                      <ServiceGallery images={content.detail.gallery} alt={content.name} />
+                    </>
+                  )}
+                </FadeIn>
+              </section>
+            )}
+
+            {/* Portfolio — related completed projects */}
+            {visible.portfolio && (
+              <section id="portfolio" data-scrollspy className="scroll-mt-36">
+                <FadeIn>
+                  <SectionHeading
+                    tag="Related Work"
+                    title="Recently Completed Projects"
+                    description={`Real projects we've delivered for ${content.name}.`}
+                  />
+                  <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                    {serviceProjects.slice(0, 3).map((project, index) => (
+                      <PortfolioProjectCard key={project.id} project={project} index={index} />
+                    ))}
+                  </div>
+                </FadeIn>
+              </section>
+            )}
+
+            {/* Key Features */}
+            {visible.features && (
+              <section id="features" data-scrollspy className="scroll-mt-36">
+                <FadeIn>
+                  <SectionHeading tag="Key Features" title="Why Businesses Choose This Service" />
+                  <StaggerGroup className="grid gap-4 sm:grid-cols-2">
+                    {content.detail.features.map((feature) => (
+                      <StaggerItem key={feature}>
+                        <div className="group h-full rounded-2xl border border-border bg-surface p-6 transition-all duration-300 hover:-translate-y-1 hover:border-accent/30 hover:shadow-lg hover:shadow-accent/5">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-subtle text-accent transition-colors group-hover:bg-accent group-hover:text-white">
+                            <Layers className="h-5 w-5" />
+                          </div>
+                          <p className="mt-4 text-sm font-medium text-ink leading-relaxed">{feature}</p>
+                        </div>
+                      </StaggerItem>
+                    ))}
+                  </StaggerGroup>
+                </FadeIn>
+              </section>
+            )}
+
+            {/* What's Included */}
+            {visible['whats-included'] && (
+              <section id="whats-included" data-scrollspy className="scroll-mt-36">
+                <FadeIn>
+                  <div className="rounded-3xl border border-border bg-surface p-8 sm:p-10">
+                    <SectionHeading tag="What's Included" title="Everything We Handle For You" />
+                    <StaggerGroup className="grid gap-3 sm:grid-cols-2">
+                      {content.detail.whatsIncluded.map((item) => (
+                        <StaggerItem key={item} className="flex items-start gap-3 rounded-xl bg-canvas p-4">
+                          <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent-subtle">
+                            <Check className="h-3 w-3 text-accent" />
+                          </div>
+                          <span className="text-sm text-ink">{item}</span>
+                        </StaggerItem>
+                      ))}
+                    </StaggerGroup>
+                  </div>
+                </FadeIn>
+              </section>
+            )}
+
+            {/* Working Process */}
+            {visible.process && (
+              <section id="process" data-scrollspy className="scroll-mt-36">
+                <FadeIn>
+                  <SectionHeading
+                    tag="Our Process"
+                    title={`How ${content.name} Is Delivered`}
+                    description="A transparent, step-by-step journey from your first enquiry to final handover."
+                  />
+                  <div className="relative">
+                    <div className="absolute left-5 top-2 bottom-2 w-px bg-border" />
+                    <div className="space-y-6">
+                      {content.detail.process.map((step, index) => (
+                        <motion.div
+                          key={`${contentKey}-${step.title}-${index}`}
+                          initial={{ opacity: 0, x: -16 }}
+                          whileInView={{ opacity: 1, x: 0 }}
+                          viewport={{ once: true, margin: '-40px' }}
+                          transition={{ duration: 0.4, delay: index * 0.08 }}
+                          className="relative flex gap-5 pl-0"
+                        >
+                          <div className="relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 border-accent bg-surface text-sm font-bold text-accent shadow-sm">
+                            {index + 1}
+                          </div>
+                          <div className="flex-1 rounded-2xl border border-border bg-surface p-5 transition-all duration-300 hover:border-accent/25 hover:shadow-md">
+                            <h3 className="text-base font-semibold text-ink">{step.title}</h3>
+                            <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">{step.description}</p>
+                          </div>
+                        </motion.div>
+                      ))}
+                    </div>
+                  </div>
+                </FadeIn>
+              </section>
+            )}
+
+            {/* FAQ */}
+            {visible.faqs && (
+              <section id="faqs" data-scrollspy className="scroll-mt-36">
+                <FadeIn>
+                  <SectionHeading tag="FAQs" title="Frequently Asked Questions" />
+                  <FAQAccordion
+                    items={content.detail.faqs.map((f, index) => ({
+                      id: `service-faq-${contentKey}-${index}`,
+                      question: f.question,
+                      answer: f.answer,
+                      category: service.name,
+                    }))}
+                  />
+                </FadeIn>
+              </section>
+            )}
+
+            {/* Testimonials */}
+            {visible.testimonials && (
+              <section id="testimonials" data-scrollspy className="scroll-mt-36">
+                <FadeIn>
+                  <SectionHeading tag="Customer Reviews" title="What Our Clients Say" />
+                  <StaggerGroup className="grid gap-4 sm:grid-cols-2">
+                    {content.detail.testimonials.map((review, index) => (
+                      <StaggerItem key={`${contentKey}-${index}`}>
+                        <TestimonialCard
+                          index={index}
+                          testimonial={{
+                            id: `service-review-${contentKey}-${index}`,
+                            name: review.name,
+                            role: review.role,
+                            company: review.company,
+                            content: review.content,
+                            rating: review.rating,
+                            avatar: review.avatar,
+                          }}
+                        />
+                      </StaggerItem>
+                    ))}
+                  </StaggerGroup>
+                </FadeIn>
+              </section>
+            )}
+
+            {/* Related Services */}
+            {visible.related && (
+              <section id="related" data-scrollspy className="scroll-mt-36">
+                <FadeIn>
+                  <SectionHeading tag="Related Services" title="Explore More Services" />
+                  <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                    {relatedServices.map((related, index) => (
+                      <ServiceCard
+                        key={related.id}
+                        name={related.name}
+                        slug={related.slug}
+                        description={related.shortDescription}
+                        icon={related.icon}
+                        image={related.image}
+                        index={index}
+                        variant="featured"
+                      />
+                    ))}
+                  </div>
+                </FadeIn>
+              </section>
+            )}
+
+            {/* Request Quote */}
+            <section id="quote" className="scroll-mt-36">
+              <FadeIn>
+                <SectionHeading
+                  tag="Get Started"
+                  title="Request a Quote"
+                  description="Share your requirements and get a free consultation with a detailed quotation."
                 />
-                <div className="mt-16 grid gap-6 lg:grid-cols-2">
+                <div className="grid gap-6 lg:grid-cols-2">
                   <GetStartedCard whatsAppHref={whatsAppHref} company={company} />
                   <QuickFacts content={content} service={service} />
                 </div>
-              </div>
-            </div>
-          ) : (
-            /* Original layout: full content + right sticky aside */
-            <div className="grid gap-12 lg:grid-cols-3">
-              <div className="lg:col-span-2 space-y-20 py-14">
-                <DetailSections
-                  content={content}
-                  contentKey={contentKey}
-                  serviceName={service.name}
-                  marketingMedia={subSlug ? undefined : mediaItems}
-                />
-              </div>
-
-              <aside className="hidden lg:block">
-                <div className="sticky top-40 space-y-6 py-14">
-                  <FadeIn direction="none">
-                    <GetStartedCard whatsAppHref={whatsAppHref} company={company} />
-                  </FadeIn>
-                  <FadeIn direction="none" delay={0.15}>
-                    <QuickFacts content={content} service={service} />
-                  </FadeIn>
-                </div>
-              </aside>
-            </div>
-          )}
+              </FadeIn>
+            </section>
+          </div>
         </motion.div>
-
-        {/* Related completed projects */}
-        {serviceProjects.length > 0 && (
-          <section className="py-16">
-            <SectionHeading
-              tag="Related Work"
-              title="Recently Completed Projects"
-              description={`Real projects we've delivered for ${content.name}.`}
-            />
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {serviceProjects.slice(0, 3).map((project, index) => (
-                <PortfolioProjectCard key={project.id} project={project} index={index} />
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* Related services */}
-        {relatedServices.length > 0 && (
-          <section className="py-16">
-            <SectionHeading tag="Related Services" title="Explore More Services" />
-            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {relatedServices.map((related, index) => (
-                <ServiceCard
-                  key={related.id}
-                  name={related.name}
-                  slug={related.slug}
-                  description={related.shortDescription}
-                  icon={related.icon}
-                  image={related.image}
-                  index={index}
-                  variant="featured"
-                />
-              ))}
-            </div>
-          </section>
-        )}
       </div>
 
       {/* ── Sticky bottom CTA ───────────────────────────────────────── */}
@@ -772,5 +843,3 @@ export function ServiceDetailPage() {
     </div>
   );
 }
-
-export type { SubServiceConfig };

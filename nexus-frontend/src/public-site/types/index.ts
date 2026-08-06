@@ -1,3 +1,5 @@
+import type { ServiceFaq, ServiceProcessStep, ServiceTestimonial } from '@/types';
+
 export interface ServiceItem {
   id: string;
   name: string;
@@ -8,6 +10,16 @@ export interface ServiceItem {
   features: string[];
   image?: string;
   category: string;
+  /** Public detail-page content, populated from the backend Service. */
+  categoryId?: string;
+  heroImage?: string;
+  gallery?: string[];
+  whatsIncluded?: string[];
+  process?: ServiceProcessStep[];
+  faqs?: ServiceFaq[];
+  testimonials?: ServiceTestimonial[];
+  basePrice?: number;
+  estimatedDuration?: string;
 }
 
 export interface IndustryItem {

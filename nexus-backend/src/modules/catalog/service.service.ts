@@ -299,6 +299,11 @@ export const serviceService = {
       metaKeywords: existing.metaKeywords ?? undefined,
       ogImage: existing.ogImage ?? undefined,
       canonicalUrl: existing.canonicalUrl ?? undefined,
+      features: (existing.features as string[]) ?? undefined,
+      whatsIncluded: (existing.whatsIncluded as string[]) ?? undefined,
+      process: (existing.process as unknown as CreateServiceInput['process']) ?? undefined,
+      faqs: (existing.faqs as unknown as CreateServiceInput['faqs']) ?? undefined,
+      testimonials: (existing.testimonials as unknown as CreateServiceInput['testimonials']) ?? undefined,
     };
 
     const service = await serviceRepository.create(input);

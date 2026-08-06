@@ -3,6 +3,25 @@ export interface CreateCategoryInput {
   parentCategoryId?: string;
 }
 
+export interface ServiceProcessStep {
+  title: string;
+  description: string;
+}
+
+export interface ServiceFaq {
+  question: string;
+  answer: string;
+}
+
+export interface ServiceTestimonial {
+  name: string;
+  role: string;
+  company: string;
+  content: string;
+  rating: number;
+  avatar?: string;
+}
+
 export interface CreateServiceInput {
   categoryId: string;
   name: string;
@@ -26,6 +45,12 @@ export interface CreateServiceInput {
   metaKeywords?: string;
   ogImage?: string;
   canonicalUrl?: string;
+  // Public detail-page content blocks (JSON arrays, mirroring SubService).
+  features?: string[];
+  whatsIncluded?: string[];
+  process?: ServiceProcessStep[];
+  faqs?: ServiceFaq[];
+  testimonials?: ServiceTestimonial[];
 }
 
 export interface UpdateServiceInput extends Partial<CreateServiceInput> {

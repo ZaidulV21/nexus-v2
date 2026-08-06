@@ -78,6 +78,34 @@ describe('serviceService.create', () => {
       expect.objectContaining({ entityType: 'SERVICE', entityId: 'svc1', action: 'CREATE' })
     );
   });
+
+  it('passes the detail-page content blocks straight through to the repository', async () => {
+    (categoryRepository.findById as jest.Mock).mockResolvedValue({ id: 'cat1', name: 'Technology' });
+    (serviceRepository.create as jest.Mock).mockResolvedValue({ id: 'svc1', name: 'CCTV' });
+
+    await serviceService.create({
+      categoryId: 'cat1',
+      name: 'CCTV',
+      requiresSiteVisit: 'NO',
+      features: ['HD cameras', 'Remote viewing'],
+      whatsIncluded: ['Site survey', 'Warranty'],
+      process: [{ title: 'Survey', description: 'Map the site' }],
+      faqs: [{ question: 'Storage?', answer: '30 days' }],
+      testimonials: [
+        { name: 'Amit Patel', role: 'Owner', company: 'Patel Retail', content: 'Great work', rating: 5 },
+      ],
+    });
+
+    expect(serviceRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        features: ['HD cameras', 'Remote viewing'],
+        whatsIncluded: ['Site survey', 'Warranty'],
+        process: [{ title: 'Survey', description: 'Map the site' }],
+        faqs: [{ question: 'Storage?', answer: '30 days' }],
+        testimonials: [{ name: 'Amit Patel', role: 'Owner', company: 'Patel Retail', content: 'Great work', rating: 5 }],
+      })
+    );
+  });
 });
 
 describe('serviceService.update', () => {
@@ -249,6 +277,11 @@ describe('serviceService.duplicate', () => {
       metaKeywords: null,
       ogImage: null,
       canonicalUrl: null,
+      features: ['HD cameras', 'Remote viewing'],
+      whatsIncluded: ['Site survey'],
+      process: [{ title: 'Survey', description: 'Map the site' }],
+      faqs: [{ question: 'Storage?', answer: '30 days' }],
+      testimonials: [{ name: 'Amit Patel', role: 'Owner', company: 'Patel Retail', content: 'Great work', rating: 5 }],
     });
     (serviceRepository.create as jest.Mock).mockResolvedValue({ id: 'svc2', name: 'CCTV (Copy)' });
 
@@ -262,6 +295,13 @@ describe('serviceService.duplicate', () => {
         categoryId: 'cat1',
         basePrice: 10000,
         isFeatured: true,
+        features: ['HD cameras', 'Remote viewing'],
+        whatsIncluded: ['Site survey'],
+        process: [{ title: 'Survey', description: 'Map the site' }],
+        faqs: [{ question: 'Storage?', answer: '30 days' }],
+        testimonials: [
+          { name: 'Amit Patel', role: 'Owner', company: 'Patel Retail', content: 'Great work', rating: 5 },
+        ],
       })
     );
     expect(auditService.recordAudit).toHaveBeenCalledWith(

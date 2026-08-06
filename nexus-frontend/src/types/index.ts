@@ -120,6 +120,12 @@ export interface Service {
   deletedAt?: string | null;
   createdAt?: string;
   updatedAt?: string;
+  /** Public detail-page content blocks (JSON arrays, mirroring SubService). */
+  features?: string[] | null;
+  whatsIncluded?: string[] | null;
+  process?: ServiceProcessStep[] | null;
+  faqs?: ServiceFaq[] | null;
+  testimonials?: ServiceTestimonial[] | null;
   /** Present only on the service detail endpoint. */
   usage?: ServiceUsage;
 }
@@ -132,6 +138,28 @@ export interface SubServiceProcessStep {
 export interface SubServiceFaq {
   question: string;
   answer: string;
+}
+
+/** A single { title, description } step in a Service's working process. */
+export interface ServiceProcessStep {
+  title: string;
+  description: string;
+}
+
+/** A single { question, answer } pair in a Service's FAQ section. */
+export interface ServiceFaq {
+  question: string;
+  answer: string;
+}
+
+/** A customer testimonial displayed on a Service's public detail page. */
+export interface ServiceTestimonial {
+  name: string;
+  role: string;
+  company: string;
+  content: string;
+  rating: number;
+  avatar?: string;
 }
 
 /**

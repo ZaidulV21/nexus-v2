@@ -222,6 +222,17 @@ model Service {
   // but stays attached to historical Leads/Quotations/Projects/Invoices.
   deletedAt         DateTime?
   estimatedDuration String?
+  // Public detail-page content blocks (JSON arrays, mirroring SubService).
+  // The website renders each section only when the array is non-empty, so a
+  // service with no content yet still renders a complete, graceful page.
+  features        Json     @default("[]")
+  whatsIncluded   Json     @default("[]")
+  // [{ title, description }]
+  process         Json     @default("[]")
+  // [{ question, answer }]
+  faqs            Json     @default("[]")
+  // [{ name, role, company, content, rating, avatar? }]
+  testimonials    Json     @default("[]")
   leadServices      LeadService[]
   projectServices   ProjectService[]
   questionnaires    ServiceQuestionnaire[]
