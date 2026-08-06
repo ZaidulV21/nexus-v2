@@ -59,7 +59,7 @@ export function useUpdateLead(leadId: string) {
 export function useAddLeadService(leadId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: { serviceId: string; questionnaireAnswers?: Record<string, unknown> }) =>
+    mutationFn: (input: { serviceId: string; subServiceIds?: string[]; questionnaireAnswers?: Record<string, unknown> }) =>
       leadService.addService(leadId, input),
     onSuccess: () => {
       // Adding a service changes the Lead's own detail payload (leadServices

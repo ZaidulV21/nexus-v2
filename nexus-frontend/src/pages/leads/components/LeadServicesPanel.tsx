@@ -34,15 +34,23 @@ export function LeadServicesPanel({ lead }: { lead: Lead }) {
             // CREATED). Converting one service never locks the others.
             const isBackendControlled = !(MANUAL_LEAD_SERVICE_STATUSES as readonly string[]).includes(ls.status);
             const isLocked = isBackendControlled;
+            const subBadges = (ls.subServices ?? []).map((lss) => (
+              <span
+                key={lss.id}
+                className="inline-flex items-center rounded-full bg-accent px-2 py-0.5 text-[11px] font-medium text-white"
+              >
+                {lss.subService?.name ?? lss.subServiceId}
+              </span>
+            ));
             return (
               <li key={ls.id} className="flex items-center justify-between px-4 py-3">
                 <div className="flex items-center gap-3">
                   <div>
                     <p className="text-sm font-medium text-ink">
                       {ls.service?.name ?? 'Service'}
-                      {ls.subService?.name && (
-                        <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-[11px] font-medium text-white">
-                          {ls.subService.name}
+                      {subBadges.length > 0 && (
+                        <span className="ml-2 inline-flex flex-wrap items-center gap-1 align-middle">
+                          {subBadges}
                         </span>
                       )}
                     </p>

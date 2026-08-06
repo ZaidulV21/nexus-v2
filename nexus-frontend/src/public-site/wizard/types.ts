@@ -60,13 +60,16 @@ export interface WizardState {
   currentStep: number;
   /** Selected service IDs */
   selectedServices: string[];
-  /** Pinned sub-service per selected service: { serviceId: subServiceId }. */
-  selectedSubServices: Record<string, string>;
+  /**
+   * Sub-services pinned per selected service: { serviceId: string[] }. A
+   * service can carry multiple sub-services (Interior -> Painting, Flooring,
+   * Lighting), so each entry is an array of sub-service ids.
+   */
+  selectedSubServices: Record<string, string[]>;
   /**
    * True when the wizard was opened from a service/sub-service deep link
    * (?service=...&subService=...). The Services step is then replaced with a
-   * read-only summary - the client picked their option once, they never
-   * select again.
+   * summary where the service is locked but its sub-options remain selectable.
    */
   preselected: boolean;
   /** Dynamic question answers: { serviceId: { questionId: value } } */

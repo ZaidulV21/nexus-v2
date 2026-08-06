@@ -3,8 +3,8 @@ import type { Lead, LeadService as LeadServiceRecord } from '@/types';
 
 export interface CreateLeadServiceInput {
   serviceId: string;
-  /** Specific Sub Service chosen by the client (e.g. Signage -> Repair). Sent as an id. */
-  subServiceId?: string;
+  /** Sub Services chosen by the client (e.g. Interior -> Painting, Flooring, Lighting). Sent as ids. */
+  subServiceIds?: string[];
   questionnaireAnswers?: Record<string, unknown>;
 }
 

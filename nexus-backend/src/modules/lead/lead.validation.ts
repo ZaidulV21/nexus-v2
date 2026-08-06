@@ -2,8 +2,9 @@ import { z } from 'zod';
 
 const leadServiceSchema = z.object({
   serviceId: z.string().uuid(),
-  // Sub Service id, stored verbatim (never a text label).
-  subServiceId: z.string().uuid().optional(),
+  // Sub Service ids, stored verbatim (never text labels) via the junction
+  // table - a service can carry zero or more sub-services.
+  subServiceIds: z.array(z.string().uuid()).max(50, 'Too many sub-services').optional(),
   questionnaireAnswers: z.record(z.any()).optional(),
 });
 

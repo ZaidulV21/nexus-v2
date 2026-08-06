@@ -251,14 +251,23 @@ export const MANUAL_PROJECT_SERVICE_STATUSES = [
   'CANCELLED',
 ] as const;
 
+// Junction row: one (Lead Service, Sub Service) pair. A Lead Service can
+// carry one service but multiple sub-services (Interior -> Painting,
+// Flooring, Lighting) - normalized, never comma-separated text.
+export interface LeadSubService {
+  id: string;
+  leadServiceId: string;
+  subServiceId: string;
+  subService?: SubService | null;
+}
+
 export interface LeadService {
   id: string;
   leadId: string;
   serviceId: string;
   service?: Service;
-  /** Specific Sub Service pinned at quote time (e.g. Signage -> Repair), stored as an id. */
-  subServiceId?: string | null;
-  subService?: SubService | null;
+  /** Sub Services pinned on this Lead Service (zero or more). */
+  subServices?: LeadSubService[];
   status: WorkflowStatus;
   convertedAt?: string | null;
   questionnaireAnswers?: Record<string, unknown> | null;

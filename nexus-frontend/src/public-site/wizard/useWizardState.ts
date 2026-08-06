@@ -37,30 +37,36 @@ export function useWizardState() {
     });
   }, []);
 
-  const setSubService = useCallback((serviceId: string, subServiceId: string) => {
-    setState((s) => ({
-      ...s,
-      selectedSubServices: {
-        ...s.selectedSubServices,
-        [serviceId]: subServiceId,
-      },
-    }));
+  const toggleSubService = useCallback((serviceId: string, subServiceId: string) => {
+    setState((s) => {
+      const current = s.selectedSubServices[serviceId] ?? [];
+      const next = current.includes(subServiceId)
+        ? current.filter((id) => id !== subServiceId)
+        : [...current, subServiceId];
+      return {
+        ...s,
+        selectedSubServices: { ...s.selectedSubServices, [serviceId]: next },
+      };
+    });
   }, []);
 
   /**
-   * Opens the wizard with a service (and optionally a specific sub-service)
+   * Opens the wizard with a service (and optionally one or more sub-services)
    * already pinned, skipping the Services step. Used by the service detail
-   * page deep links so the client never re-selects what they already chose.
+   * page deep links so the client never re-selects the service they already
+   * chose - the service stays locked, but its sub-options remain selectable
+   * (Phase 7: one service, multiple sub-services).
    */
-  const preselect = useCallback((serviceId: string, subServiceId?: string) => {
+  const preselect = useCallback((serviceId: string, subServiceIds?: string[]) => {
     setState((s) => ({
       ...s,
       currentStep: 1,
       preselected: true,
       selectedServices: [serviceId],
-      selectedSubServices: subServiceId
-        ? { ...s.selectedSubServices, [serviceId]: subServiceId }
-        : s.selectedSubServices,
+      selectedSubServices: {
+        ...s.selectedSubServices,
+        [serviceId]: subServiceIds ?? [],
+      },
     }));
   }, []);
 
@@ -147,7 +153,7 @@ export function useWizardState() {
     next,
     prev,
     toggleService,
-    setSubService,
+    toggleSubService,
     preselect,
     setAnswer,
     addFiles,

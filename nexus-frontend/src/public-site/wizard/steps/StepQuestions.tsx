@@ -10,8 +10,8 @@ interface StepQuestionsProps {
   answers: Record<string, Record<string, string | string[]>>;
   onAnswer: (serviceId: string, questionId: string, value: string | string[]) => void;
   showErrors?: boolean;
-  /** Pinned sub-services: { serviceId: subServiceId } shown as chips under each service. */
-  selectedSubServices?: Record<string, string>;
+  /** Sub-services pinned per service: { serviceId: string[] } shown as chips. */
+  selectedSubServices?: Record<string, string[]>;
   /** subServiceId -> display name, resolved from the public sub-services API. */
   subServiceNames?: Record<string, string>;
 }
@@ -71,8 +71,7 @@ export function StepQuestions({
         {selectedServiceData.map((service, sIndex) => {
           const config = getQuestionsForService(service.slug);
           const serviceAnswers = answers[service.id] || {};
-          const subId = selectedSubServices[service.id];
-          const subName = subId ? subServiceNames[subId] : undefined;
+          const subIds = (selectedSubServices[service.id] ?? []).filter((id) => subServiceNames[id]);
 
           return (
             <motion.div
@@ -84,12 +83,15 @@ export function StepQuestions({
             >
               <div className="flex flex-wrap items-center gap-2">
                 <h3 className="text-base font-semibold text-ink">{service.name}</h3>
-                {subName && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-accent px-2.5 py-0.5 text-xs font-medium text-white">
+                {subIds.map((subId) => (
+                  <span
+                    key={subId}
+                    className="inline-flex items-center gap-1 rounded-full bg-accent px-2.5 py-0.5 text-xs font-medium text-white"
+                  >
                     <BadgeCheck className="h-3 w-3" />
-                    {subName}
+                    {subServiceNames[subId]}
                   </span>
-                )}
+                ))}
               </div>
 
               {config ? (

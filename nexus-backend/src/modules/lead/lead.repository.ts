@@ -21,7 +21,10 @@ export const leadRepository = {
   findById(id: string) {
     return prisma.lead.findFirst({
       where: { id, deletedAt: null },
-      include: { leadServices: { include: { service: true, subService: true } }, sourceClient: true },
+      include: {
+        leadServices: { include: { service: true, subServices: { include: { subService: true } } } },
+        sourceClient: true,
+      },
     });
   },
 
@@ -70,7 +73,7 @@ export const leadRepository = {
         skip: pagination.skip,
         take: pagination.take,
         orderBy: { [pagination.sortBy || 'createdAt']: pagination.sortOrder },
-        include: { leadServices: { include: { service: true, subService: true } } },
+        include: { leadServices: { include: { service: true, subServices: { include: { subService: true } } } } },
       }),
       prisma.lead.count({ where }),
     ]);
@@ -87,7 +90,12 @@ export const leadRepository = {
 export const leadServiceRepository = {
   createMany(
     leadId: string,
-    services: Array<{ serviceId: string; subServiceId?: string; questionnaireVersionId?: string; questionnaireAnswers?: any }>,
+    services: Array<{
+      serviceId: string;
+      subServiceIds?: string[];
+      questionnaireVersionId?: string;
+      questionnaireAnswers?: any;
+    }>,
     tx: Prisma.TransactionClient
   ) {
     return Promise.all(
@@ -96,7 +104,10 @@ export const leadServiceRepository = {
           data: {
             leadId,
             serviceId: s.serviceId,
-            subServiceId: s.subServiceId,
+            // Junction rows created atomically with their Lead Service.
+            subServices: s.subServiceIds?.length
+              ? { create: s.subServiceIds.map((subServiceId) => ({ subServiceId })) }
+              : undefined,
             questionnaireVersionId: s.questionnaireVersionId,
             questionnaireAnswers: s.questionnaireAnswers,
             status: 'NEW',
@@ -108,7 +119,12 @@ export const leadServiceRepository = {
 
   create(
     leadId: string,
-    service: { serviceId: string; subServiceId?: string; questionnaireVersionId?: string; questionnaireAnswers?: any },
+    service: {
+      serviceId: string;
+      subServiceIds?: string[];
+      questionnaireVersionId?: string;
+      questionnaireAnswers?: any;
+    },
     tx?: Prisma.TransactionClient
   ) {
     const client = tx ?? prisma;
@@ -116,7 +132,9 @@ export const leadServiceRepository = {
       data: {
         leadId,
         serviceId: service.serviceId,
-        subServiceId: service.subServiceId,
+        subServices: service.subServiceIds?.length
+          ? { create: service.subServiceIds.map((subServiceId) => ({ subServiceId })) }
+          : undefined,
         questionnaireVersionId: service.questionnaireVersionId,
         questionnaireAnswers: service.questionnaireAnswers,
         status: 'NEW',
@@ -125,11 +143,17 @@ export const leadServiceRepository = {
   },
 
   findById(id: string) {
-    return prisma.leadService.findFirst({ where: { id }, include: { service: true, subService: true, lead: true } });
+    return prisma.leadService.findFirst({
+      where: { id },
+      include: { service: true, subServices: { include: { subService: true } }, lead: true },
+    });
   },
 
   listForLead(leadId: string) {
-    return prisma.leadService.findMany({ where: { leadId }, include: { service: true, subService: true } });
+    return prisma.leadService.findMany({
+      where: { leadId },
+      include: { service: true, subServices: { include: { subService: true } } },
+    });
   },
 
   // Marks a Lead Service as converted/attached to the Lead's Client. Each

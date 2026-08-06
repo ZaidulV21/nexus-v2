@@ -36,11 +36,14 @@ function buildLeadInput(wizard: ReturnType<typeof useWizardState>, isLoggedIn: b
     email: contact.email,
     companyName: contact.company || undefined,
     source: 'WEBSITE',
-    services: selectedServices.map((serviceId: string) => ({
-      serviceId,
-      subServiceId: selectedSubServices[serviceId],
-      questionnaireAnswers: answers[serviceId] || {},
-    })),
+    services: selectedServices.map((serviceId: string) => {
+      const subServiceIds = selectedSubServices[serviceId] ?? [];
+      return {
+        serviceId,
+        ...(subServiceIds.length > 0 ? { subServiceIds } : {}),
+        questionnaireAnswers: answers[serviceId] || {},
+      };
+    }),
     password: isLoggedIn ? undefined : (account.password || undefined),
     clientId: isLoggedIn ? clientId : undefined,
   };
@@ -88,12 +91,13 @@ export function GetQuotePage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const createLeadMutation = useCreateLead();
 
-  // Deep-linked preselection: /get-quote?service=<id|slug>[&subService=<id>]
-  // opens the wizard with the service (and specific sub-service) already
-  // pinned. The client picked their option on the service page - the Services
-  // step is skipped and rendered read-only, so they never select again.
+  // Deep-linked preselection: /get-quote?service=<id|slug>[&subService=<id>...]
+  // opens the wizard with the service (and zero or more specific sub-services)
+  // already pinned. The client picked their option on the service page - the
+  // service is locked, but its sub-options remain selectable so one service
+  // can carry multiple sub-services (Interior -> Painting, Flooring, Lighting).
   const serviceParam = searchParams.get('service');
-  const subServiceParam = searchParams.get('subService');
+  const subServiceParams = searchParams.getAll('subService');
 
   const preselectedService = useMemo(
     () => services.find((s) => s.id === serviceParam || s.slug === serviceParam),
@@ -114,15 +118,14 @@ export function GetQuotePage() {
   const appliedPreselection = useRef(false);
   useEffect(() => {
     if (appliedPreselection.current || !preselectedService) return;
-    // If a sub-service was requested, wait until its list has loaded so we
-    // can validate the id before pinning it (or fall back to service-only).
-    if (subServiceParam && preselectedSubsLoading) return;
+    // If sub-services were requested, wait until the service's sub list has
+    // loaded so we can validate the ids before pinning them (unknown ids are
+    // dropped; a fully unknown set falls back to service-only).
+    if (subServiceParams.length > 0 && preselectedSubsLoading) return;
     appliedPreselection.current = true;
-    const subId = subServiceParam && preselectedSubs.some((sub) => sub.id === subServiceParam)
-      ? subServiceParam
-      : undefined;
-    wizard.preselect(preselectedService.id, subId);
-  }, [preselectedService, subServiceParam, preselectedSubs, preselectedSubsLoading, wizard]);
+    const validSubIds = subServiceParams.filter((id) => preselectedSubs.some((sub) => sub.id === id));
+    wizard.preselect(preselectedService.id, validSubIds);
+  }, [preselectedService, subServiceParams, preselectedSubs, preselectedSubsLoading, wizard]);
 
   // Check if we returned from forgot-password reset
   const returnedFromReset = searchParams.get('returned') === 'true';
@@ -373,17 +376,16 @@ export function GetQuotePage() {
                       </div>
                       <div className="flex flex-wrap gap-2">
                         {selectedServiceData.map((s) => {
-                          const subId = state.selectedSubServices[s.id];
-                          const subName = subId ? subServiceNames[subId] : undefined;
+                          const subIds = (state.selectedSubServices[s.id] ?? []).filter((id) => subServiceNames[id]);
                           return (
                             <span key={s.id} className="inline-flex items-center gap-1 rounded-full bg-accent-subtle px-3 py-1 text-xs font-medium text-accent">
                               {s.name}
-                              {subName && (
-                                <span className="inline-flex items-center gap-0.5 rounded-full bg-accent px-2 py-0.5 text-[11px] font-medium text-white">
+                              {subIds.map((subId) => (
+                                <span key={subId} className="inline-flex items-center gap-0.5 rounded-full bg-accent px-2 py-0.5 text-[11px] font-medium text-white">
                                   <BadgeCheck className="h-3 w-3" />
-                                  {subName}
+                                  {subServiceNames[subId]}
                                 </span>
-                              )}
+                              ))}
                             </span>
                           );
                         })}
@@ -469,10 +471,10 @@ export function GetQuotePage() {
                   {/* Normal wizard steps */}
                   {state.currentStep === 0 && (state.preselected ? (
                     <StepServicesPreselected
-                      services={services}
-                      selectedServices={state.selectedServices}
-                      selectedSubServices={state.selectedSubServices}
-                      subServiceNames={subServiceNames}
+                      service={preselectedService}
+                      subServices={preselectedSubs}
+                      selectedSubServiceIds={state.selectedSubServices[preselectedService?.id ?? ''] ?? []}
+                      onToggleSubService={(subId) => wizard.toggleSubService(preselectedService?.id ?? '', subId)}
                     />
                   ) : (
                     <StepServices

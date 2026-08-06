@@ -312,8 +312,8 @@ model SubService {
   archivedAt      DateTime?
   // Soft delete, mirroring Service. A sub-service is never hard-deleted.
   deletedAt       DateTime?
-  service         Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
-  leadServices    LeadService[]
+  service           Service           @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  leadSubServices   LeadSubService[]
 
   @@unique([serviceId, slug])
   @@index([serviceId, isActive, archivedAt, deletedAt])
@@ -364,11 +364,6 @@ model LeadService {
   id                        String                @id @default(uuid())
   leadId                    String
   serviceId                 String
-  // Optional Sub Service pinned at quote time (public wizard flow): the
-  // client picked a specific option (e.g. Signage -> Repair), so the Lead
-  // Service carries the SubService id, not a text label. SetNull keeps the
-  // historical row intact if a sub-service is ever hard-deleted.
-  subServiceId              String?
   status                    String                @default("NEW")
   // Timestamp when this service was converted/attached to the Lead's Client
   // (first conversion creates the Client, later conversions only attach the
@@ -386,11 +381,30 @@ model LeadService {
   lead                      Lead                  @relation(fields: [leadId], references: [id])
   questionnaireVersion      ServiceQuestionnaire? @relation(fields: [questionnaireVersionId], references: [id])
   service                   Service               @relation(fields: [serviceId], references: [id])
-  subService                SubService?           @relation(fields: [subServiceId], references: [id], onDelete: SetNull)
+  subServices               LeadSubService[]
   projectServices           ProjectService[]
 
-  @@index([subServiceId])
   @@map("lead_services")
+}
+
+// Phase 7: a Lead Service can carry ONE service but MULTIPLE sub-services via
+// this normalized junction table (Interior -> Painting, Flooring, Lighting).
+// No comma-separated values, no denormalized column - each row is one
+// (leadServiceId, subServiceId) pair, unique so a sub-service can never be
+// pinned twice on the same Lead Service. Rows die with their Lead Service
+// (Cascade) and are RESTRICTed against hard-deleting a Sub Service that is
+// still referenced by history (sub-services are soft-deleted in-app anyway).
+model LeadSubService {
+  id            String      @id @default(uuid())
+  leadServiceId String
+  subServiceId  String
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  leadService   LeadService @relation(fields: [leadServiceId], references: [id], onDelete: Cascade)
+  subService    SubService  @relation(fields: [subServiceId], references: [id])
+
+  @@unique([leadServiceId, subServiceId])
+  @@map("lead_sub_services")
 }
 
 model LeadActivityNote {

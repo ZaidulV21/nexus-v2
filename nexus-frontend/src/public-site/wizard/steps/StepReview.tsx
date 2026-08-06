@@ -50,17 +50,19 @@ export function StepReview({ state, goTo, subServiceNames = {} }: StepReviewProp
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
             {selectedServiceData.map((s) => {
-              const subId = state.selectedSubServices[s.id];
-              const subName = subId ? subServiceNames[subId] : undefined;
+              const subIds = (state.selectedSubServices[s.id] ?? []).filter((id) => subServiceNames[id]);
               return (
                 <span key={s.id} className="rounded-full bg-accent-subtle px-3 py-1 text-xs font-medium text-accent inline-flex items-center gap-1">
                   {s.name}
-                  {subName && (
-                    <span className="inline-flex items-center gap-0.5 rounded-full bg-accent px-2 py-0.5 text-[11px] font-medium text-white">
+                  {subIds.map((subId) => (
+                    <span
+                      key={subId}
+                      className="inline-flex items-center gap-0.5 rounded-full bg-accent px-2 py-0.5 text-[11px] font-medium text-white"
+                    >
                       <BadgeCheck className="h-3 w-3" />
-                      {subName}
+                      {subServiceNames[subId]}
                     </span>
-                  )}
+                  ))}
                 </span>
               );
             })}
@@ -72,8 +74,7 @@ export function StepReview({ state, goTo, subServiceNames = {} }: StepReviewProp
           const config = getQuestionsForService(service.slug);
           const serviceAnswers = state.answers[service.id] || {};
           const hasAnswers = Object.keys(serviceAnswers).length > 0;
-          const subId = state.selectedSubServices[service.id];
-          const subName = subId ? subServiceNames[subId] : undefined;
+          const subIds = (state.selectedSubServices[service.id] ?? []).filter((id) => subServiceNames[id]);
 
           return (
             <motion.div
@@ -86,12 +87,15 @@ export function StepReview({ state, goTo, subServiceNames = {} }: StepReviewProp
               <div className="flex items-center justify-between">
                 <div className="flex flex-wrap items-center gap-2">
                   <h3 className="text-sm font-semibold text-ink">{service.name}</h3>
-                  {subName && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-[11px] font-medium text-white">
+                  {subIds.map((subId) => (
+                    <span
+                      key={subId}
+                      className="inline-flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-[11px] font-medium text-white"
+                    >
                       <BadgeCheck className="h-3 w-3" />
-                      {subName}
+                      {subServiceNames[subId]}
                     </span>
-                  )}
+                  ))}
                 </div>
                 <button onClick={() => goTo(1)} className="text-xs font-medium text-accent hover:text-accent-hover flex items-center gap-1">
                   <Edit2 className="h-3 w-3" /> Edit

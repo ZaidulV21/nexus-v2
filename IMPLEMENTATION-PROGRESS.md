@@ -1958,3 +1958,54 @@ Get Quote is now deep-link aware. Any "Get Quote" CTA — the Service Details he
 | No regressions to auth, RBAC, services, sub-services, leads, clients, quotations, projects, invoices, portfolio | ✅ |
 
 > **Note:** the backend (port 4000) and Vite (port 5173) dev servers were left running after the smoke test. C: had ~2.5 GB free during the frontend build.
+
+---
+
+# Phase 7 — Lead Flow: One Service, Multiple Sub Services (Normalized Junction)
+
+**Date**: 2026-08-07
+**Status**: ✅ PHASE 7 COMPLETE
+
+## Summary
+
+The Lead flow (Lead → Lead Services → Lead Sub Services) now supports **one service with multiple sub-services** on a single Lead Service — e.g. Interior → Painting, Flooring, Lighting — through a **normalized junction table** (`lead_sub_services`), never comma-separated text and never a denormalized column. The existing single-sub-service history (Phase 6 pins) was migrated into the junction table so current service history keeps working unchanged. The current lead flow remains exactly as-is: the wizard steps, admin panels, status engine, conversion and quotation/project workflows are untouched — only the sub-service capability was enhanced.
+
+## Backend Changes
+
+1. `prisma/schema.prisma` — NEW `LeadSubService` model (id, `leadServiceId`, `subServiceId`, timestamps, `@@unique([leadServiceId, subServiceId])`): one row per (Lead Service, Sub Service) pair. `LeadService` dropped `subServiceId`/`subService`/`@@index([subServiceId])` and gained `subServices LeadSubService[]`; `SubService.leadServices` → `leadSubServices LeadSubService[]`. FK `onDelete: Cascade` (junction rows die with their Lead Service) and `Restrict` on sub-service (sub-services are soft-deleted in-app anyway).
+2. `prisma/migrations/20260807010000_lead_sub_services/migration.sql` — NEW: creates `lead_sub_services`, **migrates every historical Phase 6 pin** (`INSERT ... SELECT` from `lead_services.subServiceId`), then drops the old FK constraint, index and column. Applied via `npx prisma migrate deploy` (31 migrations total; client regenerated; hand-written-SQL pattern as Phases 2–6). Post-migration check: L-00015 → Repair lives in the junction.
+3. `src/modules/lead/lead.types.ts` — `CreateLeadServiceInput`/`AddServiceToLeadInput`: `subServiceId?` → `subServiceIds?: string[]`.
+4. `src/modules/lead/lead.validation.ts` — `subServiceIds: z.array(z.string().uuid()).max(50).optional()`.
+5. `src/modules/lead/lead.service.ts` — `resolveSubServiceId` → `resolveSubServiceIds(subServiceIds, serviceId)`: dedupes ids, then validates each must exist, be `isActive`, not archived/deleted, and belong to the same Service (`ValidationError` otherwise). Wired into `createLead` (per-service loop) and `addServiceToLead`.
+6. `src/modules/lead/lead.repository.ts` — `createMany`/`create` persist sub-services via **nested create** (`subServices: { create: [{ subServiceId }] }`, atomic with the Lead Service); all lead reads (`findById`, `list`, `leadServiceRepository.findById`/`listForLead`) now include `subServices: { include: { subService: true } }`.
+7. `src/modules/lead/tests/lead.service.test.ts` — sub-service suite rewritten for arrays: stores 3 sub-service ids on one Lead Service, dedupes repeated ids, stores none when absent, rejects mismatch / unavailable / non-existent, and `addServiceToLead` persists multiple ids. File: 26/26; full suite **405/405, 26 suites**.
+
+## Frontend Changes
+
+1. **Data layer** — `src/types/index.ts`: NEW `LeadSubService` interface; `LeadService` dropped `subServiceId?/subService?`, gained `subServices?: LeadSubService[]`. `src/services/leadService.ts`: `subServiceId?` → `subServiceIds?: string[]` on `CreateLeadServiceInput`.
+2. **Wizard state** — `src/public-site/wizard/types.ts`: `selectedSubServices` is now `Record<string, string[]>` (a service can carry multiple sub-services). `useWizardState.ts`: `setSubService` → `toggleSubService(serviceId, subServiceId)` (add/remove from the array); `preselect(serviceId, subServiceIds?: string[])`.
+3. **`StepServicesPreselected.tsx`** — REWRITTEN: the deep-linked step now shows the service **locked** (never re-selectable) plus a checkbox grid of its sub-options the client can add or remove, so one service can carry multiple sub-services; `subServiceNames`/`services` props replaced by `service`, `subServices`, `selectedSubServiceIds`, `onToggleSubService`.
+4. **`GetQuotePage.tsx`** — deep link now reads repeated `subService` params (`searchParams.getAll('subService')`), validates each against the loaded sub list, and passes the array to `preselect`. `buildLeadInput` maps `subServiceIds: selectedSubServices[serviceId]` (omitted when empty). Post-login review renders one chip per sub-service.
+5. **`StepQuestions.tsx` / `StepReview.tsx`** — render **one accent chip per pinned sub-service** under each service heading.
+6. **Admin** — `LeadServicesPanel.tsx` shows one accent badge per `subServices[]` entry; `AddServiceModal.tsx` gained a multi-select sub-service picker (checkbox list driven by `usePublicSubServices(serviceId)`), sending `subServiceIds` when the admin adds a service.
+
+## Verification
+
+| Check | Result |
+|-------|--------|
+| Backend tests: 405/405 (26 suites, +2 net new sub-service tests) | ✅ |
+| Backend `npx tsc --noEmit` | ✅ 0 errors |
+| Frontend `npx tsc --noEmit` | ✅ 0 errors |
+| Frontend production build | ✅ clean (chunk-size warning pre-existing) |
+| Migration `20260807010000_lead_sub_services` applied (31 total) | ✅ |
+| Phase 6 pin migrated into junction (L-00015 → Repair) | ✅ |
+| Live: created Painting / Flooring / Lighting sub-services under Interior Design | ✅ |
+| Live: lead L-00016 = Interior Design with **3** sub-services, all resolved via junction | ✅ |
+| Guard: sub of another service → "does not belong to the selected Service" | ✅ |
+| Guard: unknown sub → "is not available" (lead rolled back, not created) | ✅ |
+| Lead detail + list endpoints return `subServices[].subService.name` | ✅ |
+| Vite dev: all changed modules transform (200) | ✅ |
+| Smoke lead L-00016 archived after the test | ✅ |
+| No regressions to auth, RBAC, services, sub-services, leads, clients, quotations, projects, invoices, portfolio | ✅ |
+
+> **Note:** the backend (port 4000, restarted after the migration) and Vite (port 5173) dev servers are running. Interior Design's Painting (`91d89094…`), Flooring (`68092941…`), Lighting (`61c6f50d…`) sub-services are live seed data matching the Phase 7 example; the existing Office Fit-out / Retail Store Design subs remain intact.

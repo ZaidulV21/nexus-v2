@@ -1,7 +1,11 @@
 export interface CreateLeadServiceInput {
   serviceId: string;
-  /** Optional Sub Service (public wizard picks a specific option, e.g. Signage -> Repair). Stored as an id. */
-  subServiceId?: string;
+  /**
+   * One or more Sub Services (e.g. Interior -> Painting, Flooring, Lighting).
+   * Stored normalized via the lead_sub_services junction table - one row per
+   * (Lead Service, Sub Service) pair, never comma-separated text.
+   */
+  subServiceIds?: string[];
   questionnaireAnswers?: Record<string, unknown>;
 }
 
@@ -20,7 +24,7 @@ export interface CreateLeadInput {
 
 export interface AddServiceToLeadInput {
   serviceId: string;
-  subServiceId?: string;
+  subServiceIds?: string[];
   questionnaireAnswers?: Record<string, unknown>;
 }
 

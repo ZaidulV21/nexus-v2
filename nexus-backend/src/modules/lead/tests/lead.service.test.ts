@@ -400,53 +400,97 @@ describe('leadService.createLead - existing client (clientId)', () => {
   });
 });
 
-describe('leadService.createLead - sub-service pinning (Signage -> Repair)', () => {
+describe('leadService.createLead - sub-service pinning (Interior -> Painting + Flooring + Lighting)', () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it('stores the Sub Service id on the Lead Service when it belongs to the Service', async () => {
+  const availableSub = (id: string, serviceId: string) => ({
+    id,
+    serviceId,
+    name: id,
+    isActive: true,
+    archivedAt: null,
+    deletedAt: null,
+  });
+
+  it('stores multiple Sub Service ids on one Lead Service (normalized, one row per sub)', async () => {
     (leadRepository.create as jest.Mock).mockResolvedValue({ id: 'lead1', leadNumber: 'L-00001' });
-    (serviceRepository.findById as jest.Mock).mockResolvedValue({ id: 'svc-signage', isActive: true, name: 'Branding & Signage' });
-    (subServiceRepository.findById as jest.Mock).mockResolvedValue({
-      id: 'sub-repair',
-      serviceId: 'svc-signage',
-      name: 'Repair',
-      isActive: true,
-      archivedAt: null,
-      deletedAt: null,
-    });
-    (leadServiceRepository.createMany as jest.Mock).mockResolvedValue([{ id: 'ls1', serviceId: 'svc-signage', subServiceId: 'sub-repair' }]);
+    (serviceRepository.findById as jest.Mock).mockResolvedValue({ id: 'svc-interior', isActive: true, name: 'Interior Design' });
+    (subServiceRepository.findById as jest.Mock).mockImplementation((id: string) =>
+      Promise.resolve(availableSub(id, 'svc-interior'))
+    );
+    (leadServiceRepository.createMany as jest.Mock).mockResolvedValue([
+      { id: 'ls1', serviceId: 'svc-interior', subServices: [{ subServiceId: 'sub-painting' }] },
+    ]);
 
     const result = await leadService.createLead({
       contactName: 'John Doe',
       phone: '9999999999',
-      services: [{ serviceId: 'svc-signage', subServiceId: 'sub-repair' }],
+      services: [{ serviceId: 'svc-interior', subServiceIds: ['sub-painting', 'sub-flooring', 'sub-lighting'] }],
     });
 
     expect(result.leadServices).toHaveLength(1);
     expect(leadServiceRepository.createMany).toHaveBeenCalledWith(
       'lead1',
-      expect.arrayContaining([expect.objectContaining({ serviceId: 'svc-signage', subServiceId: 'sub-repair' })]),
+      expect.arrayContaining([
+        expect.objectContaining({ serviceId: 'svc-interior', subServiceIds: ['sub-painting', 'sub-flooring', 'sub-lighting'] }),
+      ]),
+      {}
+    );
+  });
+
+  it('deduplicates repeated Sub Service ids before storing', async () => {
+    (leadRepository.create as jest.Mock).mockResolvedValue({ id: 'lead1', leadNumber: 'L-00001' });
+    (serviceRepository.findById as jest.Mock).mockResolvedValue({ id: 'svc-interior', isActive: true, name: 'Interior Design' });
+    (subServiceRepository.findById as jest.Mock).mockImplementation((id: string) =>
+      Promise.resolve(availableSub(id, 'svc-interior'))
+    );
+    (leadServiceRepository.createMany as jest.Mock).mockResolvedValue([{ id: 'ls1', serviceId: 'svc-interior' }]);
+
+    await leadService.createLead({
+      contactName: 'John Doe',
+      phone: '9999999999',
+      services: [{ serviceId: 'svc-interior', subServiceIds: ['sub-painting', 'sub-painting', 'sub-lighting'] }],
+    });
+
+    expect(leadServiceRepository.createMany).toHaveBeenCalledWith(
+      'lead1',
+      expect.arrayContaining([
+        expect.objectContaining({ serviceId: 'svc-interior', subServiceIds: ['sub-painting', 'sub-lighting'] }),
+      ]),
+      {}
+    );
+  });
+
+  it('stores no sub-services when none are provided (plain service enquiry)', async () => {
+    (leadRepository.create as jest.Mock).mockResolvedValue({ id: 'lead1', leadNumber: 'L-00001' });
+    (serviceRepository.findById as jest.Mock).mockResolvedValue({ id: 'svc-interior', isActive: true, name: 'Interior Design' });
+    (leadServiceRepository.createMany as jest.Mock).mockResolvedValue([{ id: 'ls1', serviceId: 'svc-interior' }]);
+
+    await leadService.createLead({
+      contactName: 'John Doe',
+      phone: '9999999999',
+      services: [{ serviceId: 'svc-interior' }],
+    });
+
+    expect(leadServiceRepository.createMany).toHaveBeenCalledWith(
+      'lead1',
+      expect.arrayContaining([expect.objectContaining({ serviceId: 'svc-interior', subServiceIds: [] })]),
       {}
     );
   });
 
   it('rejects a Sub Service that does not belong to the selected Service', async () => {
     (leadRepository.create as jest.Mock).mockResolvedValue({ id: 'lead1', leadNumber: 'L-00001' });
-    (serviceRepository.findById as jest.Mock).mockResolvedValue({ id: 'svc-signage', isActive: true, name: 'Branding & Signage' });
-    (subServiceRepository.findById as jest.Mock).mockResolvedValue({
-      id: 'sub-repair',
-      serviceId: 'svc-interior', // belongs to a different service
-      name: 'Repair',
-      isActive: true,
-      archivedAt: null,
-      deletedAt: null,
-    });
+    (serviceRepository.findById as jest.Mock).mockResolvedValue({ id: 'svc-interior', isActive: true, name: 'Interior Design' });
+    (subServiceRepository.findById as jest.Mock).mockImplementation((id: string) =>
+      Promise.resolve(id === 'sub-painting' ? availableSub('sub-painting', 'svc-signage') : availableSub(id, 'svc-interior'))
+    );
 
     await expect(
       leadService.createLead({
         contactName: 'John Doe',
         phone: '9999999999',
-        services: [{ serviceId: 'svc-signage', subServiceId: 'sub-repair' }],
+        services: [{ serviceId: 'svc-interior', subServiceIds: ['sub-painting', 'sub-flooring'] }],
       })
     ).rejects.toThrow('does not belong to the selected Service');
     expect(leadServiceRepository.createMany).not.toHaveBeenCalled();
@@ -454,11 +498,11 @@ describe('leadService.createLead - sub-service pinning (Signage -> Repair)', () 
 
   it('rejects an unavailable (inactive / archived / deleted) Sub Service', async () => {
     (leadRepository.create as jest.Mock).mockResolvedValue({ id: 'lead1', leadNumber: 'L-00001' });
-    (serviceRepository.findById as jest.Mock).mockResolvedValue({ id: 'svc-signage', isActive: true, name: 'Branding & Signage' });
+    (serviceRepository.findById as jest.Mock).mockResolvedValue({ id: 'svc-interior', isActive: true, name: 'Interior Design' });
     (subServiceRepository.findById as jest.Mock).mockResolvedValue({
-      id: 'sub-repair',
-      serviceId: 'svc-signage',
-      name: 'Repair',
+      id: 'sub-painting',
+      serviceId: 'svc-interior',
+      name: 'Painting',
       isActive: false,
       archivedAt: null,
       deletedAt: null,
@@ -468,7 +512,7 @@ describe('leadService.createLead - sub-service pinning (Signage -> Repair)', () 
       leadService.createLead({
         contactName: 'John Doe',
         phone: '9999999999',
-        services: [{ serviceId: 'svc-signage', subServiceId: 'sub-repair' }],
+        services: [{ serviceId: 'svc-interior', subServiceIds: ['sub-painting'] }],
       })
     ).rejects.toThrow('is not available');
     expect(leadServiceRepository.createMany).not.toHaveBeenCalled();
@@ -476,14 +520,14 @@ describe('leadService.createLead - sub-service pinning (Signage -> Repair)', () 
 
   it('rejects a non-existent Sub Service', async () => {
     (leadRepository.create as jest.Mock).mockResolvedValue({ id: 'lead1', leadNumber: 'L-00001' });
-    (serviceRepository.findById as jest.Mock).mockResolvedValue({ id: 'svc-signage', isActive: true, name: 'Branding & Signage' });
+    (serviceRepository.findById as jest.Mock).mockResolvedValue({ id: 'svc-interior', isActive: true, name: 'Interior Design' });
     (subServiceRepository.findById as jest.Mock).mockResolvedValue(null);
 
     await expect(
       leadService.createLead({
         contactName: 'John Doe',
         phone: '9999999999',
-        services: [{ serviceId: 'svc-signage', subServiceId: 'missing-sub' }],
+        services: [{ serviceId: 'svc-interior', subServiceIds: ['missing-sub'] }],
       })
     ).rejects.toThrow('is not available');
   });
@@ -492,36 +536,31 @@ describe('leadService.createLead - sub-service pinning (Signage -> Repair)', () 
 describe('leadService.addServiceToLead - sub-service pinning', () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it('validates and persists the Sub Service id', async () => {
+  it('validates and persists multiple Sub Service ids', async () => {
     (leadRepository.findById as jest.Mock).mockResolvedValue({
       id: 'lead1',
       leadNumber: 'L-00001',
       convertedAt: null,
     });
-    (serviceRepository.findById as jest.Mock).mockResolvedValue({ id: 'svc-signage', isActive: true, name: 'Branding & Signage' });
-    (subServiceRepository.findById as jest.Mock).mockResolvedValue({
-      id: 'sub-repair',
-      serviceId: 'svc-signage',
-      name: 'Repair',
-      isActive: true,
-      archivedAt: null,
-      deletedAt: null,
-    });
+    (serviceRepository.findById as jest.Mock).mockResolvedValue({ id: 'svc-interior', isActive: true, name: 'Interior Design' });
+    (subServiceRepository.findById as jest.Mock).mockImplementation((id: string) =>
+      Promise.resolve({ id, serviceId: 'svc-interior', name: id, isActive: true, archivedAt: null, deletedAt: null })
+    );
     (leadServiceRepository.create as jest.Mock).mockResolvedValue({
       id: 'ls1',
-      serviceId: 'svc-signage',
-      subServiceId: 'sub-repair',
+      serviceId: 'svc-interior',
+      subServices: [{ subServiceId: 'sub-painting' }, { subServiceId: 'sub-flooring' }],
     });
 
     const result = await leadService.addServiceToLead('lead1', {
-      serviceId: 'svc-signage',
-      subServiceId: 'sub-repair',
+      serviceId: 'svc-interior',
+      subServiceIds: ['sub-painting', 'sub-flooring'],
     });
 
     expect(leadServiceRepository.create).toHaveBeenCalledWith(
       'lead1',
-      expect.objectContaining({ serviceId: 'svc-signage', subServiceId: 'sub-repair' })
+      expect.objectContaining({ serviceId: 'svc-interior', subServiceIds: ['sub-painting', 'sub-flooring'] })
     );
-    expect(result.subServiceId).toBe('sub-repair');
+    expect((result as any).subServices).toHaveLength(2);
   });
 });
