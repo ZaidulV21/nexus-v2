@@ -60,6 +60,50 @@ export interface Service {
   usage?: ServiceUsage;
 }
 
+export interface SubServiceProcessStep {
+  title: string;
+  description: string;
+}
+
+export interface SubServiceFaq {
+  question: string;
+  answer: string;
+}
+
+/**
+ * A CMS-managed Sub Service under a Service, exposed at a public SEO URL like
+ * /services/interior-design/false-ceiling. Mirrored from the backend's
+ * `SubService` Prisma model; the structured arrays are JSON columns.
+ */
+export interface SubService {
+  id: string;
+  serviceId: string;
+  name: string;
+  slug: string;
+  shortDescription?: string | null;
+  description?: string | null;
+  icon?: string | null;
+  heroImage?: string | null;
+  gallery?: string[] | null;
+  features?: string[] | null;
+  whatsIncluded?: string[] | null;
+  process?: SubServiceProcessStep[] | null;
+  faqs?: SubServiceFaq[] | null;
+  startingPrice?: string | null;
+  completionTime?: string | null;
+  isActive: boolean;
+  sortOrder?: number;
+  seoTitle?: string | null;
+  metaDescription?: string | null;
+  metaKeywords?: string | null;
+  ogImage?: string | null;
+  canonicalUrl?: string | null;
+  archivedAt?: string | null;
+  deletedAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export const LEAD_SERVICE_STATUSES = [
   'NEW',
   'CONTACTED',

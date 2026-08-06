@@ -1643,3 +1643,70 @@ Made the service catalog fully CMS-driven. Admins now manage every field that po
 | No regressions to auth, RBAC, leads, clients, quotations, projects, invoices | ✅ |
 
 > **Note:** the backend dev server was stopped during this work (to unlock the Prisma engine DLL). Run `npm run dev` in `nexus-backend` and `npx prisma migrate deploy` before resuming manual testing.
+
+---
+
+# Phase 2 — CMS-Managed Sub Services
+
+**Date**: 2026-08-06
+**Status**: ✅ PHASE 2 COMPLETE
+
+## Summary
+
+Every Service can now expose an unlimited number of CMS-managed Sub Services. Each one gets its own public SEO URL (`/services/<service-slug>/<sub-slug>`) and its own detail page, with structured content (gallery, features, what's included, process steps, FAQs), pricing/delivery info, hero/OG images, and full SEO metadata. The public site renders them from the CMS (falling back to the existing static config until an admin adds sub-services) in a left sub-service nav + right detail layout with client-side switching (no page reload).
+
+## Backend Changes
+
+### Prisma Schema + Migration
+- `SubService` model added to `schema.prisma`: `name`, `slug`, `shortDescription`, `description`, `icon`, `heroImage`, `ogImage`, `gallery String[]` (Json), `features String[]` (Json), `whatsIncluded String[]` (Json), `process Json`, `faqs Json`, `startingPrice`, `completionTime`, `isActive`, `sortOrder`, full SEO block, `archivedAt`, `deletedAt`, lifecycle timestamps; `@@unique([serviceId, slug])`, `@@index([serviceId, isActive, archivedAt, deletedAt])`, `onDelete: Cascade` on the `serviceId` FK; `Service.subServices SubService[]` relation added.
+- Migration `20260806010000_sub_service_cms/migration.sql` — creates `sub_services`, the unique index, and the FK. Applied via `npx prisma migrate deploy` (client regenerated).
+
+### Catalog module (`src/modules/catalog/`)
+1. `subService.repository.ts` — NEW: full CRUD (`create`, `update`, `getById` with visibility, `list` with `status` filter + `sortOrder` ordering, `archive`, `restore`, `disable`, `softDelete`, `undelete`, `duplicate`, `updateImage`, `appendGalleryImage`, `removeGalleryImage`, `reorder`).
+2. `subService.service.ts` — NEW: slug generation/dedup (per-parent `ensureUniqueSlug`), ACTIVE-only public list, soft-delete/archive/restore/disable rules, Duplicate (copies content + "(Copy)" name), reorder (assigns sequential `sortOrder`), image upload/remove (gallery appends by URL, removes by URL). All lifecycle actions record timeline + audit.
+3. `subService.controller.ts` + `subService.validation.ts` — NEW: create/update schemas, `parseImageField` (`heroImage`/`ogImage`/`gallery`), upload (`.single('file')`), image removal with `?field=` + `&url=` for single gallery entries, list filters.
+4. `service.routes.ts` — sub-routes nested under a service: public `GET /:id/sub-services` (ACTIVE only) + admin `POST /:id/sub-services`, `PATCH|DELETE /:id/sub-services/:subId`, `PATCH .../archive|restore`, `POST .../undelete|duplicate`, `POST .../reorder` (orderedIds), `POST .../image`, `DELETE .../image`. The `:id` resolves a service UUID or public slug via the shared `resolveService`.
+5. `tests/subService.service.test.ts` — NEW: 33 tests (create/update/archive/restore/disable/softDelete/undelete/duplicate/getById visibility/list/reorder/updateImage/gallery append+remove).
+
+## Frontend Changes — Admin
+
+1. `src/types/index.ts` — `SubService`, `SubServiceProcessStep`, `SubServiceFaq` types.
+2. `src/services/serviceCatalogService.ts` — sub-service API (`listSubServices`, `listPublicSubServices`, `create/update/archive/restore/softDelete/undelete/duplicate/reorder`, `uploadSubServiceImage` via `api.upload`, `removeSubServiceImage`).
+3. `src/queries/keys.ts` + `src/queries/useServices.ts` — sub-service query keys + 8 mutation hooks (`useCreate/Update/Archive/Restore/SoftDelete/Undelete/Duplicate/ReorderSubService`) with cache invalidation.
+4. `src/pages/services/components/SubServiceFormDrawer.tsx` — NEW: full create/edit drawer (name, auto-slug, icon picker, short/long description, pricing & delivery, hero/OG image slots, gallery upload/URL, features & what's-included list editors, process steps, FAQs, sort order, Active switch, SEO block). Pending uploads queue and run after create.
+5. `src/pages/services/components/SubServicesTab.tsx` — NEW: Sub Services tab on the admin service detail page — status-filtered table (name/icon, slug, price, status pill, sort, created), per-row reorder up/down, edit, archive/restore, delete/undelete with confirmation dialogs, "New Sub Service" button wiring the drawer.
+6. `src/pages/services/ServiceDetailPage.tsx` — added the Sub Services tab.
+
+## Frontend Changes — Public Site
+
+1. `src/queries/usePublicSubServices.ts` — NEW: `toSubServiceConfig()` (CMS → public render shape, description split into overview paragraphs, structured arrays mapped across) + `usePublicSubServices(slug)`.
+2. `src/public-site/components/subServiceIcons.ts` — NEW: shared icon map (admin `SERVICE_ICON_OPTIONS` ∪ static config icons) for both navs.
+3. `src/public-site/components/VerticalSubServiceNav.tsx` — NEW: sticky left-hand sub-service nav (icon + name + short description, active highlight, "All Options" link).
+4. `src/public-site/components/SubServiceNav.tsx` — refactored to use the shared icon map; kept for mobile (horizontal cards).
+5. `src/public-site/pages/ServiceDetailPage.tsx` — CMS-driven sub-services with static fallback (`cmsSubs.length > 0 ? cmsSubs : getSubServices(slug)`); split layout when sub-services exist (left vertical nav + right detail, no page reload via client-side `Link`s); sections extracted into reusable components; original layout preserved when none exist.
+
+## Key Design Decisions
+
+1. **Structured fields are Json columns** (gallery/features/whatsIncluded/process/faqs) — not relational tables; editors render them as list/step editors.
+2. **Reorder is a REST bulk endpoint** (`orderedIds`) with a numeric `sortOrder` as fallback/ground truth.
+3. **Duplicate** appends ` (Copy)` to the name.
+4. **Reviews are not part of the CMS model yet** — CMS sub-services render the built-in "no reviews" state.
+5. **Public fallback** — no CMS sub-services → the static config drives the page; `SubServiceNav` returns `null` when the list is empty.
+6. **Public list is ACTIVE-only**; admin list supports ALL/ACTIVE/INACTIVE/ARCHIVED/DELETED.
+
+## Verification
+
+| Check | Result |
+|-------|--------|
+| Backend tests: 362/362 (24 suites, incl. 33 new sub-service tests) | ✅ |
+| Backend `npm run build` (tsc) | ✅ 0 errors |
+| Frontend `npx tsc --noEmit` | ✅ 0 errors |
+| Frontend production build | ✅ clean |
+| Public URL `/services/<service>/<sub>` resolves by slug | ✅ |
+| Split layout: left sub-service nav + right detail, no reload | ✅ |
+| CMS sub-services render; static config as fallback | ✅ |
+| Admin create/edit/reorder/archive/restore/delete/duplicate | ✅ |
+| Image upload (hero/OG) + gallery append/remove | ✅ |
+| No regressions to auth, RBAC, leads, clients, quotations, projects, invoices | ✅ |
+
+> **Note:** the backend dev server must be restarted (`npm run dev` in `nexus-backend`) — it was stopped during this work to unlock the Prisma engine DLL.

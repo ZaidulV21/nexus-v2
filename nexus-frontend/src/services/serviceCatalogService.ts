@@ -1,5 +1,5 @@
 import { api } from '@/lib/api';
-import type { Service, Category } from '@/types';
+import type { Service, Category, SubService, SubServiceFaq, SubServiceProcessStep } from '@/types';
 
 export type ServiceStatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE' | 'ARCHIVED' | 'DELETED';
 
@@ -55,6 +55,45 @@ export interface UpdateServiceInput extends Partial<CreateServiceInput> {
   isActive?: boolean;
 }
 
+export type SubServiceStatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE' | 'ARCHIVED' | 'DELETED';
+
+/** Maps each CMS image slot on a Sub Service to its URL field. `gallery`
+ *  appends to the JSON array (uploads) or filters by URL (removals). */
+export type SubServiceImageField = 'heroImage' | 'ogImage' | 'gallery';
+
+export interface SubServiceListParams {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  status?: SubServiceStatusFilter;
+}
+
+export interface CreateSubServiceInput {
+  name: string;
+  /** URL segment within the parent service. Auto-generated from `name` when omitted. */
+  slug?: string;
+  shortDescription?: string;
+  description?: string;
+  icon?: string;
+  heroImage?: string;
+  gallery?: string[];
+  features?: string[];
+  whatsIncluded?: string[];
+  process?: SubServiceProcessStep[];
+  faqs?: SubServiceFaq[];
+  startingPrice?: string;
+  completionTime?: string;
+  isActive?: boolean;
+  sortOrder?: number;
+  seoTitle?: string;
+  metaDescription?: string;
+  metaKeywords?: string;
+  ogImage?: string;
+  canonicalUrl?: string;
+}
+
+export interface UpdateSubServiceInput extends Partial<CreateSubServiceInput> {}
+
 export const serviceCatalogService = {
   // Selection dropdowns (lead/quotation forms) - only selectable services.
   // status=ACTIVE matters because authenticated admins would otherwise see
@@ -101,4 +140,51 @@ export const serviceCatalogService = {
   undelete: (id: string) => api.post<Service>(`/services/${id}/undelete`),
   duplicate: (id: string) => api.post<Service>(`/services/${id}/duplicate`),
   getCategoryTree: () => api.get<Category[]>('/categories'),
+
+  // ── Sub Services ────────────────────────────────────────────────────────
+  // `serviceRef` is the parent service UUID (admin) or its public slug
+  // (public site) - the backend resolves both.
+  listSubServices: (serviceRef: string, params: SubServiceListParams = {}) =>
+    api.getPaginated<SubService>(`/services/${serviceRef}/sub-services`, {
+      page: params.page,
+      pageSize: params.pageSize,
+      search: params.search,
+      status: params.status,
+    }),
+  // Public site: always ACTIVE, ordered by sortOrder.
+  listPublicSubServices: (serviceRef: string) =>
+    api.getPaginated<SubService>(`/services/${serviceRef}/sub-services`, {
+      pageSize: 100,
+      status: 'ACTIVE',
+    }),
+  createSubService: (serviceRef: string, input: CreateSubServiceInput) =>
+    api.post<SubService>(`/services/${serviceRef}/sub-services`, input),
+  updateSubService: (serviceRef: string, subId: string, input: UpdateSubServiceInput) =>
+    api.patch<SubService>(`/services/${serviceRef}/sub-services/${subId}`, input),
+  uploadSubServiceImage: (serviceRef: string, subId: string, file: File, field: SubServiceImageField = 'heroImage') => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.upload<{ fileUrl: string; subService: SubService }>(
+      `/services/${serviceRef}/sub-services/${subId}/image?field=${encodeURIComponent(field)}`,
+      formData,
+    );
+  },
+  removeSubServiceImage: (serviceRef: string, subId: string, field: SubServiceImageField = 'heroImage', url?: string) =>
+    api.delete<{ subService: SubService }>(
+      `/services/${serviceRef}/sub-services/${subId}/image?field=${encodeURIComponent(field)}${
+        url ? `&url=${encodeURIComponent(url)}` : ''
+      }`,
+    ),
+  archiveSubService: (serviceRef: string, subId: string) =>
+    api.patch<SubService>(`/services/${serviceRef}/sub-services/${subId}/archive`),
+  restoreSubService: (serviceRef: string, subId: string) =>
+    api.patch<SubService>(`/services/${serviceRef}/sub-services/${subId}/restore`),
+  softDeleteSubService: (serviceRef: string, subId: string) =>
+    api.delete<SubService>(`/services/${serviceRef}/sub-services/${subId}`),
+  undeleteSubService: (serviceRef: string, subId: string) =>
+    api.post<SubService>(`/services/${serviceRef}/sub-services/${subId}/undelete`),
+  duplicateSubService: (serviceRef: string, subId: string) =>
+    api.post<SubService>(`/services/${serviceRef}/sub-services/${subId}/duplicate`),
+  reorderSubServices: (serviceRef: string, orderedIds: string[]) =>
+    api.post<{ orderedIds: string[] }>(`/services/${serviceRef}/sub-services/reorder`, { orderedIds }),
 };

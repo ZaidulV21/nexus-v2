@@ -39,6 +39,7 @@ import { formatCurrency, formatDate } from '@/lib/format';
 import { ApiError } from '@/lib/api';
 import { ROUTES } from '@/routes/routes';
 import { ServiceFormDrawer } from './components/ServiceFormDrawer';
+import { SubServicesTab } from './components/SubServicesTab';
 import { ServiceStatusPill } from './ServicesPage';
 
 const SITE_VISIT_LABELS: Record<string, string> = {
@@ -288,6 +289,7 @@ export function ServiceDetailPage() {
           <Tabs defaultValue="overview">
             <TabsList>
               <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="sub-services">Sub Services</TabsTrigger>
               <TabsTrigger value="timeline">Timeline</TabsTrigger>
               <TabsTrigger value="audit">Audit Log</TabsTrigger>
             </TabsList>
@@ -460,6 +462,9 @@ export function ServiceDetailPage() {
               )}
             </TabsContent>
 
+            <TabsContent value="sub-services" className="pt-5">
+              <SubServicesTab service={service} />
+            </TabsContent>
             <TabsContent value="timeline" className="pt-5">
               <EntityTimeline entityType="SERVICE" entityId={service.id} />
             </TabsContent>

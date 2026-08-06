@@ -18,18 +18,21 @@ import {
   Info,
 } from 'lucide-react';
 import { usePublicServiceBySlug, usePublicServices } from '@/queries/usePublicServices';
+import { usePublicSubServices } from '@/queries/usePublicSubServices';
 import { usePublicCompany } from '../hooks';
 import { cn } from '@/lib/utils';
 import { ServiceCard } from '../components/ServiceCard';
 import { ServiceGallery } from '../components/ServiceGallery';
 import { SubServiceNav } from '../components/SubServiceNav';
+import { VerticalSubServiceNav } from '../components/VerticalSubServiceNav';
 import { FAQAccordion } from '../components/FAQAccordion';
 import { TestimonialCard } from '../components/TestimonialCard';
 import { FadeIn, ScaleIn, StaggerGroup, StaggerItem } from '../components/motion';
 import { getServiceDetailConfig, buildDefaultServiceDetail } from '../config/serviceDetails';
 import type { ServiceDetailConfig } from '../config/serviceDetails';
-import { getSubService, getSubServices } from '../config/subServices';
+import { getSubServices } from '../config/subServices';
 import type { SubServiceConfig } from '../config/subServices';
+import type { ServiceItem } from '../types';
 
 const SECTION_NAV = [
   { id: 'overview', label: 'Overview' },
@@ -114,10 +117,278 @@ interface ActiveContent {
   detail: ServiceDetailConfig;
 }
 
+/** Shared detail-page sections (overview → reviews), re-rendered on switch. */
+function DetailSections({
+  content,
+  contentKey,
+  serviceName,
+}: {
+  content: ActiveContent;
+  contentKey: string;
+  serviceName: string;
+}) {
+  return (
+    <>
+      {/* Overview */}
+      <section id="overview" data-scrollspy className="scroll-mt-36">
+        <FadeIn>
+          <SectionHeading tag="Overview" title={`About ${content.name}`} />
+          <div className="space-y-5">
+            {content.detail.overview.map((paragraph, index) => (
+              <p key={index} className="text-[15px] leading-relaxed text-ink-muted">
+                {paragraph}
+              </p>
+            ))}
+          </div>
+
+          <div className="mt-8 grid gap-4 sm:grid-cols-3">
+            {content.detail.startingPrice && (
+              <div className="rounded-2xl border border-border bg-surface p-5">
+                <IndianRupee className="h-5 w-5 text-accent" />
+                <p className="mt-3 text-xs font-medium uppercase tracking-wider text-ink-faint">Starting Price</p>
+                <p className="mt-1 text-lg font-bold text-ink">{content.detail.startingPrice}</p>
+              </div>
+            )}
+            <div className="rounded-2xl border border-border bg-surface p-5">
+              <Clock className="h-5 w-5 text-accent" />
+              <p className="mt-3 text-xs font-medium uppercase tracking-wider text-ink-faint">Completion Time</p>
+              <p className="mt-1 text-lg font-bold text-ink">{content.detail.completionTime}</p>
+            </div>
+            <div className="rounded-2xl border border-border bg-surface p-5">
+              <ShieldCheck className="h-5 w-5 text-accent" />
+              <p className="mt-3 text-xs font-medium uppercase tracking-wider text-ink-faint">Quality</p>
+              <p className="mt-1 text-lg font-bold text-ink">Warranty + Support</p>
+            </div>
+          </div>
+        </FadeIn>
+      </section>
+
+      {/* What's Included */}
+      <section className="scroll-mt-36">
+        <FadeIn>
+          <div className="rounded-3xl border border-border bg-surface p-8 sm:p-10">
+            <SectionHeading tag="What's Included" title="Everything We Handle For You" />
+            <StaggerGroup className="grid gap-3 sm:grid-cols-2">
+              {content.detail.whatsIncluded.map((item) => (
+                <StaggerItem key={item} className="flex items-start gap-3 rounded-xl bg-canvas p-4">
+                  <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent-subtle">
+                    <Check className="h-3 w-3 text-accent" />
+                  </div>
+                  <span className="text-sm text-ink">{item}</span>
+                </StaggerItem>
+              ))}
+            </StaggerGroup>
+          </div>
+        </FadeIn>
+      </section>
+
+      {/* Gallery */}
+      <section id="gallery" data-scrollspy className="scroll-mt-36">
+        <FadeIn>
+          <SectionHeading tag="Gallery" title="Project Gallery" description="A glimpse of the quality and finish you can expect with this service." />
+          <ServiceGallery images={content.detail.gallery} alt={content.name} />
+        </FadeIn>
+      </section>
+
+      {/* Key Features */}
+      <section id="features" data-scrollspy className="scroll-mt-36">
+        <SectionHeading tag="Key Features" title="Why Businesses Choose This Service" />
+        <StaggerGroup className="grid gap-4 sm:grid-cols-2">
+          {content.detail.features.map((feature) => (
+            <StaggerItem key={feature}>
+              <div className="group h-full rounded-2xl border border-border bg-surface p-6 transition-all duration-300 hover:-translate-y-1 hover:border-accent/30 hover:shadow-lg hover:shadow-accent/5">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-subtle text-accent transition-colors group-hover:bg-accent group-hover:text-white">
+                  <Layers className="h-5 w-5" />
+                </div>
+                <p className="mt-4 text-sm font-medium text-ink leading-relaxed">{feature}</p>
+              </div>
+            </StaggerItem>
+          ))}
+        </StaggerGroup>
+      </section>
+
+      {/* Process */}
+      <section id="process" data-scrollspy className="scroll-mt-36">
+        <SectionHeading
+          tag="Our Process"
+          title={`How ${content.name} Is Delivered`}
+          description="A transparent, step-by-step journey from your first enquiry to final handover."
+        />
+        <div className="relative">
+          <div className="absolute left-5 top-2 bottom-2 w-px bg-border" />
+          <div className="space-y-6">
+            {content.detail.process.map((step, index) => (
+              <motion.div
+                key={step.title}
+                initial={{ opacity: 0, x: -16 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                viewport={{ once: true, margin: '-40px' }}
+                transition={{ duration: 0.4, delay: index * 0.08 }}
+                className="relative flex gap-5 pl-0"
+              >
+                <div className="relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 border-accent bg-surface text-sm font-bold text-accent shadow-sm">
+                  {index + 1}
+                </div>
+                <div className="flex-1 rounded-2xl border border-border bg-surface p-5 transition-all duration-300 hover:border-accent/25 hover:shadow-md">
+                  <h3 className="text-base font-semibold text-ink">{step.title}</h3>
+                  <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">{step.description}</p>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* FAQ */}
+      <section id="faqs" data-scrollspy className="scroll-mt-36">
+        <SectionHeading tag="FAQs" title="Frequently Asked Questions" />
+        <FAQAccordion
+          items={content.detail.faqs.map((f, index) => ({
+            id: `service-faq-${contentKey}-${index}`,
+            question: f.question,
+            answer: f.answer,
+            category: serviceName,
+          }))}
+        />
+      </section>
+
+      {/* Reviews */}
+      <section id="reviews" data-scrollspy className="scroll-mt-36">
+        <SectionHeading tag="Customer Reviews" title="What Our Clients Say" />
+        {content.detail.reviews.length > 0 ? (
+          <StaggerGroup className="grid gap-4 sm:grid-cols-2">
+            {content.detail.reviews.map((review, index) => (
+              <StaggerItem key={index}>
+                <TestimonialCard
+                  testimonial={{
+                    id: `service-review-${contentKey}-${index}`,
+                    name: review.name,
+                    role: review.role,
+                    company: review.company,
+                    content: review.content,
+                    rating: review.rating,
+                  }}
+                />
+              </StaggerItem>
+            ))}
+          </StaggerGroup>
+        ) : (
+          <ScaleIn>
+            <div className="flex flex-col items-center rounded-2xl border border-dashed border-border bg-surface p-10 text-center">
+              <div className="flex gap-1">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <Star key={i} className="h-5 w-5 text-border-strong" />
+                ))}
+              </div>
+              <p className="mt-4 text-lg font-semibold text-ink">No reviews yet</p>
+              <p className="mt-2 max-w-sm text-sm text-ink-muted">
+                Be the first to experience {content.name} and share your feedback after your project is delivered.
+              </p>
+              <Link
+                to="/get-quote"
+                className="mt-6 inline-flex items-center gap-2 rounded-xl bg-accent px-6 py-3 text-sm font-semibold text-white transition-all hover:bg-accent-hover"
+              >
+                Get Started Today <ArrowRight className="h-4 w-4" />
+              </Link>
+            </div>
+          </ScaleIn>
+        )}
+      </section>
+    </>
+  );
+}
+
+/** Gradient "get started" card with quote / call / WhatsApp actions. */
+function GetStartedCard({
+  whatsAppHref,
+  company,
+}: {
+  whatsAppHref: string | null;
+  company: { name: string; phone: string; whatsapp: string };
+}) {
+  return (
+    <div className="overflow-hidden rounded-3xl border border-border bg-surface shadow-sm">
+      <div className="bg-gradient-to-br from-accent to-[#2d3abf] p-6 text-white">
+        <p className="text-xs font-semibold uppercase tracking-wider text-white/70">Get started</p>
+        <h3 className="mt-2 text-xl font-bold">Interested in this service?</h3>
+        <p className="mt-2 text-sm text-white/80">
+          Get a free consultation and a detailed quotation within 24 hours.
+        </p>
+      </div>
+      <div className="space-y-3 p-6">
+        <Link
+          to="/get-quote"
+          className="flex items-center justify-center gap-2 rounded-xl bg-accent px-5 py-3.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-accent-hover"
+        >
+          Request Quote
+          <ArrowRight className="h-4 w-4" />
+        </Link>
+        {company.phone && (
+          <a
+            href={`tel:${company.phone}`}
+            className="flex items-center justify-center gap-2 rounded-xl border border-border px-5 py-3.5 text-sm font-semibold text-ink transition-all hover:bg-canvas"
+          >
+            <Phone className="h-4 w-4 text-accent" />
+            Call Now
+          </a>
+        )}
+        {whatsAppHref && (
+          <a
+            href={whatsAppHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center gap-2 rounded-xl bg-[#25D366]/10 px-5 py-3.5 text-sm font-semibold text-[#128C7E] transition-all hover:bg-[#25D366]/20"
+          >
+            <MessageCircle className="h-4 w-4" />
+            WhatsApp Us
+          </a>
+        )}
+        <div className="flex items-center gap-2 rounded-xl bg-canvas px-4 py-3 text-xs text-ink-muted">
+          <Quote className="h-4 w-4 text-accent shrink-0" />
+          Free consultation · No obligation · Response within 24 hrs
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Compact facts card shown next to the CTA. */
+function QuickFacts({ content, service }: { content: ActiveContent; service: ServiceItem }) {
+  return (
+    <div className="rounded-3xl border border-border bg-surface p-6">
+      <div className="flex items-center gap-2">
+        <Users className="h-4 w-4 text-accent" />
+        <h3 className="text-sm font-semibold text-ink">Quick Service Facts</h3>
+      </div>
+      <dl className="mt-4 space-y-3 text-sm">
+        <div className="flex items-center justify-between gap-3">
+          <dt className="text-ink-muted">Service type</dt>
+          <dd className="font-medium text-ink">{service.category || 'Managed'}</dd>
+        </div>
+        {content.detail.startingPrice && (
+          <div className="flex items-center justify-between gap-3">
+            <dt className="text-ink-muted">Starting price</dt>
+            <dd className="font-medium text-ink">{content.detail.startingPrice}</dd>
+          </div>
+        )}
+        <div className="flex items-center justify-between gap-3">
+          <dt className="text-ink-muted">Timeline</dt>
+          <dd className="font-medium text-ink">{content.detail.completionTime.split('depending')[0]}</dd>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <dt className="text-ink-muted">Warranty</dt>
+          <dd className="font-medium text-ink">Included</dd>
+        </div>
+      </dl>
+    </div>
+  );
+}
+
 export function ServiceDetailPage() {
   const { slug, subSlug } = useParams<{ slug: string; subSlug?: string }>();
   const { data: service, isLoading } = usePublicServiceBySlug(slug);
   const { data: allServices = [] } = usePublicServices();
+  const { data: cmsSubs = [] } = usePublicSubServices(slug);
   const company = usePublicCompany();
   const { scrollYProgress } = useScroll();
   const progress = useSpring(scrollYProgress, { stiffness: 100, damping: 30, restDelta: 0.001 });
@@ -131,8 +402,10 @@ export function ServiceDetailPage() {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
-  const subServices = getSubServices(slug);
-  const activeSub = getSubService(slug, subSlug);
+  // CMS sub-services win; static config is only a fallback until an admin
+  // adds sub-services through the CMS.
+  const subServices = cmsSubs.length > 0 ? cmsSubs : getSubServices(slug);
+  const activeSub = subServices.find((sub) => sub.slug === subSlug);
 
   let content: ActiveContent | null = null;
   if (service) {
@@ -306,9 +579,9 @@ export function ServiceDetailPage() {
 
       {/* ── Main content ────────────────────────────────────────────── */}
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        {/* Sub-service family navigation (horizontal cards) */}
+        {/* Sub-service family navigation — horizontal cards on mobile only */}
         {subServices.length > 0 && (
-          <div className="pt-10">
+          <div className="pt-10 lg:hidden">
             <SubServiceNav
               serviceSlug={service.slug}
               serviceName={service.name}
@@ -331,255 +604,51 @@ export function ServiceDetailPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35, ease: [0.25, 0.1, 0.25, 1] }}
         >
-          <div className="grid gap-12 lg:grid-cols-3">
-            {/* Left column */}
-            <div className="lg:col-span-2 space-y-20 py-14">
-              {/* Overview */}
-              <section id="overview" data-scrollspy className="scroll-mt-36">
-                <FadeIn>
-                  <SectionHeading tag="Overview" title={`About ${content.name}`} />
-                  <div className="space-y-5">
-                    {content.detail.overview.map((paragraph, index) => (
-                      <p key={index} className="text-[15px] leading-relaxed text-ink-muted">
-                        {paragraph}
-                      </p>
-                    ))}
-                  </div>
-
-                  <div className="mt-8 grid gap-4 sm:grid-cols-3">
-                    {content.detail.startingPrice && (
-                      <div className="rounded-2xl border border-border bg-surface p-5">
-                        <IndianRupee className="h-5 w-5 text-accent" />
-                        <p className="mt-3 text-xs font-medium uppercase tracking-wider text-ink-faint">Starting Price</p>
-                        <p className="mt-1 text-lg font-bold text-ink">{content.detail.startingPrice}</p>
-                      </div>
-                    )}
-                    <div className="rounded-2xl border border-border bg-surface p-5">
-                      <Clock className="h-5 w-5 text-accent" />
-                      <p className="mt-3 text-xs font-medium uppercase tracking-wider text-ink-faint">Completion Time</p>
-                      <p className="mt-1 text-lg font-bold text-ink">{content.detail.completionTime}</p>
-                    </div>
-                    <div className="rounded-2xl border border-border bg-surface p-5">
-                      <ShieldCheck className="h-5 w-5 text-accent" />
-                      <p className="mt-3 text-xs font-medium uppercase tracking-wider text-ink-faint">Quality</p>
-                      <p className="mt-1 text-lg font-bold text-ink">Warranty + Support</p>
-                    </div>
-                  </div>
-                </FadeIn>
-              </section>
-
-              {/* What's Included */}
-              <section className="scroll-mt-36">
-                <FadeIn>
-                  <div className="rounded-3xl border border-border bg-surface p-8 sm:p-10">
-                    <SectionHeading tag="What's Included" title="Everything We Handle For You" />
-                    <StaggerGroup className="grid gap-3 sm:grid-cols-2">
-                      {content.detail.whatsIncluded.map((item) => (
-                        <StaggerItem key={item} className="flex items-start gap-3 rounded-xl bg-canvas p-4">
-                          <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent-subtle">
-                            <Check className="h-3 w-3 text-accent" />
-                          </div>
-                          <span className="text-sm text-ink">{item}</span>
-                        </StaggerItem>
-                      ))}
-                    </StaggerGroup>
-                  </div>
-                </FadeIn>
-              </section>
-
-              {/* Gallery */}
-              <section id="gallery" data-scrollspy className="scroll-mt-36">
-                <FadeIn>
-                  <SectionHeading tag="Gallery" title="Project Gallery" description="A glimpse of the quality and finish you can expect with this service." />
-                  <ServiceGallery images={content.detail.gallery} alt={content.name} />
-                </FadeIn>
-              </section>
-
-              {/* Key Features */}
-              <section id="features" data-scrollspy className="scroll-mt-36">
-                <SectionHeading tag="Key Features" title="Why Businesses Choose This Service" />
-                <StaggerGroup className="grid gap-4 sm:grid-cols-2">
-                  {content.detail.features.map((feature) => (
-                    <StaggerItem key={feature}>
-                      <div className="group h-full rounded-2xl border border-border bg-surface p-6 transition-all duration-300 hover:-translate-y-1 hover:border-accent/30 hover:shadow-lg hover:shadow-accent/5">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-subtle text-accent transition-colors group-hover:bg-accent group-hover:text-white">
-                          <Layers className="h-5 w-5" />
-                        </div>
-                        <p className="mt-4 text-sm font-medium text-ink leading-relaxed">{feature}</p>
-                      </div>
-                    </StaggerItem>
-                  ))}
-                </StaggerGroup>
-              </section>
-
-              {/* Process */}
-              <section id="process" data-scrollspy className="scroll-mt-36">
-                <SectionHeading
-                  tag="Our Process"
-                  title={`How ${content.name} Is Delivered`}
-                  description="A transparent, step-by-step journey from your first enquiry to final handover."
+          {subServices.length > 0 ? (
+            /* Split layout: left sub-service nav + right detail (no page reload) */
+            <div className="grid gap-10 py-10 lg:grid-cols-[260px_minmax(0,1fr)] lg:gap-14">
+              <div className="hidden lg:block">
+                <VerticalSubServiceNav
+                  serviceSlug={service.slug}
+                  serviceName={service.name}
+                  subServices={subServices}
+                  activeSubSlug={activeSub?.slug}
                 />
-                <div className="relative">
-                  <div className="absolute left-5 top-2 bottom-2 w-px bg-border" />
-                  <div className="space-y-6">
-                    {content.detail.process.map((step, index) => (
-                      <motion.div
-                        key={step.title}
-                        initial={{ opacity: 0, x: -16 }}
-                        whileInView={{ opacity: 1, x: 0 }}
-                        viewport={{ once: true, margin: '-40px' }}
-                        transition={{ duration: 0.4, delay: index * 0.08 }}
-                        className="relative flex gap-5 pl-0"
-                      >
-                        <div className="relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 border-accent bg-surface text-sm font-bold text-accent shadow-sm">
-                          {index + 1}
-                        </div>
-                        <div className="flex-1 rounded-2xl border border-border bg-surface p-5 transition-all duration-300 hover:border-accent/25 hover:shadow-md">
-                          <h3 className="text-base font-semibold text-ink">{step.title}</h3>
-                          <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">{step.description}</p>
-                        </div>
-                      </motion.div>
-                    ))}
-                  </div>
-                </div>
-              </section>
-
-              {/* FAQ */}
-              <section id="faqs" data-scrollspy className="scroll-mt-36">
-                <SectionHeading tag="FAQs" title="Frequently Asked Questions" />
-                <FAQAccordion
-                  items={content.detail.faqs.map((f, index) => ({
-                    id: `service-faq-${contentKey}-${index}`,
-                    question: f.question,
-                    answer: f.answer,
-                    category: service.name,
-                  }))}
-                />
-              </section>
-
-              {/* Reviews */}
-              <section id="reviews" data-scrollspy className="scroll-mt-36">
-                <SectionHeading tag="Customer Reviews" title="What Our Clients Say" />
-                {content.detail.reviews.length > 0 ? (
-                  <StaggerGroup className="grid gap-4 sm:grid-cols-2">
-                    {content.detail.reviews.map((review, index) => (
-                      <StaggerItem key={index}>
-                        <TestimonialCard
-                          testimonial={{
-                            id: `service-review-${contentKey}-${index}`,
-                            name: review.name,
-                            role: review.role,
-                            company: review.company,
-                            content: review.content,
-                            rating: review.rating,
-                          }}
-                        />
-                      </StaggerItem>
-                    ))}
-                  </StaggerGroup>
-                ) : (
-                  <ScaleIn>
-                    <div className="flex flex-col items-center rounded-2xl border border-dashed border-border bg-surface p-10 text-center">
-                      <div className="flex gap-1">
-                        {Array.from({ length: 5 }).map((_, i) => (
-                          <Star key={i} className="h-5 w-5 text-border-strong" />
-                        ))}
-                      </div>
-                      <p className="mt-4 text-lg font-semibold text-ink">No reviews yet</p>
-                      <p className="mt-2 max-w-sm text-sm text-ink-muted">
-                        Be the first to experience {content.name} and share your feedback after your project is delivered.
-                      </p>
-                      <Link
-                        to="/get-quote"
-                        className="mt-6 inline-flex items-center gap-2 rounded-xl bg-accent px-6 py-3 text-sm font-semibold text-white transition-all hover:bg-accent-hover"
-                      >
-                        Get Started Today <ArrowRight className="h-4 w-4" />
-                      </Link>
-                    </div>
-                  </ScaleIn>
-                )}
-              </section>
-            </div>
-
-            {/* Right column — sticky quick actions */}
-            <aside className="hidden lg:block">
-              <div className="sticky top-40 space-y-6 py-14">
-                <FadeIn direction="none">
-                  <div className="overflow-hidden rounded-3xl border border-border bg-surface shadow-sm">
-                    <div className="bg-gradient-to-br from-accent to-[#2d3abf] p-6 text-white">
-                      <p className="text-xs font-semibold uppercase tracking-wider text-white/70">Get started</p>
-                      <h3 className="mt-2 text-xl font-bold">Interested in this service?</h3>
-                      <p className="mt-2 text-sm text-white/80">
-                        Get a free consultation and a detailed quotation within 24 hours.
-                      </p>
-                    </div>
-                    <div className="space-y-3 p-6">
-                      <Link
-                        to="/get-quote"
-                        className="flex items-center justify-center gap-2 rounded-xl bg-accent px-5 py-3.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-accent-hover"
-                      >
-                        Request Quote
-                        <ArrowRight className="h-4 w-4" />
-                      </Link>
-                      {company.phone && (
-                        <a
-                          href={`tel:${company.phone}`}
-                          className="flex items-center justify-center gap-2 rounded-xl border border-border px-5 py-3.5 text-sm font-semibold text-ink transition-all hover:bg-canvas"
-                        >
-                          <Phone className="h-4 w-4 text-accent" />
-                          Call Now
-                        </a>
-                      )}
-                      {whatsAppHref && (
-                        <a
-                          href={whatsAppHref}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center justify-center gap-2 rounded-xl bg-[#25D366]/10 px-5 py-3.5 text-sm font-semibold text-[#128C7E] transition-all hover:bg-[#25D366]/20"
-                        >
-                          <MessageCircle className="h-4 w-4" />
-                          WhatsApp Us
-                        </a>
-                      )}
-                      <div className="flex items-center gap-2 rounded-xl bg-canvas px-4 py-3 text-xs text-ink-muted">
-                        <Quote className="h-4 w-4 text-accent shrink-0" />
-                        Free consultation · No obligation · Response within 24 hrs
-                      </div>
-                    </div>
-                  </div>
-                </FadeIn>
-
-                <FadeIn direction="none" delay={0.15}>
-                  <div className="rounded-3xl border border-border bg-surface p-6">
-                    <div className="flex items-center gap-2">
-                      <Users className="h-4 w-4 text-accent" />
-                      <h3 className="text-sm font-semibold text-ink">Quick Service Facts</h3>
-                    </div>
-                    <dl className="mt-4 space-y-3 text-sm">
-                      <div className="flex items-center justify-between gap-3">
-                        <dt className="text-ink-muted">Service type</dt>
-                        <dd className="font-medium text-ink">{service.category || 'Managed'}</dd>
-                      </div>
-                      {content.detail.startingPrice && (
-                        <div className="flex items-center justify-between gap-3">
-                          <dt className="text-ink-muted">Starting price</dt>
-                          <dd className="font-medium text-ink">{content.detail.startingPrice}</dd>
-                        </div>
-                      )}
-                      <div className="flex items-center justify-between gap-3">
-                        <dt className="text-ink-muted">Timeline</dt>
-                        <dd className="font-medium text-ink">{content.detail.completionTime.split('depending')[0]}</dd>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <dt className="text-ink-muted">Warranty</dt>
-                        <dd className="font-medium text-ink">Included</dd>
-                      </div>
-                    </dl>
-                  </div>
-                </FadeIn>
               </div>
-            </aside>
-          </div>
+
+              <div className="min-w-0">
+                {unknownSub && (
+                  <div className="mb-6 flex items-center gap-2 rounded-xl border border-warning/30 bg-warning-subtle px-4 py-3 text-sm text-warning">
+                    <Info className="h-4 w-4 shrink-0" />
+                    This service option isn't available yet — pick another option from the list.
+                  </div>
+                )}
+                <DetailSections content={content} contentKey={contentKey} serviceName={service.name} />
+                <div className="mt-16 grid gap-6 lg:grid-cols-2">
+                  <GetStartedCard whatsAppHref={whatsAppHref} company={company} />
+                  <QuickFacts content={content} service={service} />
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* Original layout: full content + right sticky aside */
+            <div className="grid gap-12 lg:grid-cols-3">
+              <div className="lg:col-span-2 space-y-20 py-14">
+                <DetailSections content={content} contentKey={contentKey} serviceName={service.name} />
+              </div>
+
+              <aside className="hidden lg:block">
+                <div className="sticky top-40 space-y-6 py-14">
+                  <FadeIn direction="none">
+                    <GetStartedCard whatsAppHref={whatsAppHref} company={company} />
+                  </FadeIn>
+                  <FadeIn direction="none" delay={0.15}>
+                    <QuickFacts content={content} service={service} />
+                  </FadeIn>
+                </div>
+              </aside>
+            </div>
+          )}
         </motion.div>
 
         {/* Related services */}

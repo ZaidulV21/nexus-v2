@@ -1,56 +1,9 @@
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import {
-  ArrowLeftRight,
-  BatteryCharging,
-  Briefcase,
-  Cable,
-  Camera,
-  CircuitBoard,
-  Cog,
-  FileSearch,
-  Flame,
-  Globe,
-  Headset,
-  Layers,
-  LayoutGrid,
-  Lightbulb,
-  Lock,
-  Move,
-  Paintbrush,
-  Server,
-  ShoppingCart,
-  Sparkles,
-  Sun,
-  Wrench,
-} from 'lucide-react';
+import { Sparkles, Wrench } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { subServiceIconMap } from './subServiceIcons';
 import type { SubServiceConfig } from '../config/subServices';
-
-const iconMap: Record<string, React.ElementType> = {
-  ArrowLeftRight,
-  BatteryCharging,
-  Briefcase,
-  Cable,
-  Camera,
-  CircuitBoard,
-  Cog,
-  FileSearch,
-  Flame,
-  Globe,
-  Headset,
-  Layers,
-  LayoutGrid,
-  Lightbulb,
-  Lock,
-  Move,
-  Paintbrush,
-  Server,
-  ShoppingCart,
-  Sparkles,
-  Sun,
-  Wrench,
-};
 
 interface SubServiceNavProps {
   serviceSlug: string;
@@ -96,7 +49,7 @@ export function SubServiceNav({ serviceSlug, serviceName, subServices, activeSub
         </Link>
 
         {subServices.map((sub) => {
-          const Icon = iconMap[sub.icon] ?? Wrench;
+          const Icon = subServiceIconMap[sub.icon] ?? Wrench;
           const isActive = sub.slug === activeSubSlug;
           return (
             <Link

@@ -225,10 +225,58 @@ model Service {
   leadServices      LeadService[]
   projectServices   ProjectService[]
   questionnaires    ServiceQuestionnaire[]
+  subServices       SubService[]
   category          Category               @relation(fields: [categoryId], references: [id])
 
   @@index([isActive, archivedAt, deletedAt])
   @@map("services")
+}
+
+// A CMS-managed Sub Service: a distinct offer under a Service, exposed at a
+// public SEO URL like /services/interior-design/false-ceiling. A service can
+// have unlimited sub-services. Structured content (gallery, features,
+// whatsIncluded, process, faqs) is stored as JSON arrays so the admin can
+// edit them without schema churn.
+model SubService {
+  id              String   @id @default(uuid())
+  serviceId       String
+  name            String
+  // URL segment within the parent service: unique per service, so
+  // /services/:serviceSlug/:subSlug always resolves to one row.
+  slug            String
+  // Card copy for the sub-service nav; `description` is the long form
+  // (paragraphs are split on blank lines when rendered on the public site).
+  shortDescription String?
+  description     String?
+  icon            String?
+  heroImage       String?
+  gallery         Json     @default("[]")
+  features        Json     @default("[]")
+  whatsIncluded   Json     @default("[]")
+  // [{ title, description }]
+  process         Json     @default("[]")
+  // [{ question, answer }]
+  faqs            Json     @default("[]")
+  startingPrice   String?
+  completionTime  String?
+  isActive        Boolean  @default(true)
+  sortOrder       Int      @default(0)
+  // SEO metadata.
+  seoTitle        String?
+  metaDescription String?
+  metaKeywords    String?
+  ogImage         String?
+  canonicalUrl    String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  archivedAt      DateTime?
+  // Soft delete, mirroring Service. A sub-service is never hard-deleted.
+  deletedAt       DateTime?
+  service         Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@unique([serviceId, slug])
+  @@index([serviceId, isActive, archivedAt, deletedAt])
+  @@map("sub_services")
 }
 
 model ServiceQuestionnaire {

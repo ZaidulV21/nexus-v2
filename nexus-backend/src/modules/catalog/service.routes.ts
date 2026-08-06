@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import { serviceController } from './service.controller';
+import { subServiceController } from './subService.controller';
 import { authenticate, authenticateOptional } from '../../core/middleware/authenticate';
 import { authorize } from '../../core/middleware/authorize';
 
@@ -14,6 +15,11 @@ router.get('/', authenticateOptional, serviceController.list);
 router.get('/:id', authenticateOptional, serviceController.getById);
 router.get('/:id/questionnaire', serviceController.getQuestionnaire);
 
+// Sub-services live under a service and resolve `:id` as either the service
+// UUID (admin) or its public slug (public site). The public list endpoint
+// returns only ACTIVE sub-services for the /services/:slug/:subSlug pages.
+router.get('/:id/sub-services', authenticateOptional, subServiceController.listByService);
+
 // Admin only
 router.post('/', authenticate, authorize('service.manage'), serviceController.create);
 router.put('/:id', authenticate, authorize('service.manage'), serviceController.update);
@@ -26,5 +32,25 @@ router.patch('/:id/restore', authenticate, authorize('service.manage'), serviceC
 router.delete('/:id', authenticate, authorize('service.manage'), serviceController.softDelete);
 router.post('/:id/undelete', authenticate, authorize('service.manage'), serviceController.undelete);
 router.post('/:id/duplicate', authenticate, authorize('service.manage'), serviceController.duplicate);
+
+// Sub-service admin routes
+router.post('/:id/sub-services', authenticate, authorize('service.manage'), subServiceController.create);
+router.post('/:id/sub-services/reorder', authenticate, authorize('service.manage'), subServiceController.reorder);
+router.put('/:id/sub-services/:subId', authenticate, authorize('service.manage'), subServiceController.update);
+router.patch('/:id/sub-services/:subId', authenticate, authorize('service.manage'), subServiceController.update);
+router.post(
+  '/:id/sub-services/:subId/image',
+  authenticate,
+  authorize('service.manage'),
+  upload.single('file'),
+  subServiceController.uploadImage,
+);
+router.delete('/:id/sub-services/:subId/image', authenticate, authorize('service.manage'), subServiceController.removeImage);
+router.patch('/:id/sub-services/:subId/disable', authenticate, authorize('service.manage'), subServiceController.disable);
+router.patch('/:id/sub-services/:subId/archive', authenticate, authorize('service.manage'), subServiceController.archive);
+router.patch('/:id/sub-services/:subId/restore', authenticate, authorize('service.manage'), subServiceController.restore);
+router.delete('/:id/sub-services/:subId', authenticate, authorize('service.manage'), subServiceController.softDelete);
+router.post('/:id/sub-services/:subId/undelete', authenticate, authorize('service.manage'), subServiceController.undelete);
+router.post('/:id/sub-services/:subId/duplicate', authenticate, authorize('service.manage'), subServiceController.duplicate);
 
 export default router;

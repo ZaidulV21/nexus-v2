@@ -42,3 +42,47 @@ export interface ServiceListFilters {
   /** When true, only popular services are returned. */
   popular?: boolean;
 }
+
+export interface SubServiceProcessStep {
+  title: string;
+  description: string;
+}
+
+export interface SubServiceFaq {
+  question: string;
+  answer: string;
+}
+
+export interface CreateSubServiceInput {
+  name: string;
+  // SEO URL segment within the parent service. Auto-generated from `name`
+  // when omitted, and unique per service.
+  slug?: string;
+  shortDescription?: string;
+  description?: string;
+  icon?: string;
+  heroImage?: string;
+  gallery?: string[];
+  features?: string[];
+  whatsIncluded?: string[];
+  process?: SubServiceProcessStep[];
+  faqs?: SubServiceFaq[];
+  startingPrice?: string;
+  completionTime?: string;
+  isActive?: boolean;
+  sortOrder?: number;
+  seoTitle?: string;
+  metaDescription?: string;
+  metaKeywords?: string;
+  ogImage?: string;
+  canonicalUrl?: string;
+}
+
+export interface UpdateSubServiceInput extends Partial<CreateSubServiceInput> {}
+
+// Filters accepted by the admin sub-service list. Public callers are always
+// forced to ACTIVE. `search` matches name/slug.
+export interface SubServiceListFilters {
+  status?: 'ALL' | 'ACTIVE' | 'INACTIVE' | 'ARCHIVED' | 'DELETED';
+  search?: string;
+}
