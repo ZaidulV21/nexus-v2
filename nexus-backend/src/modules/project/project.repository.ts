@@ -2,24 +2,36 @@ import { prisma } from '../../config/database';
 import { Prisma } from '@prisma/client';
 import { PaginationParams } from '../../core/utils/pagination';
 
+// Phase 9: every Project Service read resolves its derived Sub Services so
+// API consumers see the service + sub-service lineage without a second lookup.
+const PROJECT_SERVICE_INCLUDE = {
+  service: true,
+  subServices: { include: { subService: true } },
+  leadService: { include: { service: true } },
+  assignedQuotationVersion: { include: { quotation: true, approvals: true } },
+} as const;
+
+// Every Project read resolves the origin quotation directly (project.quotationId)
+// plus the client/lead records so a Project can always trace its full lineage.
+const PROJECT_INCLUDE = {
+  projectServices: { include: PROJECT_SERVICE_INCLUDE },
+  client: true,
+  lead: true,
+  quotation: true,
+} as const;
+
 export const projectRepository = {
-  create(data: { projectNumber: string; leadId: string; clientId: string }, tx: Prisma.TransactionClient) {
+  create(
+    data: { projectNumber: string; leadId: string; clientId: string; quotationId?: string | null },
+    tx: Prisma.TransactionClient
+  ) {
     return tx.project.create({ data });
   },
 
   findByLeadAndClient(leadId: string, clientId: string) {
     return prisma.project.findFirst({
       where: { leadId, clientId, deletedAt: null },
-      include: {
-        projectServices: {
-          include: {
-            service: true,
-            assignedQuotationVersion: { include: { quotation: true, approvals: true } },
-          },
-        },
-        client: true,
-        lead: true,
-      },
+      include: PROJECT_INCLUDE,
     });
   },
 
@@ -31,16 +43,7 @@ export const projectRepository = {
           some: { assignedQuotationVersionId: quotationVersionId },
         },
       },
-      include: {
-        projectServices: {
-          include: {
-            service: true,
-            assignedQuotationVersion: { include: { quotation: true, approvals: true } },
-          },
-        },
-        client: true,
-        lead: true,
-      },
+      include: PROJECT_INCLUDE,
     });
   },
 
@@ -48,9 +51,11 @@ export const projectRepository = {
     return prisma.project.findFirst({
       where: { id, deletedAt: null },
       include: {
+        ...PROJECT_INCLUDE,
         projectServices: {
           include: {
             service: true,
+            subServices: { include: { subService: true } },
             leadService: { include: { service: true } },
             assignedQuotationVersion: {
               include: {
@@ -61,8 +66,6 @@ export const projectRepository = {
             },
           },
         },
-        client: true,
-        lead: true,
         media: true,
       },
     });
@@ -100,14 +103,7 @@ export const projectRepository = {
         take: pagination.take,
         orderBy: { [pagination.sortBy || 'createdAt']: pagination.sortOrder },
         include: {
-          projectServices: {
-            include: {
-              service: true,
-              assignedQuotationVersion: { include: { quotation: true, approvals: true } },
-            },
-          },
-          client: true,
-          lead: true,
+          ...PROJECT_INCLUDE,
           media: true,
         },
       }),
@@ -127,16 +123,7 @@ export const projectRepository = {
   listForClient(clientId: string) {
     return prisma.project.findMany({
       where: { clientId, deletedAt: null },
-      include: {
-        projectServices: {
-          include: {
-            service: true,
-            assignedQuotationVersion: { include: { quotation: true, approvals: true } },
-          },
-        },
-        client: true,
-        lead: true,
-      },
+      include: PROJECT_INCLUDE,
     });
   },
 
@@ -149,7 +136,7 @@ export const projectRepository = {
 export const projectServiceRepository = {
   createMany(
     projectId: string,
-    services: Array<{ serviceId: string; leadServiceId?: string; assignedQuotationVersionId?: string }>,
+    services: Array<{ serviceId: string; leadServiceId?: string; assignedQuotationVersionId?: string; subServiceIds?: string[] }>,
     tx: Prisma.TransactionClient
   ) {
     return Promise.all(
@@ -161,6 +148,11 @@ export const projectServiceRepository = {
             leadServiceId: s.leadServiceId,
             assignedQuotationVersionId: s.assignedQuotationVersionId,
             status: 'PROJECT CREATED',
+            // Phase 9: persist the derived Sub Services atomically with the
+            // Project Service so the Project knows its sub-service lineage.
+            ...(s.subServiceIds && s.subServiceIds.length > 0
+              ? { subServices: { create: s.subServiceIds.map((subServiceId) => ({ subServiceId })) } }
+              : {}),
           },
         })
       )
@@ -168,20 +160,37 @@ export const projectServiceRepository = {
   },
 
   create(
-    data: { projectId: string; serviceId: string; assignedQuotationVersionId?: string },
+    data: {
+      projectId: string;
+      serviceId: string;
+      assignedQuotationVersionId?: string;
+      subServiceIds?: string[];
+    },
     tx?: Prisma.TransactionClient
   ) {
     const client = tx ?? prisma;
     return client.projectService.create({
-      data: { ...data, status: 'PROJECT CREATED' },
+      data: {
+        ...data,
+        status: 'PROJECT CREATED',
+        ...(data.subServiceIds && data.subServiceIds.length > 0
+          ? { subServices: { create: data.subServiceIds.map((subServiceId) => ({ subServiceId })) } }
+          : {}),
+      },
     });
   },
 
   findById(id: string) {
-    return prisma.projectService.findFirst({ where: { id }, include: { service: true, project: true } });
+    return prisma.projectService.findFirst({
+      where: { id },
+      include: { service: true, project: true, subServices: { include: { subService: true } } },
+    });
   },
 
   listForProject(projectId: string) {
-    return prisma.projectService.findMany({ where: { projectId }, include: { service: true } });
+    return prisma.projectService.findMany({
+      where: { projectId },
+      include: { service: true, subServices: { include: { subService: true } } },
+    });
   },
 };

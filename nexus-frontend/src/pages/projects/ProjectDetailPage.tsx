@@ -44,7 +44,7 @@ function getClientName(project: Project) {
 }
 
 function ProjectOverview({ project }: { project: Project }) {
-  const quotation = project.quotations?.[0];
+  const quotation = project.quotation ?? project.quotations?.[0];
 
   return (
     <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
@@ -56,7 +56,18 @@ function ProjectOverview({ project }: { project: Project }) {
           <Field label="Project number" value={<span className="font-mono">{project.projectNumber}</span>} />
           <Field label="Client" value={getClientName(project)} />
           <Field label="Related lead" value={project.lead?.leadNumber ?? '—'} />
-          <Field label="Linked quotation" value={quotation?.quotationNumber ?? '-'} />
+          <Field
+            label="Origin quotation"
+            value={
+              quotation ? (
+                <Link to={ROUTES.admin.quotationDetail(quotation.id)} className="text-accent hover:text-accent-hover">
+                  {quotation.quotationNumber}
+                </Link>
+              ) : (
+                '-'
+              )
+            }
+          />
           <Field label="Created" value={formatDateTime(project.createdAt)} />
           <Field label="Aggregate status" value={<StatusBadge status={project.aggregateStatus ?? 'NO SERVICES'} />} />
           <Field label="Completion percentage" value={`${project.completionPercentage ?? 0}%`} />
@@ -89,6 +100,18 @@ function ProjectOverview({ project }: { project: Project }) {
             </span>
             <ChevronRight className="h-4 w-4 text-ink-faint" />
           </Link>
+          {quotation && (
+            <Link
+              to={ROUTES.admin.quotationDetail(quotation.id)}
+              className="flex items-center justify-between rounded border border-border bg-canvas px-3 py-2 text-sm hover:bg-surface"
+            >
+              <span>
+                <span className="block font-medium text-ink">{quotation.quotationNumber}</span>
+                <span className="text-xs text-ink-faint">Origin quotation</span>
+              </span>
+              <ChevronRight className="h-4 w-4 text-ink-faint" />
+            </Link>
+          )}
         </CardContent>
       </Card>
     </div>
@@ -117,10 +140,22 @@ function ProjectServices({
         return (
         <li key={service.id} className="px-4 py-3">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-sm font-medium text-ink">{service.service?.name ?? 'Service'}</p>
-              <p className="text-xs text-ink-faint">{service.service?.category?.name ?? 'Catalog service'}</p>
-            </div>
+          <div>
+            <p className="text-sm font-medium text-ink">{service.service?.name ?? 'Service'}</p>
+            <p className="text-xs text-ink-faint">{service.service?.category?.name ?? 'Catalog service'}</p>
+            {!!service.subServices?.length && (
+              <div className="mt-1.5 flex flex-wrap gap-1">
+                {service.subServices.map((sub) => (
+                  <span
+                    key={sub.id}
+                    className="rounded-full border border-border bg-canvas px-2 py-0.5 text-xs text-ink-muted"
+                  >
+                    {sub.subService?.name ?? 'Sub-service'}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
             <div className="flex items-center gap-3">
               <StatusBadge status={service.status} />
               <div className="w-28">

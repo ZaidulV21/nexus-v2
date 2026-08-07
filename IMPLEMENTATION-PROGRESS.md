@@ -2056,3 +2056,43 @@ Quotations now automatically know **Service, Sub Service and Client from the par
 | No regressions to auth, RBAC, services, sub-services, leads, clients, quotations, projects, invoices, portfolio | ✅ |
 
 > **Note:** the backend (port 4000) and Vite (port 5173) dev servers are running. Smoke artifacts: lead L-00017, client C-00009, quotation Q-00011 remain in the DB (L-00016/L-00015 from Phase 7 are archived).
+
+# Phase 9 — Project Auto-Derives Full Lineage: Origin Quotation & Sub Services
+
+**Date**: 2026-08-07
+**Status**: ✅ PHASE 9 COMPLETE
+
+## Summary
+
+Projects now automatically know their **full lineage — Origin Lead, Service, Sub Service, Quotation and Client — with zero manual re-entry**. The origin quotation is denormalized onto the Project (`projects.quotationId`), and each Project Service carries its Sub Services through a normalized `project_sub_services` junction mirrored after `lead_sub_services`. Sub-services are derived at create/add time from the **assigned quotation version's line items** (the exact scope the client accepted). No CRM redesign and no workflow change: project creation still runs through the client-acceptance transaction, service dedupe by `serviceId` is untouched, and `project_sub_services` cascades/deletes exactly like its Lead twin.
+
+## Backend Changes
+
+1. `prisma/schema.prisma` — `Project` gained `quotationId String?` + `quotation Quotation?` (back-relation on `Quotation`); NEW `ProjectSubService` model (`@@unique([projectServiceId, subServiceId])`, `@@index([subServiceId])`, `@@map("project_sub_services")`, cascade with Project Service, restrict with Sub Service); `ProjectService.subServices` and `SubService.projectSubServices` back-relations.
+2. `prisma/migrations/20260807030000_project_flow_derivations/migration.sql` — NEW: adds `projects.quotationId` + backfills each project to its **earliest assigned quotation version's quotation** via `DISTINCT ON (ps."projectId")`; creates `project_sub_services`; backfills from quotation items (`qi."subServiceId"` joined through `quotation_versions` by `serviceId`), then from `lead_sub_services` lineage; adds the unique index **before** the `ON CONFLICT` inserts (idempotent + re-runnable). Applied via `npx prisma migrate deploy` (33 migrations total).
+3. `src/modules/project/project.repository.ts` — NEW `PROJECT_SERVICE_INCLUDE` (`subServices: { include: { subService: true } }`) and `PROJECT_INCLUDE` (`quotation: true`); used by `list`, `findById`, `findByLeadAndClient`, `findByQuotationVersionId`, `listForClient`; `create()` accepts `quotationId?: string | null`; `projectServiceRepository.createMany()`/`create()` accept `subServiceIds` and persist them atomically via nested `subServices: { create: ... }`.
+4. `src/modules/project/project.service.ts` — helper now returns `{ serviceId, subServiceIds }[]` from the assigned quotation version's line items; `create()` writes `quotationId: quotation.id` and passes `subServiceIds` per service; `addServiceToProject()` fetches the assigned quotation version and derives sub-service ids for the added service.
+5. `src/modules/project/tests/project.service.test.ts` — 4 tests: acceptance-transaction preserved, origin `quotationId` stored, per-service `subServiceIds` derived (incl. `[]` when the version has no sub-lines), and `addServiceToProject` derives from the assigned version. Full suite **413/413, 26 suites**.
+
+## Frontend Changes
+
+1. `src/types/index.ts` — NEW `ProjectSubService`; `ProjectService.subServices?: ProjectSubService[]`; `Project.quotation?: Quotation | null`.
+2. `src/pages/projects/ProjectDetailPage.tsx` — Overview shows **Origin quotation** (link, prefers `project.quotation`, falls back to the first summary); **Linked records** card gains the origin quotation link; Services list renders **sub-service chips** under each service.
+3. `src/pages/portal/PortalProjectDetailPage.tsx` — Overview shows **Origin quotation**; Linked records prefers the full origin quotation and keeps the version/total summary fallback; services render **sub-service chips**.
+4. `src/pages/projects/ProjectsPage.tsx` — list gains an **Origin Quotation** column.
+
+## Verification
+
+| Check | Result |
+|-------|--------|
+| Migration `20260807030000_project_flow_derivations` applied (33 total) | ✅ |
+| Backfill: **10/10 projects** got `quotationId` from the earliest assigned quotation version | ✅ |
+| `project_sub_services` backfill is legitimately empty (current data has no project service whose assigned quotation line items carry a sub-service, and no lead lineage overlap) | ✅ (runtime writes verified by tests) |
+| FKs + indexes confirmed in `pg_constraint` / `pg_indexes` (junction cascade/restrict/set-null) | ✅ |
+| Backend tests: **413/413** (26 suites, +4 Phase 9 tests) | ✅ |
+| Backend `npx tsc --noEmit` + `npm run build` | ✅ 0 errors |
+| Frontend `npx tsc --noEmit` + `npm run build` | ✅ clean (chunk-size warning pre-existing) |
+| Live smoke: `GET /api/projects` and `GET /api/projects/:id` return `quotationId`, resolved `quotation` (Q-00010, ACCEPTED) and `subServices[]` | ✅ |
+| No regressions to auth, RBAC, leads, clients, quotations, invoices, payments, portfolio, timeline, audit | ✅ |
+
+> **Note:** the backend dev server was stopped to unlock the Prisma engine DLL for `migrate deploy`, then restarted (PID logged in `dev-server.log`, which is cleaned up). Vite on port 5173 was untouched.

@@ -304,11 +304,22 @@ export interface Client {
   lastLoginAt?: string | null;
 }
 
+export interface ProjectSubService {
+  id: string;
+  projectServiceId: string;
+  subServiceId: string;
+  subService?: SubService;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface ProjectService {
   id: string;
   projectId: string;
   serviceId: string;
   service?: Service;
+  /** Phase 9: the Sub Services pinned to this Project Service, derived from the accepted quotation's line items. */
+  subServices?: ProjectSubService[];
   leadServiceId?: string | null;
   assignedQuotationVersionId?: string | null;
   assignedQuotationVersion?: QuotationVersion & { quotation?: Quotation };
@@ -351,6 +362,8 @@ export interface Project {
   completedByUserId?: string | null;
   client?: Client;
   lead?: Lead;
+  /** Phase 9: the origin Quotation the Project was created from. */
+  quotation?: Quotation | null;
   quotations?: ProjectQuotationSummary[];
   aggregateStatus?: string;
   completedServices?: number;

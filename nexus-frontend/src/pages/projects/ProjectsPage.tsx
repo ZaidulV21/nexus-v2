@@ -83,6 +83,15 @@ export function ProjectsPage() {
         ),
       },
       {
+        id: 'quotation',
+        header: 'Origin Quotation',
+        cell: (info) => (
+          <span className="font-mono text-ink-muted">
+            {info.row.original.quotation?.quotationNumber ?? '—'}
+          </span>
+        ),
+      },
+      {
         id: 'services',
         header: 'Services',
         cell: (info) => (

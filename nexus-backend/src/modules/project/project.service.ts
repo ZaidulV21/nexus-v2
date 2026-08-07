@@ -52,14 +52,21 @@ function buildQuotationSummaries(projectServices: any[]) {
   return Array.from(byQuotationId.values());
 }
 
-function uniqueServiceRecordsFromQuotationVersion(version: any): Array<{ serviceId: string }> {
-  const seen = new Set<string>();
-  return (version?.items ?? []).reduce((services: any[], item: any) => {
-    if (!item.serviceId || seen.has(item.serviceId)) return services;
-    seen.add(item.serviceId);
-    services.push({ serviceId: item.serviceId });
-    return services;
-  }, []);
+// Phase 9: one Project Service per distinct Service on the accepted quotation
+// version, carrying the specific Sub Services that line covered. Sub services
+// are derived from the quotation's line items (Interior -> Painting,
+// Flooring, Lighting each become a sub-service pin) - never manual re-entry.
+function uniqueServiceRecordsFromQuotationVersion(version: any): Array<{ serviceId: string; subServiceIds: string[] }> {
+  const byService = new Map<string, Set<string>>();
+  (version?.items ?? []).forEach((item: any) => {
+    if (!item.serviceId) return;
+    if (!byService.has(item.serviceId)) byService.set(item.serviceId, new Set());
+    if (item.subServiceId) byService.get(item.serviceId)!.add(item.subServiceId);
+  });
+  return Array.from(byService.entries()).map(([serviceId, subs]) => ({
+    serviceId,
+    subServiceIds: Array.from(subs),
+  }));
 }
 
 async function attachAggregateStatus(project: any) {
@@ -168,16 +175,24 @@ export const projectService = {
     const result = await runInTransaction(async (tx) => {
       const projectNumber = await projectRepository.generateProjectNumber(tx);
       const project = await projectRepository.create(
-        { projectNumber, leadId: input.leadId, clientId: input.clientId },
+        {
+          projectNumber,
+          leadId: input.leadId,
+          clientId: input.clientId,
+          // Phase 9: the Project always knows the origin Quotation it was
+          // created from - no re-entry, traceable at a glance.
+          quotationId: quotation.id,
+        },
         tx
       );
 
       const projectServices = await projectServiceRepository.createMany(
         project.id,
-        projectServicesFromQuotation.map((serviceRecord: { serviceId: string }) => ({
+        projectServicesFromQuotation.map((serviceRecord: { serviceId: string; subServiceIds: string[] }) => ({
           serviceId: serviceRecord.serviceId,
           leadServiceId: lead.leadServices?.find((leadService) => leadService.serviceId === serviceRecord.serviceId)?.id,
           assignedQuotationVersionId: input.quotationVersionId,
+          subServiceIds: serviceRecord.subServiceIds,
         })),
         tx
       );
@@ -230,7 +245,9 @@ export const projectService = {
   },
 
   // Implements PRD 4.3: add a new service to an already-active Project
-  // without creating a new Lead or Client.
+  // without creating a new Lead or Client. When the admin attaches it to a
+  // quotation version, the Sub Services are derived from that version's line
+  // items for the service - no manual re-entry.
   async addServiceToProject(projectId: string, input: AddServiceToProjectInput, actorUserId: string) {
     const project = await projectRepository.findById(projectId);
     if (!project) throw new NotFoundError('Project not found');
@@ -238,10 +255,21 @@ export const projectService = {
     const service = await serviceRepository.findById(input.serviceId);
     if (!service || !service.isActive) throw new ValidationError('Service is not available in the catalog');
 
+    let subServiceIds: string[] = [];
+    if (input.assignedQuotationVersionId) {
+      const version = await quotationVersionRepository.findById(input.assignedQuotationVersionId);
+      if (version) {
+        subServiceIds = uniqueServiceRecordsFromQuotationVersion(version)
+          .find((record) => record.serviceId === input.serviceId)
+          ?.subServiceIds ?? [];
+      }
+    }
+
     const projectService = await projectServiceRepository.create({
       projectId,
       serviceId: input.serviceId,
       assignedQuotationVersionId: input.assignedQuotationVersionId,
+      subServiceIds,
     });
 
     await timelineService.recordEvent({

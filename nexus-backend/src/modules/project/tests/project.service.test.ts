@@ -47,6 +47,7 @@ import { projectRepository, projectServiceRepository } from '../project.reposito
 import { leadRepository } from '../../lead/lead.repository';
 import { clientRepository } from '../../client/client.repository';
 import { quotationVersionRepository } from '../../quotation/quotation.repository';
+import { serviceRepository } from '../../catalog/service.repository';
 import { timelineService } from '../../timeline/timeline.service';
 import { statusEngineService } from '../../status-engine/statusEngine.service';
 import { projectService } from '../project.service';
@@ -94,6 +95,122 @@ describe('projectService.create', () => {
 
     expect(projectRepository.create).toHaveBeenCalled();
     expect(result.projectNumber).toBe('P-00001');
+  });
+
+  it('stores the origin quotation id on the Project when created from an accepted quotation', async () => {
+    (leadRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'lead1',
+      email: 'client@example.com',
+      leadServices: [{ id: 'ls1', serviceId: 'svc1' }],
+    });
+    (clientRepository.findById as jest.Mock).mockResolvedValue({ id: 'client1', sourceLeadId: 'lead1' });
+    (quotationVersionRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'ver1',
+      isActive: true,
+      quotation: { id: 'quo1', leadId: 'lead1', status: 'SENT' },
+      items: [{ serviceId: 'svc1' }],
+    });
+    (projectRepository.findByQuotationVersionId as jest.Mock).mockResolvedValue(null);
+    (projectRepository.findByLeadAndClient as jest.Mock).mockResolvedValue(null);
+    (projectRepository.create as jest.Mock).mockResolvedValue({ id: 'proj1', projectNumber: 'P-00001' });
+    (projectRepository.listStatusHistoryForServiceIds as jest.Mock).mockResolvedValue([]);
+    (projectServiceRepository.createMany as jest.Mock).mockResolvedValue([{ id: 'ps1', status: 'PROJECT CREATED' }]);
+    (projectRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'proj1',
+      projectNumber: 'P-00001',
+      projectServices: [{ status: 'PROJECT CREATED' }],
+    });
+
+    await projectService.create(
+      { leadId: 'lead1', clientId: 'client1', quotationVersionId: 'ver1' },
+      'client1',
+      async () => undefined
+    );
+
+    expect(projectRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({ leadId: 'lead1', clientId: 'client1', quotationId: 'quo1' }),
+      expect.anything()
+    );
+  });
+
+  it('derives each Project Service sub-services from the accepted quotation line items', async () => {
+    (leadRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'lead1',
+      email: 'client@example.com',
+      leadServices: [
+        { id: 'ls1', serviceId: 'svc1' },
+        { id: 'ls2', serviceId: 'svc2' },
+      ],
+    });
+    (clientRepository.findById as jest.Mock).mockResolvedValue({ id: 'client1', sourceLeadId: 'lead1' });
+    (quotationVersionRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'ver1',
+      isActive: true,
+      quotation: { id: 'quo1', leadId: 'lead1', status: 'SENT' },
+      items: [
+        { serviceId: 'svc1', subServiceId: 'sub1' },
+        { serviceId: 'svc1', subServiceId: 'sub2' },
+        { serviceId: 'svc2' },
+      ],
+    });
+    (projectRepository.findByQuotationVersionId as jest.Mock).mockResolvedValue(null);
+    (projectRepository.findByLeadAndClient as jest.Mock).mockResolvedValue(null);
+    (projectRepository.create as jest.Mock).mockResolvedValue({ id: 'proj1', projectNumber: 'P-00001' });
+    (projectRepository.listStatusHistoryForServiceIds as jest.Mock).mockResolvedValue([]);
+    (projectServiceRepository.createMany as jest.Mock).mockResolvedValue([
+      { id: 'ps1', status: 'PROJECT CREATED' },
+      { id: 'ps2', status: 'PROJECT CREATED' },
+    ]);
+    (projectRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'proj1',
+      projectNumber: 'P-00001',
+      projectServices: [{ status: 'PROJECT CREATED' }],
+    });
+
+    await projectService.create(
+      { leadId: 'lead1', clientId: 'client1', quotationVersionId: 'ver1' },
+      'client1',
+      async () => undefined
+    );
+
+    expect(projectServiceRepository.createMany).toHaveBeenCalledWith(
+      'proj1',
+      expect.arrayContaining([
+        expect.objectContaining({ serviceId: 'svc1', leadServiceId: 'ls1', subServiceIds: ['sub1', 'sub2'] }),
+        expect.objectContaining({ serviceId: 'svc2', leadServiceId: 'ls2', subServiceIds: [] }),
+      ]),
+      expect.anything()
+    );
+  });
+
+  it('derives sub-services from the assigned quotation version when a service is added to an active project', async () => {
+    (projectRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'proj1',
+      projectNumber: 'P-00001',
+      projectServices: [{ status: 'PROJECT CREATED' }],
+    });
+    (serviceRepository.findById as jest.Mock).mockResolvedValue({ id: 'svc1', isActive: true, name: 'Interior Design' });
+    (quotationVersionRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'ver2',
+      items: [
+        { serviceId: 'svc1', subServiceId: 'sub1' },
+        { serviceId: 'svc1', subServiceId: 'sub2' },
+      ],
+    });
+    (projectServiceRepository.create as jest.Mock).mockResolvedValue({ id: 'ps2', status: 'PROJECT CREATED' });
+
+    await projectService.addServiceToProject(
+      'proj1',
+      { serviceId: 'svc1', assignedQuotationVersionId: 'ver2' },
+      'admin1'
+    );
+
+    expect(projectServiceRepository.create).toHaveBeenCalledWith({
+      projectId: 'proj1',
+      serviceId: 'svc1',
+      assignedQuotationVersionId: 'ver2',
+      subServiceIds: ['sub1', 'sub2'],
+    });
   });
 
   it('rejects direct project creation from a merely sent quotation', async () => {

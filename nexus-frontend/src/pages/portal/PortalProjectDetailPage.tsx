@@ -36,6 +36,18 @@ function ServiceProgress({ service }: { service: ProjectService }) {
         <div>
           <p className="text-sm font-medium text-ink">{service.service?.name ?? 'Service'}</p>
           <p className="text-xs text-ink-faint">{service.service?.category?.name ?? 'Catalog service'}</p>
+          {!!service.subServices?.length && (
+            <div className="mt-1.5 flex flex-wrap gap-1">
+              {service.subServices.map((sub) => (
+                <span
+                  key={sub.id}
+                  className="rounded-full border border-border bg-canvas px-2 py-0.5 text-xs text-ink-muted"
+                >
+                  {sub.subService?.name ?? 'Sub-service'}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-3">
           <StatusBadge status={service.status} />
@@ -54,7 +66,8 @@ function ServiceProgress({ service }: { service: ProjectService }) {
 }
 
 function ProjectOverview({ project }: { project: Project }) {
-  const quotation = project.quotations?.[0];
+  const originQuotation = project.quotation;
+  const quotationSummary = project.quotations?.[0];
 
   return (
     <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
@@ -71,7 +84,10 @@ function ProjectOverview({ project }: { project: Project }) {
             label="Services"
             value={`${project.completedServices ?? 0} of ${project.totalServices ?? 0} completed`}
           />
-          <Field label="Linked quotation" value={quotation?.quotationNumber ?? '-'} />
+          <Field
+            label="Origin quotation"
+            value={originQuotation?.quotationNumber ?? quotationSummary?.quotationNumber ?? '-'}
+          />
         </CardContent>
       </Card>
 
@@ -80,15 +96,19 @@ function ProjectOverview({ project }: { project: Project }) {
           <CardTitle>Linked records</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          {quotation ? (
+          {originQuotation || quotationSummary ? (
             <Link
-              to={ROUTES.portal.quotationDetail(quotation.id)}
+              to={ROUTES.portal.quotationDetail((originQuotation ?? quotationSummary)!.id)}
               className="flex items-center justify-between rounded border border-border bg-canvas px-3 py-2 text-sm hover:bg-surface"
             >
               <span>
-                <span className="block font-medium text-ink">{quotation.quotationNumber}</span>
+                <span className="block font-medium text-ink">
+                  {originQuotation?.quotationNumber ?? quotationSummary?.quotationNumber}
+                </span>
                 <span className="text-xs text-ink-faint">
-                  Version {quotation.versionNumber} · {formatCurrency(quotation.grandTotal)}
+                  {originQuotation
+                    ? 'Origin quotation'
+                    : `Version ${quotationSummary!.versionNumber} · ${formatCurrency(quotationSummary!.grandTotal)}`}
                 </span>
               </span>
               <ChevronRight className="h-4 w-4 text-ink-faint" />

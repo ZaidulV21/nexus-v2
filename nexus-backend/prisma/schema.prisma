@@ -315,6 +315,7 @@ model SubService {
   service           Service           @relation(fields: [serviceId], references: [id], onDelete: Cascade)
   leadSubServices   LeadSubService[]
   quotationItems    QuotationItem[]
+  projectSubServices ProjectSubService[]
 
   @@unique([serviceId, slug])
   @@index([serviceId, isActive, archivedAt, deletedAt])
@@ -464,6 +465,10 @@ model Quotation {
   versions           QuotationVersion[]
   client             Client             @relation(fields: [clientId], references: [id])
   lead               Lead               @relation(fields: [leadId], references: [id])
+  // Phase 9: the Projects born from accepting this quotation. A Project
+  // records its origin quotation directly (project.quotationId) so it can
+  // always trace back without walking through version rows.
+  projects           Project[]
 
   @@map("quotations")
 }
@@ -533,6 +538,12 @@ model Project {
   projectNumber   String           @unique
   leadId          String
   clientId        String
+  // Phase 9: the origin Quotation this Project was created from (the accepted
+  // quotation's id). Nullable for projects whose services were assembled
+  // manually, and ON DELETE SET NULL because quotations are never hard-deleted
+  // in-app anyway. Lets a Project trace its full lineage - Origin Lead,
+  // Services, Sub Services, Quotation, Client - without manual re-entry.
+  quotationId     String?
   // Human-friendly project name shown on the public portfolio. When empty the
   // website falls back to the client's company/contact name.
   title           String?
@@ -552,6 +563,7 @@ model Project {
   media           ProjectMedia[]
   client          Client           @relation(fields: [clientId], references: [id])
   lead            Lead             @relation(fields: [leadId], references: [id])
+  quotation       Quotation?       @relation(fields: [quotationId], references: [id], onDelete: SetNull)
 
   @@map("projects")
 }
@@ -602,8 +614,32 @@ model ProjectService {
   leadService                LeadService?      @relation(fields: [leadServiceId], references: [id])
   project                    Project           @relation(fields: [projectId], references: [id])
   service                    Service           @relation(fields: [serviceId], references: [id])
+  // Phase 9: the specific Sub Services this Project Service covers, derived
+  // from the accepted quotation's line items (Interior -> Painting,
+  // Flooring, Lighting). Normalized junction - a Project Service can carry
+  // one service but multiple sub-services, mirroring LeadSubService.
+  subServices                ProjectSubService[]
 
   @@map("project_services")
+}
+
+// Phase 9: one (Project Service, Sub Service) pair - the normalized link that
+// lets a Project automatically know the Sub Services it was created with,
+// straight from the accepted quotation, with zero manual re-entry. Rows die
+// with their Project Service (Cascade); sub-services are soft-deleted in-app,
+// so the FK is plain Restrict like LeadSubService.
+model ProjectSubService {
+  id               String         @id @default(uuid())
+  projectServiceId String
+  subServiceId     String
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  projectService   ProjectService @relation(fields: [projectServiceId], references: [id], onDelete: Cascade)
+  subService       SubService     @relation(fields: [subServiceId], references: [id])
+
+  @@unique([projectServiceId, subServiceId])
+  @@index([subServiceId])
+  @@map("project_sub_services")
 }
 
 model Invoice {
