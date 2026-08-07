@@ -1,4 +1,7 @@
-/* Phase 8 + Phase 9 regression harness - Tests 1-4 (first chunk). */
+/* Phase 8 + Phase 9 regression harness (Tests 1-9): exercises the full
+ * Lead -> Client -> Quotation -> Project lineage end-to-end against a live
+ * backend. Run with `npm run regression:test` (backend on :4000 required).
+ * See README "Phase 8 + Phase 9 regression harness" for details. */
 const {
   prisma, check, req, loginAdmin, setClientPassword, loginClient, qualifyLeadServices, summary,
   INTERIOR, ELECTRICAL, WEBSITE, CCTV, PAINTING, FLOORING, LIGHTING, OFFICE_FITOUT, INACTIVE_CCTV_SUB, TEST_PASSWORD,

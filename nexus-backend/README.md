@@ -122,6 +122,38 @@ Open `requests.http` for anything you want to inspect by eye (e.g. reading the f
 
 Everything in Tier 2 is safe to re-run repeatedly — each run creates fresh Leads/Clients/Invoices rather than depending on prior state, so you can run `npm run smoke-test` after every code change with no manual cleanup.
 
+### Phase 8 + Phase 9 regression harness (Lead → Client → Quotation → Project lineage)
+
+A deeper black-box regression suite (`scripts/regression-run.js` + `scripts/regression-helpers.js`) that walks the entire Phase 8/9 data lineage end-to-end and verifies integrity at every step. Run it **after any major change to the Lead → Client → Quotation → Project flow** (new statuses, quotation versioning/revise logic, project creation from accepted quotations, sub-service derivation, invoicing, timeline/audit events).
+
+**What it tests (9 tests, 83 checks):**
+- Test 1 — multi-service/multi-sub full lineage (Electrical → Wiring + DB Panel + Website) through to a project with derived `project_sub_services` rows.
+- Test 2 — single-service lineage (Interior → Painting).
+- Test 3 — manual quotation create, revise/edit/delete items with grand-total recompute, and all validation negatives (missing client, empty items, mismatched/inactive sub-service).
+- Test 4 — pre-Phase-8 quotations still render, revise, approve, send, and show in the client portal.
+- Test 5 — pre-Phase-9 projects still render, run the service status workflow, and show in the client portal.
+- Test 6 — invoice creation from new + existing projects with quotation totals unchanged.
+- Test 7 — repeat enquiries convert to the SAME client (no duplicate accounts) and service history spans multiple conversions.
+- Test 8 — timeline/audit events contain no duplicates (esp. a single `QUOTATION_ACCEPTED`).
+- Test 9 — direct DB integrity chains and an orphan-FK scan across the whole database.
+
+**How to run it:**
+```bash
+# terminal 1 (leave running)
+npm run dev
+
+# terminal 2, once the server is up
+npm run regression:test
+```
+Equivalent direct invocation: `node scripts/regression-run.js`. Each run creates fresh Leads/Clients/Quotations/Invoices, so it is safe to re-run repeatedly. It exits non-zero if any check fails and prints `PASS`/`FAIL` per check with a summary (expect `83/83` on a healthy build).
+
+**Environment requirements:**
+- Backend running on `http://localhost:4000` (see `NEXUS_BASE_URL` in `regression-helpers.js`).
+- A real Postgres database (the harness reads/writes via Prisma directly, e.g. for client passwords and Test 9's integrity scan).
+- Seeded Admin login `admin@nexus.local` / `ChangeMe123!` (or match the credentials in `regression-helpers.js`).
+- Node 18+ (uses the built-in `fetch`).
+- The service-catalog IDs (Interior/Electrical/Website/CCTV/Painting/Flooring/Lighting) and the inactive CCTV sub-service referenced in the harness must exist in the DB.
+
 ## Project structure
 
 ```
