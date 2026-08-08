@@ -22,6 +22,8 @@ import { usePublicServiceMedia } from '@/queries/useServices';
 import { useServicePortfolio } from '@/queries/usePortfolio';
 import { usePublicCompany } from '../hooks';
 import { cn } from '@/lib/utils';
+import { RichTextContent } from '@/components/rich-text/RichTextContent';
+import { richTextToPlainText } from '@/lib/richText';
 import { ServiceCard } from '../components/ServiceCard';
 import { ServiceGallery } from '../components/ServiceGallery';
 import { MarketingGallery } from '../components/MarketingGallery';
@@ -31,6 +33,7 @@ import { TestimonialCard } from '../components/TestimonialCard';
 import { FadeIn, StaggerGroup, StaggerItem } from '../components/motion';
 import { subServiceIconMap } from '../components/subServiceIcons';
 import { toServiceDetailContent, toSubServiceDetailContent } from '../lib/serviceDetailContent';
+import { SeoHead, siteUrl, absoluteUrl, buildServiceJsonLd, buildBreadcrumbJsonLd, buildFaqJsonLd } from '../seo';
 import type { ServiceDetailContent } from '../lib/serviceDetailContent';
 import type { ServiceItem } from '../types';
 import type { SubService } from '@/types';
@@ -401,32 +404,87 @@ export function ServiceDetailPage() {
   const sectionIds = useMemo(() => sectionNav.map((s) => s.id), [sectionNav]);
   const activeSection = useActiveSection(sectionIds);
 
-  // SEO: keep the document title in sync with the active (sub)service.
-  useEffect(() => {
-    if (content) {
-      document.title = `${content.name} | ${company.name}`;
-    }
-    return () => {
-      document.title = company.name;
-    };
-  }, [content, company.name]);
+  // ── Phase 11 SEO ─────────────────────────────────────────────────────
+  // The active entity is the sub-service when one is selected, otherwise the
+  // parent service. Its CMS-managed SEO fields win over derived fallbacks;
+  // structured data is custom (admin JSON-LD) when present, otherwise
+  // auto-generated Service + Breadcrumb + FAQ schema.org nodes.
+  const seoEntity = activeSub ?? service ?? null;
+  const seoCanonical =
+    seoEntity?.canonicalUrl?.trim() ||
+    siteUrl(service ? (activeSub ? `/services/${service.slug}/${activeSub.slug}` : `/services/${service.slug}`) : '/services');
+  const seoTitle = seoEntity?.seoTitle?.trim() || (content ? `${content.name} | ${company.name}` : company.name);
+  const seoDescription = richTextToPlainText(
+    seoEntity?.metaDescription?.trim() || content?.shortDescription?.trim() || content?.detail.overview[0] || ''
+  );
+  const seoKeywords = seoEntity?.metaKeywords?.trim() || undefined;
+  const seoOgImage = absoluteUrl(seoEntity?.ogImage?.trim() || content?.heroImage || service?.image);
+  const customStructuredData =
+    seoEntity?.structuredData && JSON.stringify(seoEntity.structuredData) !== '{}' ? seoEntity.structuredData : null;
 
-  if (isLoading) return <LoadingState />;
+  const seoJsonLd: Record<string, unknown> | Array<Record<string, unknown>> | undefined = customStructuredData
+    ? customStructuredData
+    : service
+      ? [
+          buildServiceJsonLd({
+            name: content?.name ?? service.name,
+            description: seoDescription || service.description,
+            url: seoCanonical,
+            image: seoOgImage,
+            serviceType: service.category || service.name,
+            price: content?.detail.startingPrice,
+            provider: company,
+            faqs: content?.detail.faqs ?? [],
+            testimonials: content?.detail.testimonials ?? [],
+          }),
+          buildBreadcrumbJsonLd([
+            { name: 'Home', url: siteUrl('/') },
+            { name: 'Services', url: siteUrl('/services') },
+            { name: service.name, url: siteUrl(`/services/${service.slug}`) },
+            ...(activeSub ? [{ name: activeSub.name, url: siteUrl(`/services/${service.slug}/${activeSub.slug}`) }] : []),
+          ]),
+          ...((content?.detail.faqs.length ?? 0) > 0 ? [buildFaqJsonLd(content!.detail.faqs)] : []),
+        ]
+      : undefined;
+
+  const seoProps = {
+    title: seoTitle,
+    description: seoDescription,
+    keywords: seoKeywords,
+    canonical: seoCanonical,
+    ogTitle: seoTitle,
+    ogDescription: seoDescription,
+    ogImage: seoOgImage,
+    ogUrl: seoCanonical,
+    siteName: company.name,
+    twitterCard: 'summary_large_image',
+    jsonLd: seoJsonLd,
+  };
+
+  if (isLoading) return (
+    <>
+      <SeoHead title={company.name} canonical={siteUrl('/services')} />
+      <LoadingState />
+    </>
+  );
 
   if (!service || !content) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <div className="max-w-md text-center">
-          <h1 className="text-2xl font-bold text-ink">Service Not Found</h1>
-          <p className="mt-3 text-ink-muted">The service you're looking for doesn't exist or is no longer available.</p>
-          <Link
-            to="/services"
-            className="mt-6 inline-flex items-center gap-2 rounded-xl bg-accent px-6 py-3 text-sm font-semibold text-white transition-all hover:bg-accent-hover"
-          >
-            View All Services <ArrowRight className="h-4 w-4" />
-          </Link>
+      <>
+        <SeoHead title={`Service Not Found | ${company.name}`} noindex />
+        <div className="flex min-h-[60vh] items-center justify-center">
+          <div className="max-w-md text-center">
+            <h1 className="text-2xl font-bold text-ink">Service Not Found</h1>
+            <p className="mt-3 text-ink-muted">The service you're looking for doesn't exist or is no longer available.</p>
+            <Link
+              to="/services"
+              className="mt-6 inline-flex items-center gap-2 rounded-xl bg-accent px-6 py-3 text-sm font-semibold text-white transition-all hover:bg-accent-hover"
+            >
+              View All Services <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
@@ -439,6 +497,7 @@ export function ServiceDetailPage() {
 
   return (
     <div className="relative pb-28">
+      <SeoHead {...seoProps} />
       {/* Scroll progress bar */}
       <motion.div
         style={{ scaleX: progress }}
@@ -572,9 +631,11 @@ export function ServiceDetailPage() {
                   <SectionHeading tag="Overview" title={`About ${content.name}`} />
                   <div className="space-y-5">
                     {content.detail.overview.map((paragraph, index) => (
-                      <p key={index} className="text-[15px] leading-relaxed text-ink-muted">
-                        {paragraph}
-                      </p>
+                      <RichTextContent
+                        key={index}
+                        html={paragraph}
+                        className="text-[15px] leading-relaxed text-ink-muted"
+                      />
                     ))}
                   </div>
 
@@ -715,7 +776,12 @@ export function ServiceDetailPage() {
                           </div>
                           <div className="flex-1 rounded-2xl border border-border bg-surface p-5 transition-all duration-300 hover:border-accent/25 hover:shadow-md">
                             <h3 className="text-base font-semibold text-ink">{step.title}</h3>
-                            <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">{step.description}</p>
+                            <div className="mt-1.5">
+                              <RichTextContent
+                                html={step.description}
+                                className="text-sm leading-relaxed text-ink-muted"
+                              />
+                            </div>
                           </div>
                         </motion.div>
                       ))}

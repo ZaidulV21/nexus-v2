@@ -74,6 +74,11 @@ export const queryKeys = {
     conversations: ['messages', 'conversations'] as const,
     thread: (clientId: string) => ['messages', 'thread', clientId] as const,
   },
+  contact: {
+    all: ['contact'] as const,
+    list: (params: unknown) => ['contact', 'list', params] as const,
+    counts: ['contact', 'counts'] as const,
+  },
   dashboard: {
     adminSummary: ['dashboard', 'admin-summary'] as const,
     clientSummary: ['dashboard', 'client-summary'] as const,

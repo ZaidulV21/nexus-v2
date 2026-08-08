@@ -11,6 +11,8 @@ import {
   RotateCcw,
   Star,
   Flame,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { useRef } from 'react';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -23,6 +25,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EntityTimeline } from '@/components/common/EntityTimeline';
 import { EntityAuditLog } from '@/components/common/EntityAuditLog';
 import { ServiceIcon } from '@/components/common/ServiceIcon';
+import { RichTextContent } from '@/components/rich-text/RichTextContent';
 import { useDisclosure } from '@/hooks/useDisclosure';
 import { useToast } from '@/hooks/useToast';
 import {
@@ -33,6 +36,8 @@ import {
   useDuplicateService,
   useSoftDeleteService,
   useUndeleteService,
+  usePublishService,
+  useDraftService,
 } from '@/queries/useServices';
 import { serviceCatalogService } from '@/services/serviceCatalogService';
 import { formatCurrency, formatDate } from '@/lib/format';
@@ -41,7 +46,7 @@ import { ROUTES } from '@/routes/routes';
 import { ServiceFormDrawer } from './components/ServiceFormDrawer';
 import { SubServicesTab } from './components/SubServicesTab';
 import { ServiceGalleryTab } from './components/ServiceGalleryTab';
-import { ServiceStatusPill } from './ServicesPage';
+import { ServiceStatusPill, PublicationStatePill } from './ServicesPage';
 
 const SITE_VISIT_LABELS: Record<string, string> = {
   YES: 'Always required',
@@ -71,6 +76,8 @@ export function ServiceDetailPage() {
   const duplicateMutation = useDuplicateService();
   const softDeleteMutation = useSoftDeleteService(id ?? '');
   const undeleteMutation = useUndeleteService(id ?? '');
+  const publishMutation = usePublishService(id ?? '');
+  const draftMutation = useDraftService(id ?? '');
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -219,6 +226,36 @@ export function ServiceDetailPage() {
     }
   }
 
+  async function handlePublish() {
+    try {
+      await publishMutation.mutateAsync();
+      toast({ title: 'Service published', description: `"${service!.name}" is now live on the public site.`, variant: 'success' });
+    } catch (err) {
+      toast({
+        title: 'Could not publish service',
+        description: err instanceof ApiError ? err.message : 'Something went wrong.',
+        variant: 'danger',
+      });
+    }
+  }
+
+  async function handleDraft() {
+    try {
+      await draftMutation.mutateAsync();
+      toast({
+        title: 'Service moved to draft',
+        description: `"${service!.name}" is no longer visible on the public site.`,
+        variant: 'success',
+      });
+    } catch (err) {
+      toast({
+        title: 'Could not move service to draft',
+        description: err instanceof ApiError ? err.message : 'Something went wrong.',
+        variant: 'danger',
+      });
+    }
+  }
+
   return (
     <div>
       <PageHeader
@@ -227,8 +264,19 @@ export function ServiceDetailPage() {
         actions={
           <div className="flex items-center gap-2">
             <ServiceStatusPill service={service} />
+            <PublicationStatePill publicationState={service.publicationState} />
             {!isDeleted ? (
               <>
+                {!isArchived && service.publicationState === 'DRAFT' && (
+                  <Button variant="secondary" size="sm" loading={publishMutation.isPending} onClick={handlePublish}>
+                    <Eye className="h-3.5 w-3.5" /> Publish
+                  </Button>
+                )}
+                {!isArchived && service.publicationState !== 'DRAFT' && (
+                  <Button variant="secondary" size="sm" loading={draftMutation.isPending} onClick={handleDraft}>
+                    <EyeOff className="h-3.5 w-3.5" /> Draft
+                  </Button>
+                )}
                 {!isArchived && (
                   <Button variant="secondary" size="sm" onClick={editDrawer.open}>
                     <Pencil className="h-3.5 w-3.5" /> Edit
@@ -369,6 +417,7 @@ export function ServiceDetailPage() {
                   label="Status"
                   value={isDeleted ? 'Deleted' : isArchived ? 'Archived' : service.isActive ? 'Active' : 'Inactive'}
                 />
+                <Field label="Publication" value={service.publicationState === 'DRAFT' ? 'Draft (hidden from public site)' : 'Published (live on public site)'} />
                 <Field
                   label="Flags"
                   value={
@@ -397,7 +446,14 @@ export function ServiceDetailPage() {
                   <Field label="Short description" value={service.shortDescription} />
                 </div>
                 <div className="col-span-full">
-                  <Field label="Description" value={service.description} />
+                  <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">Description</p>
+                  <div className="mt-0.5 text-sm text-ink">
+                    {service.description ? (
+                      <RichTextContent html={service.description} />
+                    ) : (
+                      <span>—</span>
+                    )}
+                  </div>
                 </div>
               </div>
 

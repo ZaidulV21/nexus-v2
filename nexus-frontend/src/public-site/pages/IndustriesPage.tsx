@@ -3,13 +3,22 @@ import { ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { INDUSTRIES } from '../constants';
 import { PageHero } from '../components/PageHero';
+import { usePublicCompany } from '../hooks';
+import { SeoHead, siteUrl } from '../seo';
 
 const FALLBACK_IMAGE =
   'https://images.unsplash.com/photo-1497366811353-6870744d04b2?auto=format&fit=crop&w=1000&q=80';
 
 export function IndustriesPage() {
+  const company = usePublicCompany();
+
   return (
     <div>
+      <SeoHead
+        title={`Industries We Serve | ${company.name}`}
+        description="Specialized infrastructure solutions tailored to the unique requirements of every industry. We understand that each sector demands a different approach."
+        canonical={siteUrl('/industries')}
+      />
       <PageHero
         title="Industries We Serve"
         description="Specialized infrastructure solutions tailored to the unique requirements of every industry. We understand that each sector demands a different approach."

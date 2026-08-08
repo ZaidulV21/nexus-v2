@@ -3,11 +3,15 @@
  * backend. Run with `npm run regression:test` (backend on :4000 required).
  * See README "Phase 8 + Phase 9 regression harness" for details. */
 const {
-  prisma, check, req, loginAdmin, setClientPassword, loginClient, qualifyLeadServices, summary,
-  INTERIOR, ELECTRICAL, WEBSITE, CCTV, PAINTING, FLOORING, LIGHTING, OFFICE_FITOUT, INACTIVE_CCTV_SUB, TEST_PASSWORD,
+  prisma, check, req, loginAdmin, setClientPassword, loginClient, qualifyLeadServices, summary, resolveCatalog,
+  TEST_PASSWORD,
 } = require('./regression-helpers');
 
 const state = {};
+
+// Catalog ids are resolved from the DB in main() before any test runs (see
+// resolveCatalog in regression-helpers.js); `let` so the tests can read them.
+let INTERIOR, ELECTRICAL, WEBSITE, CCTV, PAINTING, FLOORING, LIGHTING, INACTIVE_CCTV_SUB;
 
 let seq = 0;
 function nextName(prefix) {
@@ -290,10 +294,23 @@ async function test4(token) {
     include: { versions: { include: { items: true, approvals: true }, orderBy: { versionNumber: 'desc' } } },
     orderBy: { createdAt: 'asc' },
   });
-  const pre = all.find((q) =>
+  let pre = all.find((q) =>
     (q.versions.find((v) => v.id === q.activeVersionId) || q.versions[0]).items.every((i) => i.subServiceId === null)
   );
-  check('Test4: found a pre-Phase-8 quotation', !!pre, `quotation=${pre && pre.quotationNumber} (${pre && pre.id})`);
+  if (!pre && state.t1) {
+    // Fresh baseline: no legacy quotations survive a migrate reset. Synthesise
+    // one in the pre-Phase-8 shape (every item without subServiceId) so the
+    // legacy render/revise/approve/send/portal path is still exercised.
+    const legacy = await createQuotation(token, {
+      clientId: state.t1.clientId, leadId: state.t1.leadId,
+      items: [
+        { serviceId: ELECTRICAL, description: 'Legacy wiring line', quantity: 1, unit: 'Job', unitPrice: 100000, taxRate: 18 },
+        { serviceId: ELECTRICAL, description: 'Legacy panel line', quantity: 1, unit: 'Job', unitPrice: 30000, taxRate: 18 },
+      ],
+    });
+    pre = legacy && { id: legacy.id, clientId: state.t1.clientId, quotationNumber: legacy.quotationNumber };
+  }
+  check('Test4: found a pre-Phase-8 quotation (existing or synthesised)', !!pre, `quotation=${pre && pre.quotationNumber} (${pre && pre.id})`);
   if (!pre) return;
   const qId = pre.id;
   state.t4 = { quotationId: qId, clientId: pre.clientId };
@@ -346,17 +363,27 @@ async function test5(token) {
 
   // A pre-Phase-9 project: created before the Phase-9 migration, with at
   // least one service still in a mutable state (so the workflow can run).
-  const pres = await prisma.project.findMany({
+  // Pre-Phase-9 rows only exist when the DB predates the Phase-9 migration;
+  // on a clean baseline fall back to a project created earlier in this run
+  // whose services are still in a mutable state.
+  let pre = (await prisma.project.findMany({
     where: {
       createdAt: { lt: new Date('2026-08-07T00:00:00Z') },
       projectServices: { some: { status: { in: ['PROJECT CREATED', 'IN PROGRESS', 'ON HOLD'] } } },
     },
     include: { projectServices: true },
     orderBy: { createdAt: 'asc' },
-  });
-  const pre = pres.sort((a, b) => b.projectServices.length - a.projectServices.length)[0];
-  check('Test5: found an existing multi-service pre-Phase-9 project', !!pre && pre.projectServices.length >= 2,
-    `project=${pre && pre.id} services=${pre && pre.projectServices.length}`);
+  })).sort((a, b) => b.projectServices.length - a.projectServices.length)[0];
+  const legacyMode = !!pre;
+  if (!pre) {
+    pre = (await prisma.project.findMany({
+      where: { projectServices: { some: { status: { in: ['PROJECT CREATED', 'IN PROGRESS', 'ON HOLD'] } } } },
+      include: { projectServices: true },
+      orderBy: { createdAt: 'asc' },
+    })).sort((a, b) => b.projectServices.length - a.projectServices.length)[0];
+  }
+  check('Test5: found a multi-service project with mutable services', !!pre && pre.projectServices.length >= 2,
+    `project=${pre && pre.id} services=${pre && pre.projectServices.length}${legacyMode ? ' (legacy)' : ' (fresh baseline)'}`);
   if (!pre) return;
   const pId = pre.id;
   state.t5 = { projectId: pId, clientId: pre.clientId };
@@ -608,6 +635,9 @@ async function main() {
   console.log('=== Phase 8 + Phase 9 REGRESSION HARNESS ===');
   const adminToken = await loginAdmin();
   check('setup: admin login', !!adminToken);
+
+  const cat = await resolveCatalog();
+  ({ INTERIOR, ELECTRICAL, WEBSITE, CCTV, PAINTING, FLOORING, LIGHTING, INACTIVE_CCTV_SUB } = cat);
 
   const tests = [
     ['Test1', () => test1(adminToken)],

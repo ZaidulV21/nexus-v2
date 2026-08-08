@@ -1,5 +1,10 @@
 import { prisma } from '../../config/database';
-import { CreateSubServiceInput, UpdateSubServiceInput, SubServiceListFilters } from './catalog.types';
+import {
+  CreateSubServiceInput,
+  UpdateSubServiceInput,
+  SubServiceListFilters,
+  BulkCatalogAction,
+} from './catalog.types';
 
 export const subServiceRepository = {
   create(serviceId: string, input: CreateSubServiceInput) {
@@ -12,6 +17,14 @@ export const subServiceRepository = {
 
   disable(id: string) {
     return prisma.subService.update({ where: { id }, data: { isActive: false } });
+  },
+
+  publish(id: string) {
+    return prisma.subService.update({ where: { id }, data: { publicationState: 'PUBLISHED' } });
+  },
+
+  draft(id: string) {
+    return prisma.subService.update({ where: { id }, data: { publicationState: 'DRAFT' } });
   },
 
   archive(id: string) {
@@ -70,6 +83,49 @@ export const subServiceRepository = {
     });
   },
 
+  // Fetch the rows backing a bulk operation so the service layer can validate
+  // every id belongs to the right service and state before mutating.
+  findManyByIds(serviceId: string, ids: string[]) {
+    return prisma.subService.findMany({ where: { serviceId, id: { in: ids } } });
+  },
+
+  // Applies one bulk action across many rows under a service in a single
+  // transaction, mirroring the service-level bulk operation.
+  bulk(serviceId: string, ids: string[], action: BulkCatalogAction) {
+    const data: Record<string, unknown> = { isActive: false };
+    switch (action) {
+      case 'archive':
+        data.archivedAt = new Date();
+        break;
+      case 'restore':
+        data.archivedAt = null;
+        data.isActive = true;
+        break;
+      case 'delete':
+        data.deletedAt = new Date();
+        break;
+      case 'undelete':
+        data.deletedAt = null;
+        break;
+      case 'activate':
+        data.isActive = true;
+        break;
+      case 'deactivate':
+        data.isActive = false;
+        break;
+      case 'publish':
+        data.publicationState = 'PUBLISHED';
+        data.isActive = true;
+        break;
+      case 'draft':
+        data.publicationState = 'DRAFT';
+        break;
+    }
+    return prisma.$transaction(
+      ids.map((id) => prisma.subService.update({ where: { id, serviceId }, data })),
+    );
+  },
+
   async listByService(
     serviceId: string,
     onlyActive: boolean,
@@ -79,6 +135,7 @@ export const subServiceRepository = {
     const where: any = { serviceId };
 
     if (onlyActive) {
+      where.publicationState = 'PUBLISHED';
       where.isActive = true;
       where.archivedAt = null;
       where.deletedAt = null;
@@ -105,6 +162,10 @@ export const subServiceRepository = {
         default:
           where.deletedAt = null;
       }
+
+      // Admin draft/published triage on top of the status filter.
+      if (filters.publication === 'DRAFT') where.publicationState = 'DRAFT';
+      if (filters.publication === 'PUBLISHED') where.publicationState = 'PUBLISHED';
     }
 
     if (filters.search) {

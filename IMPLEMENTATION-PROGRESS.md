@@ -1727,7 +1727,7 @@ Every Service now has a CMS-managed **Marketing Gallery**: an unlimited, ordered
 ### Prisma Schema + Migration
 - `ServiceMedia` model added to `schema.prisma`: `type` (`MediaType` enum: `IMAGE`/`VIDEO`), `url` (immutable), `posterUrl?` (video cover), `altText?`, `caption?`, `sortOrder`, `isFeatured` (at most one per service), `isActive`, `serviceId` FK `onDelete: Cascade`; `@@index([serviceId, isActive, sortOrder])`; `Service.media ServiceMedia[]` relation added.
 - Migration `20260806020000_service_marketing_gallery/migration.sql` — creates `media_type` enum + `service_media` table + index + FK. Applied via `npx prisma migrate deploy` (client regenerated).
-- **Note:** `prisma migrate dev` is broken in this repo (pre-existing P3006: shadow DB fails replaying `20260801000000_payment_duplicate_protection`). Worked around for Phases 2 & 3 by hand-writing the migration SQL and applying with `migrate deploy`. The live DB has additional pre-existing drift (quotation FK names, `idempotency_key`, index renames) deliberately left untouched.
+- **Note:** the migration history has since been cleaned up. All 35 hand-written migrations (with the P3006 shadow-DB replay breakage, `idempotency_key` column, and renamed-index drift) were replaced by a single machine-generated baseline, `prisma/migrations/20260701000000_initial_baseline`, and the dev DB rebuilt from it (`prisma migrate reset --force --skip-seed` + `prisma db seed`). `prisma migrate dev` and `migrate deploy` now work normally; no drift remains.
 
 ### Catalog module (`src/modules/catalog/`)
 1. `catalog.types.ts` — `ServiceMediaType`, `CreateServiceMediaInput`, `UpdateServiceMediaInput` (with `SubServiceListFilters` moved into the same block).
@@ -1776,7 +1776,7 @@ Every Service now has a CMS-managed **Marketing Gallery**: an unlimited, ordered
 | Cleanup — gallery empty after smoke test | ✅ |
 | No regressions to auth, RBAC, leads, clients, quotations, projects, invoices, sub-services | ✅ |
 
-> **Note:** `prisma migrate dev` remains unusable (pre-existing P3006 drift). Any future schema changes must follow the Phase 2/3 pattern: hand-write the migration SQL under `prisma/migrations/<ts>_<name>/migration.sql` and apply with `npx prisma migrate deploy`.
+> **Note:** the P3006 migration-history problem is **resolved** — the history is now a machine-generated baseline (`20260701000000_initial_baseline`, applied first) plus the Phase-12 migration (`20260807183241_phase12_admin_ux`, applied after) with no drift, so both `prisma migrate dev` and `prisma migrate deploy` work normally. Any future schema change is a normal `npx prisma migrate dev --name <change>` followed by `npx prisma migrate deploy` in environments that shouldn't run `dev`.
 
 # Phase 4 — Project Portfolio Gallery (COMPLETE)
 

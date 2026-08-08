@@ -14,6 +14,19 @@ import type {
 
 export type ServiceStatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE' | 'ARCHIVED' | 'DELETED';
 
+export type PublicationFilter = 'ALL' | 'DRAFT' | 'PUBLISHED';
+
+/** Actions accepted by the shared bulk endpoint (services + sub-services). */
+export type BulkCatalogAction =
+  | 'archive'
+  | 'restore'
+  | 'delete'
+  | 'undelete'
+  | 'activate'
+  | 'deactivate'
+  | 'publish'
+  | 'draft';
+
 export type ServiceImageField = 'imageUrl' | 'bannerImage' | 'thumbnail' | 'heroImage' | 'ogImage';
 
 /** Maps each CMS image slot to the URL field on the Service record. */
@@ -33,6 +46,8 @@ export interface ServiceListParams {
   categoryId?: string;
   featured?: boolean;
   popular?: boolean;
+  /** Publication lifecycle filter (admin catalog list). */
+  publication?: PublicationFilter;
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
 }
@@ -60,6 +75,8 @@ export interface CreateServiceInput {
   metaKeywords?: string;
   ogImage?: string;
   canonicalUrl?: string;
+  /** Optional custom schema.org JSON-LD (object or @graph array). */
+  structuredData?: Record<string, unknown> | Array<Record<string, unknown>>;
   /** Public detail-page content blocks (JSON arrays, mirroring SubService). */
   features?: string[];
   whatsIncluded?: string[];
@@ -83,6 +100,8 @@ export interface SubServiceListParams {
   pageSize?: number;
   search?: string;
   status?: SubServiceStatusFilter;
+  /** Publication lifecycle filter (admin list). */
+  publication?: PublicationFilter;
 }
 
 export interface CreateSubServiceInput {
@@ -107,6 +126,8 @@ export interface CreateSubServiceInput {
   metaKeywords?: string;
   ogImage?: string;
   canonicalUrl?: string;
+  /** Optional custom schema.org JSON-LD (object or @graph array). */
+  structuredData?: Record<string, unknown> | Array<Record<string, unknown>>;
 }
 
 export interface UpdateSubServiceInput extends Partial<CreateSubServiceInput> {}
@@ -155,6 +176,7 @@ export const serviceCatalogService = {
       categoryId: params.categoryId,
       featured: params.featured,
       popular: params.popular,
+      publication: params.publication,
       sortBy: params.sortBy,
       sortOrder: params.sortOrder,
     }),
@@ -174,11 +196,24 @@ export const serviceCatalogService = {
     api.delete<{ service: Service }>(`/services/${id}/image?field=${encodeURIComponent(field)}`),
   archive: (id: string) => api.patch<Service>(`/services/${id}/archive`),
   restore: (id: string) => api.patch<Service>(`/services/${id}/restore`),
+  // Draft/publish lifecycle. Publishing also forces isActive so the row is
+  // selectable + visible once live; drafting keeps it editable but hidden.
+  publish: (id: string) => api.patch<Service>(`/services/${id}/publish`),
+  draft: (id: string) => api.patch<Service>(`/services/${id}/draft`),
+  /** Bulk action across services (archive/restore/delete/undelete/activate/
+   *  deactivate/publish/draft). Returns the updated records. */
+  bulk: (ids: string[], action: BulkCatalogAction) =>
+    api.post<{ ids: string[]; action: BulkCatalogAction; updatedCount: number }>('/services/bulk', { ids, action }),
   // Soft delete: hidden everywhere but stays on historical records. Reversible.
   softDelete: (id: string) => api.delete<Service>(`/services/${id}`),
   undelete: (id: string) => api.post<Service>(`/services/${id}/undelete`),
   duplicate: (id: string) => api.post<Service>(`/services/${id}/duplicate`),
   getCategoryTree: () => api.get<Category[]>('/categories'),
+  createCategory: (input: { name: string; parentCategoryId?: string }) =>
+    api.post<Category>('/categories', input),
+  updateCategory: (id: string, input: { name?: string; parentCategoryId?: string | null }) =>
+    api.put<Category>(`/categories/${id}`, input),
+  disableCategory: (id: string) => api.patch<Category>(`/categories/${id}/disable`),
 
   // ── Sub Services ────────────────────────────────────────────────────────
   // `serviceRef` is the parent service UUID (admin) or its public slug
@@ -189,6 +224,7 @@ export const serviceCatalogService = {
       pageSize: params.pageSize,
       search: params.search,
       status: params.status,
+      publication: params.publication,
     }),
   // Public site: always ACTIVE, ordered by sortOrder.
   listPublicSubServices: (serviceRef: string) =>
@@ -218,6 +254,16 @@ export const serviceCatalogService = {
     api.patch<SubService>(`/services/${serviceRef}/sub-services/${subId}/archive`),
   restoreSubService: (serviceRef: string, subId: string) =>
     api.patch<SubService>(`/services/${serviceRef}/sub-services/${subId}/restore`),
+  publishSubService: (serviceRef: string, subId: string) =>
+    api.patch<SubService>(`/services/${serviceRef}/sub-services/${subId}/publish`),
+  draftSubService: (serviceRef: string, subId: string) =>
+    api.patch<SubService>(`/services/${serviceRef}/sub-services/${subId}/draft`),
+  /** Bulk action across sub-services under one service. */
+  bulkSubServices: (serviceRef: string, ids: string[], action: BulkCatalogAction) =>
+    api.post<{ ids: string[]; action: BulkCatalogAction; updatedCount: number }>(
+      `/services/${serviceRef}/sub-services/bulk`,
+      { ids, action },
+    ),
   softDeleteSubService: (serviceRef: string, subId: string) =>
     api.delete<SubService>(`/services/${serviceRef}/sub-services/${subId}`),
   undeleteSubService: (serviceRef: string, subId: string) =>
@@ -258,6 +304,9 @@ export const serviceCatalogService = {
     api.patch<ServiceMedia>(`/services/${serviceRef}/media/${mediaId}`, input),
   setFeaturedServiceMedia: (serviceRef: string, mediaId: string) =>
     api.post<ServiceMedia>(`/services/${serviceRef}/media/${mediaId}/feature`),
+  /** Toggle whether a gallery item is shown on the public site. */
+  toggleServiceMediaActive: (serviceRef: string, mediaId: string) =>
+    api.patch<ServiceMedia>(`/services/${serviceRef}/media/${mediaId}/toggle-active`),
   reorderServiceMedia: (serviceRef: string, orderedIds: string[]) =>
     api.post<{ orderedIds: string[] }>(`/services/${serviceRef}/media/reorder`, { orderedIds }),
   deleteServiceMedia: (serviceRef: string, mediaId: string) =>

@@ -1,10 +1,11 @@
 import { serviceRepository } from './service.repository';
 import { categoryRepository } from './category.repository';
-import { CreateServiceInput, UpdateServiceInput, ServiceListFilters } from './catalog.types';
+import { CreateServiceInput, UpdateServiceInput, ServiceListFilters, BulkCatalogAction } from './catalog.types';
 import { PaginationParams } from '../../core/utils/pagination';
 import { ConflictError, NotFoundError, ValidationError } from '../../core/errors/AppError';
 import { timelineService } from '../timeline/timeline.service';
 import { auditService } from '../audit/audit.service';
+import { sanitizeRichText } from './richText.util';
 
 // Mirrors the frontend slugify() (nexus-frontend/src/lib/utils.ts) so slugs
 // backfilled from names produce identical URLs to what the public site used
@@ -151,6 +152,99 @@ export const serviceService = {
     return updated;
   },
 
+  async publish(id: string, actorUserId?: string) {
+    const existing = await serviceRepository.findById(id);
+    if (!existing) throw new NotFoundError('Service not found');
+    if (existing.deletedAt) throw new ValidationError('Deleted services cannot be published - restore first');
+
+    const updated = await serviceRepository.publish(id);
+
+    await timelineService.recordEvent({
+      entityType: 'SERVICE',
+      entityId: id,
+      eventType: 'SERVICE_PUBLISHED',
+      description: `Service "${existing.name}" was published to the website`,
+      actorUserId,
+    });
+
+    await auditService.recordAudit({
+      entityType: 'SERVICE',
+      entityId: id,
+      action: 'PUBLISH',
+      beforeState: { publicationState: existing.publicationState },
+      afterState: { publicationState: 'PUBLISHED' },
+      actorUserId,
+    });
+
+    return updated;
+  },
+
+  async draft(id: string, actorUserId?: string) {
+    const existing = await serviceRepository.findById(id);
+    if (!existing) throw new NotFoundError('Service not found');
+    if (existing.deletedAt) throw new ValidationError('Deleted services cannot be moved to draft - restore first');
+
+    const updated = await serviceRepository.draft(id);
+
+    await timelineService.recordEvent({
+      entityType: 'SERVICE',
+      entityId: id,
+      eventType: 'SERVICE_DRAFTED',
+      description: `Service "${existing.name}" was moved to draft and is hidden from the website`,
+      actorUserId,
+    });
+
+    await auditService.recordAudit({
+      entityType: 'SERVICE',
+      entityId: id,
+      action: 'DRAFT',
+      beforeState: { publicationState: existing.publicationState },
+      afterState: { publicationState: 'DRAFT' },
+      actorUserId,
+    });
+
+    return updated;
+  },
+
+  // Bulk operations drive the admin list's select-all toolbar. Every id is
+  // validated up-front (all must exist and not be soft-deleted where the
+  // action requires it) so a single transaction applies the action uniformly.
+  async bulk(ids: string[], action: BulkCatalogAction, actorUserId?: string) {
+    if (!Array.isArray(ids) || ids.length === 0) {
+      throw new ValidationError('ids must be a non-empty array');
+    }
+
+    const rows = await serviceRepository.findManyByIds(ids);
+    if (rows.length !== ids.length) {
+      const missing = ids.filter((id) => !rows.some((r) => r.id === id));
+      throw new NotFoundError(`Some services were not found: ${missing.join(', ')}`);
+    }
+    if (rows.some((r) => r.deletedAt)) {
+      throw new ValidationError('Soft-deleted services cannot be bulk-edited - restore them individually first');
+    }
+
+    const updated = await serviceRepository.bulk(ids, action);
+
+    await timelineService.recordEvent({
+      entityType: 'SERVICE',
+      entityId: 'bulk',
+      eventType: 'SERVICE_BULK',
+      description: `Bulk ${action} applied to ${updated.length} service(s)`,
+      actorUserId,
+      metadata: { ids, count: updated.length },
+    });
+
+    await auditService.recordAudit({
+      entityType: 'SERVICE',
+      entityId: 'bulk',
+      action: `BULK_${action.toUpperCase()}`,
+      afterState: { ids, count: updated.length },
+      actorUserId,
+    });
+
+    return { items: updated, count: updated.length };
+  },
+
   // Soft-archive: the service disappears from every selection list but stays
   // attached to historical Leads/Quotations/Projects/Invoices. Hard deletion
   // is intentionally not offered anywhere - a used service must never vanish
@@ -271,7 +365,8 @@ export const serviceService = {
 
   // Duplicates every content field into a new draft (name + " (Copy)") so the
   // admin gets a ready-to-edit starting point. Never duplicates usage - the
-  // copy starts clean.
+  // copy starts clean. Rich text is sanitized on the way through so scripts
+  // and event handlers never propagate into the copied record.
   async duplicate(id: string, actorUserId?: string) {
     const existing = await serviceRepository.findById(id);
     if (!existing) throw new NotFoundError('Service not found');
@@ -281,7 +376,7 @@ export const serviceService = {
       categoryId: existing.categoryId,
       name,
       slug: await this.ensureUniqueSlug(slugify(name)),
-      description: existing.description ?? undefined,
+      description: sanitizeRichText(existing.description) || undefined,
       shortDescription: existing.shortDescription ?? undefined,
       icon: existing.icon ?? undefined,
       imageUrl: existing.imageUrl ?? undefined,
@@ -305,6 +400,10 @@ export const serviceService = {
       faqs: (existing.faqs as unknown as CreateServiceInput['faqs']) ?? undefined,
       testimonials: (existing.testimonials as unknown as CreateServiceInput['testimonials']) ?? undefined,
     };
+
+    // A duplicate is always created as a DRAFT so it can never appear on the
+    // public website before the admin has finished editing it.
+    input.publicationState = 'DRAFT';
 
     const service = await serviceRepository.create(input);
 
@@ -335,6 +434,12 @@ export const serviceService = {
     // Soft-deleted services are only reachable by authenticated admins (for
     // the restore/undelete flow); anonymous/public callers get a 404.
     if (service.deletedAt && actorUser?.type !== 'ADMIN') {
+      throw new NotFoundError('Service not found');
+    }
+
+    // Draft services are invisible to everyone except admins (the admin needs
+    // the draft to preview it, but the public site must never see it).
+    if (service.publicationState === 'DRAFT' && actorUser?.type !== 'ADMIN') {
       throw new NotFoundError('Service not found');
     }
 

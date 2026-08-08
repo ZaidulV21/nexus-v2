@@ -9,12 +9,14 @@ import {
   CreditCard,
   Layers,
   MessageSquare,
+  Inbox,
   FolderOpen,
   Bell,
   History,
   ShieldCheck,
   Search,
   Settings,
+  Tags,
   X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -30,6 +32,7 @@ const NAV_SECTIONS = [
     label: 'Pipeline',
     items: [
       { label: 'Services', icon: Layers, to: ROUTES.admin.services },
+      { label: 'Categories', icon: Tags, to: ROUTES.admin.categories },
       { label: 'Leads', icon: FileText, to: ROUTES.admin.leads },
       { label: 'Clients', icon: Users, to: ROUTES.admin.clients },
       { label: 'Quotations', icon: FileSpreadsheet, to: ROUTES.admin.quotations },
@@ -42,6 +45,7 @@ const NAV_SECTIONS = [
     label: 'Workspace',
     items: [
       { label: 'Messages', icon: MessageSquare, to: ROUTES.admin.messages },
+      { label: 'Support Inbox', icon: Inbox, to: ROUTES.admin.support },
       { label: 'Documents', icon: FolderOpen, to: ROUTES.admin.documents },
       { label: 'Notifications', icon: Bell, to: ROUTES.admin.notifications },
       { label: 'Timeline', icon: History, to: ROUTES.admin.timeline },

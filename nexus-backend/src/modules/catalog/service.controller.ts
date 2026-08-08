@@ -1,6 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
 import { serviceService, SERVICE_IMAGE_FIELDS, ServiceImageField } from './service.service';
-import { createServiceSchema, updateServiceSchema, serviceListFiltersSchema } from './service.validation';
+import {
+  createServiceSchema,
+  updateServiceSchema,
+  serviceListFiltersSchema,
+  bulkCatalogActionSchema,
+} from './service.validation';
 import { ok, created, paginated } from '../../core/utils/response';
 import { parsePagination } from '../../core/utils/pagination';
 import { ValidationError, UnauthorizedError } from '../../core/errors/AppError';
@@ -49,6 +54,35 @@ export const serviceController = {
     try {
       const service = await serviceService.disable(req.params.id, req.user?.id);
       return ok(res, service);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async publish(req: Request, res: Response, next: NextFunction) {
+    try {
+      const service = await serviceService.publish(req.params.id, req.user?.id);
+      return ok(res, service);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async draft(req: Request, res: Response, next: NextFunction) {
+    try {
+      const service = await serviceService.draft(req.params.id, req.user?.id);
+      return ok(res, service);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async bulk(req: Request, res: Response, next: NextFunction) {
+    try {
+      const parsed = bulkCatalogActionSchema.safeParse(req.body);
+      if (!parsed.success) throw new ValidationError('Invalid bulk action payload', parsed.error.flatten());
+      const result = await serviceService.bulk(parsed.data.ids, parsed.data.action, req.user?.id);
+      return ok(res, result);
     } catch (err) {
       next(err);
     }
@@ -121,6 +155,7 @@ export const serviceController = {
         categoryId: typeof req.query.categoryId === 'string' ? req.query.categoryId : undefined,
         featured: typeof req.query.featured === 'string' ? req.query.featured : undefined,
         popular: typeof req.query.popular === 'string' ? req.query.popular : undefined,
+        publication: typeof req.query.publication === 'string' ? req.query.publication : undefined,
       });
       if (!parsedFilters.success) throw new ValidationError('Invalid service filters', parsedFilters.error.flatten());
 

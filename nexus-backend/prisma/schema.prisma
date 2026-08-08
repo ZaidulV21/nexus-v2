@@ -199,6 +199,10 @@ model Service {
   icon              String?
   basePrice         Decimal?               @db.Decimal(12, 2)
   requiresSiteVisit SiteVisitRequirement   @default(OPTIONAL)
+  // Draft/publish workflow: a DRAFT service never appears on the public
+  // website, even when active. Published is the default so existing records
+  // keep behaving exactly as before.
+  publicationState PublicationState @default(PUBLISHED)
   isActive          Boolean                @default(true)
   // CMS display flags + ordering.
   isFeatured        Boolean                @default(false)
@@ -215,6 +219,10 @@ model Service {
   metaKeywords      String?
   ogImage           String?
   canonicalUrl      String?
+  // Optional custom schema.org JSON-LD (an object or a @graph array). When
+  // empty, the public site auto-generates structured data from the service
+  // fields; when present it is rendered verbatim on the detail page.
+  structuredData    Json     @default("{}")
   createdAt         DateTime               @default(now())
   updatedAt         DateTime               @updatedAt
   archivedAt        DateTime?
@@ -299,6 +307,9 @@ model SubService {
   faqs            Json     @default("[]")
   startingPrice   String?
   completionTime  String?
+  // Draft/publish workflow, mirroring Service. A DRAFT sub-service never
+  // appears on the public site, even when active.
+  publicationState PublicationState @default(PUBLISHED)
   isActive        Boolean  @default(true)
   sortOrder       Int      @default(0)
   // SEO metadata.
@@ -307,6 +318,9 @@ model SubService {
   metaKeywords    String?
   ogImage         String?
   canonicalUrl    String?
+  // Optional custom schema.org JSON-LD, mirroring Service. Auto-generated on
+  // the public site when empty.
+  structuredData  Json     @default("{}")
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   archivedAt      DateTime?
@@ -852,6 +866,32 @@ model PasswordResetToken {
   @@map("password_reset_tokens")
 }
 
+// Phase 12: lightweight Contact/Support inbox. Public visitors submit a
+// message from the /contact page; admins triage it in the Support inbox and
+// can reply by email. Deliberately standalone - submissions never auto-create
+// Leads or Clients, keeping the existing Lead -> Client -> Project flow intact.
+model ContactMessage {
+  id         String              @id @default(uuid())
+  name       String
+  email      String
+  phone      String?
+  company    String?
+  subject    String
+  message    String
+  status     ContactMessageStatus @default(NEW)
+  // Optional admin reply (stored so the inbox shows the full exchange).
+  replyBody  String?
+  repliedAt  DateTime?
+  repliedById String?
+  archivedAt DateTime?
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+
+  @@index([status])
+  @@index([status, createdAt])
+  @@map("contact_messages")
+}
+
 enum SiteVisitRequirement {
   YES
   NO
@@ -896,4 +936,19 @@ enum InvoiceStatus {
   DRAFT
   ISSUED
   CANCELLED
+}
+
+// Draft/publish lifecycle for CMS content. DRAFT rows are never served to the
+// public website; PUBLISHED rows appear when their other status flags allow.
+enum PublicationState {
+  DRAFT
+  PUBLISHED
+}
+
+// Lifecycle of a Contact/Support inbox message.
+enum ContactMessageStatus {
+  NEW
+  READ
+  REPLIED
+  ARCHIVED
 }

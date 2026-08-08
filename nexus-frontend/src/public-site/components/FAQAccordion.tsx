@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Minus } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { RichTextContent } from '@/components/rich-text/RichTextContent';
 import type { FAQItem } from '../types';
 
 interface FAQAccordionProps {
@@ -51,7 +52,7 @@ export function FAQAccordion({ items }: FAQAccordionProps) {
                   className="overflow-hidden"
                 >
                   <div className="border-t border-border px-5 py-4">
-                    <p className="text-sm text-ink-muted leading-relaxed">{item.answer}</p>
+                    <RichTextContent html={item.answer} className="text-sm text-ink-muted" />
                   </div>
                 </motion.div>
               )}

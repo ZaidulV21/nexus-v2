@@ -34,6 +34,9 @@ router.delete('/:id/image', authenticate, authorize('service.manage'), serviceCo
 router.patch('/:id/disable', authenticate, authorize('service.manage'), serviceController.disable);
 router.patch('/:id/archive', authenticate, authorize('service.manage'), serviceController.archive);
 router.patch('/:id/restore', authenticate, authorize('service.manage'), serviceController.restore);
+router.patch('/:id/publish', authenticate, authorize('service.manage'), serviceController.publish);
+router.patch('/:id/draft', authenticate, authorize('service.manage'), serviceController.draft);
+router.post('/bulk', authenticate, authorize('service.manage'), serviceController.bulk);
 router.delete('/:id', authenticate, authorize('service.manage'), serviceController.softDelete);
 router.post('/:id/undelete', authenticate, authorize('service.manage'), serviceController.undelete);
 router.post('/:id/duplicate', authenticate, authorize('service.manage'), serviceController.duplicate);
@@ -43,6 +46,7 @@ router.post('/:id/media/upload', authenticate, authorize('service.manage'), uplo
 router.post('/:id/media/:mediaId/poster', authenticate, authorize('service.manage'), upload.single('file'), serviceMediaController.uploadPoster);
 router.post('/:id/media', authenticate, authorize('service.manage'), serviceMediaController.create);
 router.patch('/:id/media/:mediaId', authenticate, authorize('service.manage'), serviceMediaController.update);
+router.patch('/:id/media/:mediaId/toggle-active', authenticate, authorize('service.manage'), serviceMediaController.toggleActive);
 router.post('/:id/media/reorder', authenticate, authorize('service.manage'), serviceMediaController.reorder);
 router.post('/:id/media/:mediaId/feature', authenticate, authorize('service.manage'), serviceMediaController.setFeatured);
 router.delete('/:id/media/:mediaId', authenticate, authorize('service.manage'), serviceMediaController.remove);
@@ -50,6 +54,7 @@ router.delete('/:id/media/:mediaId', authenticate, authorize('service.manage'), 
 // Sub-service admin routes
 router.post('/:id/sub-services', authenticate, authorize('service.manage'), subServiceController.create);
 router.post('/:id/sub-services/reorder', authenticate, authorize('service.manage'), subServiceController.reorder);
+router.post('/:id/sub-services/bulk', authenticate, authorize('service.manage'), subServiceController.bulk);
 router.put('/:id/sub-services/:subId', authenticate, authorize('service.manage'), subServiceController.update);
 router.patch('/:id/sub-services/:subId', authenticate, authorize('service.manage'), subServiceController.update);
 router.post(
@@ -63,6 +68,8 @@ router.delete('/:id/sub-services/:subId/image', authenticate, authorize('service
 router.patch('/:id/sub-services/:subId/disable', authenticate, authorize('service.manage'), subServiceController.disable);
 router.patch('/:id/sub-services/:subId/archive', authenticate, authorize('service.manage'), subServiceController.archive);
 router.patch('/:id/sub-services/:subId/restore', authenticate, authorize('service.manage'), subServiceController.restore);
+router.patch('/:id/sub-services/:subId/publish', authenticate, authorize('service.manage'), subServiceController.publish);
+router.patch('/:id/sub-services/:subId/draft', authenticate, authorize('service.manage'), subServiceController.draft);
 router.delete('/:id/sub-services/:subId', authenticate, authorize('service.manage'), subServiceController.softDelete);
 router.post('/:id/sub-services/:subId/undelete', authenticate, authorize('service.manage'), subServiceController.undelete);
 router.post('/:id/sub-services/:subId/duplicate', authenticate, authorize('service.manage'), subServiceController.duplicate);

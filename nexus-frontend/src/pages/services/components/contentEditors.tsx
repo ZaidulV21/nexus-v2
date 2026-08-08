@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Textarea } from '@/components/ui/Textarea';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/Select';
+import { RichTextEditor } from '@/components/rich-text/RichTextEditor';
 
 /** Shared shape for { title, description } process steps. */
 export interface ProcessStepValue {
@@ -136,15 +137,15 @@ export function ProcessEditor({
                 onChange(next);
               }}
             />
-            <Textarea
-              rows={2}
+            <RichTextEditor
               value={step.description}
-              placeholder="Describe this step"
-              onChange={(e) => {
+              onChange={(html) => {
                 const next = [...values];
-                next[index] = { ...step, description: e.target.value };
+                next[index] = { ...step, description: html };
                 onChange(next);
               }}
+              placeholder="Describe this step"
+              minHeight={100}
             />
           </div>
         </div>
@@ -194,15 +195,15 @@ export function FaqEditor({
                 onChange(next);
               }}
             />
-            <Textarea
-              rows={2}
+            <RichTextEditor
               value={faq.answer}
-              placeholder="Answer"
-              onChange={(e) => {
+              onChange={(html) => {
                 const next = [...values];
-                next[index] = { ...faq, answer: e.target.value };
+                next[index] = { ...faq, answer: html };
                 onChange(next);
               }}
+              placeholder="Answer"
+              minHeight={100}
             />
           </div>
         </div>

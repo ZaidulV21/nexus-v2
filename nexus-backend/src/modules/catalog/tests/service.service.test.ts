@@ -14,6 +14,10 @@ jest.mock('../service.repository', () => ({
     list: jest.fn(),
     getActiveQuestionnaire: jest.fn(),
     updateImage: jest.fn(),
+    publish: jest.fn(),
+    draft: jest.fn(),
+    findManyByIds: jest.fn(),
+    bulk: jest.fn(),
   },
 }));
 jest.mock('../category.repository', () => ({
@@ -295,6 +299,7 @@ describe('serviceService.duplicate', () => {
         categoryId: 'cat1',
         basePrice: 10000,
         isFeatured: true,
+        publicationState: 'DRAFT',
         features: ['HD cameras', 'Remote viewing'],
         whatsIncluded: ['Site survey'],
         process: [{ title: 'Survey', description: 'Map the site' }],
@@ -312,6 +317,124 @@ describe('serviceService.duplicate', () => {
   it('throws NotFoundError when the source service does not exist', async () => {
     (serviceRepository.findById as jest.Mock).mockResolvedValue(null);
     await expect(serviceService.duplicate('missing-id')).rejects.toThrow('Service not found');
+  });
+});
+
+describe('serviceService.publish / draft', () => {
+  it('publishes a service and records timeline + audit', async () => {
+    (serviceRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'svc1',
+      name: 'CCTV',
+      deletedAt: null,
+      publicationState: 'DRAFT',
+    });
+    (serviceRepository.publish as jest.Mock).mockResolvedValue({
+      id: 'svc1',
+      name: 'CCTV',
+      publicationState: 'PUBLISHED',
+    });
+
+    const result = await serviceService.publish('svc1', 'admin1');
+
+    expect(result).toMatchObject({ publicationState: 'PUBLISHED' });
+    expect(serviceRepository.publish).toHaveBeenCalledWith('svc1');
+    expect(auditService.recordAudit).toHaveBeenCalledWith(
+      expect.objectContaining({ entityType: 'SERVICE', entityId: 'svc1', action: 'PUBLISH' })
+    );
+  });
+
+  it('rejects publishing a non-existent service', async () => {
+    (serviceRepository.findById as jest.Mock).mockResolvedValue(null);
+    await expect(serviceService.publish('missing-id')).rejects.toThrow('Service not found');
+  });
+
+  it('rejects publishing a soft-deleted service', async () => {
+    (serviceRepository.findById as jest.Mock).mockResolvedValue({ id: 'svc1', name: 'CCTV', deletedAt: new Date() });
+    await expect(serviceService.publish('svc1')).rejects.toThrow('restore first');
+  });
+
+  it('moves a service to draft and records timeline + audit', async () => {
+    (serviceRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'svc1',
+      name: 'CCTV',
+      deletedAt: null,
+      publicationState: 'PUBLISHED',
+    });
+    (serviceRepository.draft as jest.Mock).mockResolvedValue({
+      id: 'svc1',
+      name: 'CCTV',
+      publicationState: 'DRAFT',
+    });
+
+    await serviceService.draft('svc1', 'admin1');
+
+    expect(serviceRepository.draft).toHaveBeenCalledWith('svc1');
+    expect(auditService.recordAudit).toHaveBeenCalledWith(
+      expect.objectContaining({ entityType: 'SERVICE', entityId: 'svc1', action: 'DRAFT' })
+    );
+  });
+});
+
+describe('serviceService.bulk', () => {
+  it('applies an action to every validated id and records timeline + audit', async () => {
+    (serviceRepository.findManyByIds as jest.Mock).mockResolvedValue([
+      { id: 'svc1', name: 'CCTV', deletedAt: null },
+      { id: 'svc2', name: 'Solar', deletedAt: null },
+    ]);
+    (serviceRepository.bulk as jest.Mock).mockResolvedValue([
+      { id: 'svc1', publicationState: 'DRAFT' },
+      { id: 'svc2', publicationState: 'DRAFT' },
+    ]);
+
+    const result = await serviceService.bulk(['svc1', 'svc2'], 'draft', 'admin1');
+
+    expect(result).toEqual({ items: [{ id: 'svc1', publicationState: 'DRAFT' }, { id: 'svc2', publicationState: 'DRAFT' }], count: 2 });
+    expect(serviceRepository.bulk).toHaveBeenCalledWith(['svc1', 'svc2'], 'draft');
+    expect(auditService.recordAudit).toHaveBeenCalledWith(
+      expect.objectContaining({ entityType: 'SERVICE', entityId: 'bulk', action: 'BULK_DRAFT' })
+    );
+  });
+
+  it('rejects bulk actions when some ids do not exist', async () => {
+    (serviceRepository.findManyByIds as jest.Mock).mockResolvedValue([{ id: 'svc1', deletedAt: null }]);
+    await expect(serviceService.bulk(['svc1', 'ghost'], 'archive')).rejects.toThrow('ghost');
+  });
+
+  it('rejects bulk actions on soft-deleted services', async () => {
+    (serviceRepository.findManyByIds as jest.Mock).mockResolvedValue([
+      { id: 'svc1', deletedAt: new Date() },
+    ]);
+    await expect(serviceService.bulk(['svc1'], 'delete')).rejects.toThrow('Soft-deleted services cannot be bulk-edited');
+  });
+
+  it('rejects an empty ids array', async () => {
+    await expect(serviceService.bulk([], 'publish')).rejects.toThrow('ids must be a non-empty array');
+  });
+});
+
+describe('serviceService.getById draft visibility', () => {
+  it('hides a draft service from public/anonymous callers', async () => {
+    (serviceRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'svc1',
+      name: 'CCTV',
+      deletedAt: null,
+      publicationState: 'DRAFT',
+    });
+    await expect(serviceService.getById('svc1')).rejects.toThrow('Service not found');
+  });
+
+  it('allows admins to fetch a draft service (preview flow)', async () => {
+    (serviceRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'svc1',
+      name: 'CCTV',
+      deletedAt: null,
+      publicationState: 'DRAFT',
+    });
+    (serviceRepository.usageCounts as jest.Mock).mockResolvedValue({ leadServices: 0, projectServices: 0, quotationItems: 0, total: 0 });
+
+    const result = await serviceService.getById('svc1', { id: 'admin1', type: 'ADMIN' });
+
+    expect(result).toMatchObject({ id: 'svc1', name: 'CCTV', publicationState: 'DRAFT' });
   });
 });
 

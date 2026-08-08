@@ -35,6 +35,40 @@ export function useCategoryTree() {
   });
 }
 
+function useInvalidateCategories() {
+  const queryClient = useQueryClient();
+  return () => {
+    queryClient.invalidateQueries({ queryKey: queryKeys.services.categories });
+    queryClient.invalidateQueries({ queryKey: queryKeys.services.all });
+  };
+}
+
+export function useCreateCategory() {
+  const invalidate = useInvalidateCategories();
+  return useMutation({
+    mutationFn: (input: { name: string; parentCategoryId?: string }) =>
+      serviceCatalogService.createCategory(input),
+    onSuccess: invalidate,
+  });
+}
+
+export function useUpdateCategory(id: string) {
+  const invalidate = useInvalidateCategories();
+  return useMutation({
+    mutationFn: (input: { name?: string; parentCategoryId?: string | null }) =>
+      serviceCatalogService.updateCategory(id, input),
+    onSuccess: invalidate,
+  });
+}
+
+export function useDisableCategory(id: string) {
+  const invalidate = useInvalidateCategories();
+  return useMutation({
+    mutationFn: () => serviceCatalogService.disableCategory(id),
+    onSuccess: invalidate,
+  });
+}
+
 export function useCreateService() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -106,6 +140,42 @@ export function useUndeleteService(serviceId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.services.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.timeline('SERVICE', serviceId) });
+    },
+  });
+}
+
+export function usePublishService(serviceId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => serviceCatalogService.publish(serviceId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.services.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.services.publicList });
+      queryClient.invalidateQueries({ queryKey: queryKeys.timeline('SERVICE', serviceId) });
+    },
+  });
+}
+
+export function useDraftService(serviceId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => serviceCatalogService.draft(serviceId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.services.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.services.publicList });
+      queryClient.invalidateQueries({ queryKey: queryKeys.timeline('SERVICE', serviceId) });
+    },
+  });
+}
+
+export function useBulkServices() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { ids: string[]; action: import('@/services/serviceCatalogService').BulkCatalogAction }) =>
+      serviceCatalogService.bulk(input.ids, input.action),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.services.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.services.publicList });
     },
   });
 }
@@ -185,6 +255,31 @@ export function useDuplicateSubService(serviceRef: string) {
   });
 }
 
+export function usePublishSubService(serviceRef: string, subId: string) {
+  const invalidate = useInvalidateSubServices(serviceRef);
+  return useMutation({
+    mutationFn: () => serviceCatalogService.publishSubService(serviceRef, subId),
+    onSuccess: (sub) => invalidate(sub.id),
+  });
+}
+
+export function useDraftSubService(serviceRef: string, subId: string) {
+  const invalidate = useInvalidateSubServices(serviceRef);
+  return useMutation({
+    mutationFn: () => serviceCatalogService.draftSubService(serviceRef, subId),
+    onSuccess: (sub) => invalidate(sub.id),
+  });
+}
+
+export function useBulkSubServices(serviceRef: string) {
+  const invalidate = useInvalidateSubServices(serviceRef);
+  return useMutation({
+    mutationFn: (input: { ids: string[]; action: import('@/services/serviceCatalogService').BulkCatalogAction }) =>
+      serviceCatalogService.bulkSubServices(serviceRef, input.ids, input.action),
+    onSuccess: () => invalidate(),
+  });
+}
+
 export function useReorderSubServices(serviceRef: string) {
   const invalidate = useInvalidateSubServices(serviceRef);
   return useMutation({
@@ -258,5 +353,13 @@ export function useDeleteServiceMedia(serviceRef: string, mediaId: string) {
   return useMutation({
     mutationFn: () => serviceCatalogService.deleteServiceMedia(serviceRef, mediaId),
     onSuccess: () => invalidate(),
+  });
+}
+
+export function useToggleServiceMediaActive(serviceRef: string, mediaId: string) {
+  const invalidate = useInvalidateServiceMedia(serviceRef);
+  return useMutation({
+    mutationFn: () => serviceCatalogService.toggleServiceMediaActive(serviceRef, mediaId),
+    onSuccess: (media) => invalidate(media.id),
   });
 }

@@ -3,6 +3,7 @@ import { Target, Users, Award, Handshake, Shield, Lightbulb } from 'lucide-react
 import { PageHero } from '../components/PageHero';
 import { CTASection } from '../sections/CTASection';
 import { usePublicCompany } from '../hooks';
+import { SeoHead, siteUrl } from '../seo';
 
 const values = [
   { icon: Target, title: 'Mission-Driven', description: 'We exist to simplify business infrastructure so our clients can focus on what they do best.' },
@@ -18,6 +19,11 @@ export function AboutPage() {
 
   return (
     <div>
+      <SeoHead
+        title={`About Us | ${company.name}`}
+        description={`${company.name} is a managed infrastructure platform${company.city ? ` headquartered in ${company.city}` : ''}. We coordinate trusted vendors for comprehensive business infrastructure projects.`}
+        canonical={siteUrl('/about')}
+      />
       <PageHero
         title={`About ${company.name}`}
         description={`${company.name} is a managed infrastructure platform${company.city ? ` headquartered in ${company.city}` : ''}. We coordinate trusted vendors for comprehensive business infrastructure projects.`}

@@ -12,12 +12,14 @@ import { QuotationsPage } from '@/pages/quotations/QuotationsPage';
 import { QuotationDetailPage } from '@/pages/quotations/QuotationDetailPage';
 import { ServicesPage as AdminServicesPage } from '@/pages/services/ServicesPage';
 import { ServiceDetailPage as AdminServiceDetailPage } from '@/pages/services/ServiceDetailPage';
+import { CategoriesPage } from '@/pages/categories/CategoriesPage';
 import { ProjectsPage as AdminProjectsPage } from '@/pages/projects/ProjectsPage';
 import { ProjectDetailPage as AdminProjectDetailPage } from '@/pages/projects/ProjectDetailPage';
 import { InvoicesPage } from '@/pages/invoices/InvoicesPage';
 import { PaymentsPage } from '@/pages/payments/PaymentsPage';
 import { InvoiceDetailPage } from '@/pages/invoices/InvoiceDetailPage';
 import { MessagesPage } from '@/pages/messages/MessagesPage';
+import { SupportInboxPage } from '@/pages/support/SupportInboxPage';
 import { DocumentsPage } from '@/pages/documents/DocumentsPage';
 import { TimelinePage } from '@/pages/timeline/TimelinePage';
 import { NotificationsPage } from '@/pages/notifications/NotificationsPage';
@@ -110,12 +112,14 @@ export default function App() {
           <Route path="quotations/:id" element={<QuotationDetailPage />} />
           <Route path="services" element={<AdminServicesPage />} />
           <Route path="services/:id" element={<AdminServiceDetailPage />} />
+          <Route path="categories" element={<CategoriesPage />} />
           <Route path="projects" element={<AdminProjectsPage />} />
           <Route path="projects/:id" element={<AdminProjectDetailPage />} />
           <Route path="invoices" element={<InvoicesPage />} />
           <Route path="invoices/:id" element={<InvoiceDetailPage />} />
           <Route path="payments" element={<PaymentsPage />} />
           <Route path="messages" element={<MessagesPage />} />
+          <Route path="support" element={<SupportInboxPage />} />
           <Route path="documents" element={<DocumentsPage />} />
           <Route path="notifications" element={<NotificationsPage />} />
           <Route path="timeline" element={<TimelinePage />} />

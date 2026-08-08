@@ -26,8 +26,8 @@ docker compose up -d
 ```bash
 npm install
 cp .env.example .env
+npx prisma migrate deploy
 npx prisma generate
-npx prisma migrate dev --name init
 npm run prisma:seed
 ```
 The seed command prints an Admin login (`admin@nexus.local` / a generated password, or your own via `SEED_ADMIN_EMAIL`/`SEED_ADMIN_PASSWORD`) and creates your 6 baseline services.
@@ -80,9 +80,13 @@ npm install
 cp .env.example .env
 # Edit .env: set DATABASE_URL to your Postgres instance, set JWT_SECRET
 
-# 3. Generate Prisma client and run the first migration
+# 3. Apply the baseline migration and generate the Prisma client
+#    The migration history is a single machine-generated baseline
+#    (prisma/migrations/20260701000000_initial_baseline). On a brand-new DB,
+#    `migrate deploy` applies it; to rebuild an existing dev DB from scratch,
+#    use `npx prisma migrate reset --force --skip-seed` instead.
+npx prisma migrate deploy
 npx prisma generate
-npx prisma migrate dev --name init
 
 # 4. Seed permissions, a default Admin user, and baseline service catalog
 npm run prisma:seed
@@ -130,8 +134,8 @@ A deeper black-box regression suite (`scripts/regression-run.js` + `scripts/regr
 - Test 1 — multi-service/multi-sub full lineage (Electrical → Wiring + DB Panel + Website) through to a project with derived `project_sub_services` rows.
 - Test 2 — single-service lineage (Interior → Painting).
 - Test 3 — manual quotation create, revise/edit/delete items with grand-total recompute, and all validation negatives (missing client, empty items, mismatched/inactive sub-service).
-- Test 4 — pre-Phase-8 quotations still render, revise, approve, send, and show in the client portal.
-- Test 5 — pre-Phase-9 projects still render, run the service status workflow, and show in the client portal.
+- Test 4 — pre-Phase-8 quotations still render, revise, approve, send, and show in the client portal (synthesises a legacy-shaped quotation — all items without `subServiceId` — if the baseline has none).
+- Test 5 — pre-Phase-9 projects still render, run the service status workflow, and show in the client portal (falls back to a project created earlier in the same run when no pre-Phase-9 project exists).
 - Test 6 — invoice creation from new + existing projects with quotation totals unchanged.
 - Test 7 — repeat enquiries convert to the SAME client (no duplicate accounts) and service history spans multiple conversions.
 - Test 8 — timeline/audit events contain no duplicates (esp. a single `QUOTATION_ACCEPTED`).
@@ -148,11 +152,11 @@ npm run regression:test
 Equivalent direct invocation: `node scripts/regression-run.js`. Each run creates fresh Leads/Clients/Quotations/Invoices, so it is safe to re-run repeatedly. It exits non-zero if any check fails and prints `PASS`/`FAIL` per check with a summary (expect `83/83` on a healthy build).
 
 **Environment requirements:**
-- Backend running on `http://localhost:4000` (see `NEXUS_BASE_URL` in `regression-helpers.js`).
+- Backend running on `http://localhost:4000` (see `BASE` in `regression-helpers.js`).
 - A real Postgres database (the harness reads/writes via Prisma directly, e.g. for client passwords and Test 9's integrity scan).
 - Seeded Admin login `admin@nexus.local` / `ChangeMe123!` (or match the credentials in `regression-helpers.js`).
 - Node 18+ (uses the built-in `fetch`).
-- The service-catalog IDs (Interior/Electrical/Website/CCTV/Painting/Flooring/Lighting) and the inactive CCTV sub-service referenced in the harness must exist in the DB.
+- The seeded service catalog (Interior/Electrical/Website/CCTV) must exist. The harness resolves these **by slug** and creates the sub-services it depends on (Painting/Flooring/Lighting under Interior, plus an inactive CCTV sub) on demand, so it works against a fresh `prisma migrate reset` + seed without hard-coded UUIDs.
 
 ## Project structure
 

@@ -5,13 +5,17 @@ import {
   ArchiveRestore,
   ChevronDown,
   ChevronUp,
+  Eye,
+  EyeOff,
   Pencil,
   Plus,
   RotateCcw,
   Trash2,
+  X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { DataTable } from '@/components/ui/DataTable';
+import { Checkbox } from '@/components/ui/Checkbox';
 import { SearchInput } from '@/components/ui/SearchInput';
 import { FilterBar, type ActiveFilter } from '@/components/ui/FilterBar';
 import { Badge } from '@/components/ui/StatusBadge';
@@ -28,12 +32,16 @@ import {
   useSoftDeleteSubService,
   useUndeleteSubService,
   useReorderSubServices,
+  usePublishSubService,
+  useDraftSubService,
+  useBulkSubServices,
 } from '@/queries/useServices';
 import { ApiError } from '@/lib/api';
 import { formatDate } from '@/lib/format';
 import type { Service, SubService } from '@/types';
-import type { SubServiceStatusFilter } from '@/services/serviceCatalogService';
+import type { SubServiceStatusFilter, PublicationFilter, BulkCatalogAction } from '@/services/serviceCatalogService';
 import { SubServiceFormDrawer } from './SubServiceFormDrawer';
+import { PublicationStatePill } from '../ServicesPage';
 
 const STATUS_OPTIONS: Array<{ value: SubServiceStatusFilter; label: string }> = [
   { value: 'ALL', label: 'All statuses' },
@@ -41,6 +49,21 @@ const STATUS_OPTIONS: Array<{ value: SubServiceStatusFilter; label: string }> = 
   { value: 'INACTIVE', label: 'Inactive' },
   { value: 'ARCHIVED', label: 'Archived' },
   { value: 'DELETED', label: 'Deleted' },
+];
+
+const PUBLICATION_OPTIONS: Array<{ value: PublicationFilter; label: string }> = [
+  { value: 'ALL', label: 'All publication states' },
+  { value: 'PUBLISHED', label: 'Published' },
+  { value: 'DRAFT', label: 'Drafts' },
+];
+
+const BULK_OPTIONS: Array<{ value: BulkCatalogAction; label: string; destructive?: boolean }> = [
+  { value: 'publish', label: 'Publish' },
+  { value: 'draft', label: 'Move to draft' },
+  { value: 'activate', label: 'Activate' },
+  { value: 'deactivate', label: 'Deactivate' },
+  { value: 'archive', label: 'Archive', destructive: true },
+  { value: 'delete', label: 'Delete', destructive: true },
 ];
 
 export function SubServiceStatusPill({
@@ -61,6 +84,60 @@ interface ConfirmTarget {
   kind: ConfirmKind;
 }
 
+function SubPublishButton({ sub, serviceRef }: { sub: SubService; serviceRef: string }) {
+  const { toast } = useToast();
+  const publishMutation = usePublishSubService(serviceRef, sub.id);
+  async function handle() {
+    try {
+      await publishMutation.mutateAsync();
+      toast({ title: 'Sub-service published', description: `"${sub.name}" is now live on the public site.`, variant: 'success' });
+    } catch (err) {
+      toast({
+        title: 'Could not publish sub-service',
+        description: err instanceof ApiError ? err.message : 'Something went wrong.',
+        variant: 'danger',
+      });
+    }
+  }
+  return (
+    <button
+      onClick={handle}
+      disabled={publishMutation.isPending}
+      title="Publish (visible on public site)"
+      className="flex h-7 w-7 items-center justify-center rounded-md text-ink-faint transition-colors hover:bg-canvas hover:text-success disabled:opacity-50"
+    >
+      <Eye className="h-3.5 w-3.5" />
+    </button>
+  );
+}
+
+function SubDraftButton({ sub, serviceRef }: { sub: SubService; serviceRef: string }) {
+  const { toast } = useToast();
+  const draftMutation = useDraftSubService(serviceRef, sub.id);
+  async function handle() {
+    try {
+      await draftMutation.mutateAsync();
+      toast({ title: 'Sub-service moved to draft', description: `"${sub.name}" is no longer visible on the public site.`, variant: 'success' });
+    } catch (err) {
+      toast({
+        title: 'Could not move sub-service to draft',
+        description: err instanceof ApiError ? err.message : 'Something went wrong.',
+        variant: 'danger',
+      });
+    }
+  }
+  return (
+    <button
+      onClick={handle}
+      disabled={draftMutation.isPending}
+      title="Move to draft (hidden from public site)"
+      className="flex h-7 w-7 items-center justify-center rounded-md text-ink-faint transition-colors hover:bg-canvas hover:text-warning disabled:opacity-50"
+    >
+      <EyeOff className="h-3.5 w-3.5" />
+    </button>
+  );
+}
+
 const CONFIRM_LABELS: Record<ConfirmKind, { title: string; confirm: string; destructive: boolean }> = {
   archive: { title: 'Archive this sub-service?', confirm: 'Archive', destructive: true },
   restore: { title: 'Restore this sub-service?', confirm: 'Restore', destructive: false },
@@ -75,6 +152,10 @@ export function SubServicesTab({ service }: { service: Service }) {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<SubServiceStatusFilter>('ALL');
+  const [publication, setPublication] = useState<PublicationFilter>('ALL');
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkAction, setBulkAction] = useState<BulkCatalogAction | ''>('');
+  const [bulkConfirm, setBulkConfirm] = useState(false);
   const debouncedSearch = useDebounce(search, 350);
 
   const createDrawer = useDisclosure(false);
@@ -87,6 +168,7 @@ export function SubServicesTab({ service }: { service: Service }) {
     pageSize: 100,
     search: debouncedSearch || undefined,
     status,
+    publication: publication === 'ALL' ? undefined : publication,
   });
 
   const archiveMutation = useArchiveSubService(serviceRef, confirm?.sub.id ?? '');
@@ -94,15 +176,67 @@ export function SubServicesTab({ service }: { service: Service }) {
   const softDeleteMutation = useSoftDeleteSubService(serviceRef, confirm?.sub.id ?? '');
   const undeleteMutation = useUndeleteSubService(serviceRef, confirm?.sub.id ?? '');
   const reorderMutation = useReorderSubServices(serviceRef);
+  const bulkMutation = useBulkSubServices(serviceRef);
 
   const canReorder =
-    status === 'ALL' && !debouncedSearch && (data?.meta.totalPages ?? 1) <= 1;
+    status === 'ALL' && publication === 'ALL' && !debouncedSearch && (data?.meta.totalPages ?? 1) <= 1;
 
   const activeFilters: ActiveFilter[] = [
     ...(status !== 'ALL'
       ? [{ key: 'status', label: `Status: ${STATUS_OPTIONS.find((o) => o.value === status)?.label}` }]
       : []),
+    ...(publication !== 'ALL'
+      ? [{ key: 'publication', label: `Publication: ${PUBLICATION_OPTIONS.find((o) => o.value === publication)?.label}` }]
+      : []),
   ];
+
+  const currentIds = useMemo(() => (data?.items ?? []).map((s) => s.id), [data]);
+
+  function toggleSelected(id: string, checked: boolean) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll(checked: boolean) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      currentIds.forEach((id) => (checked ? next.add(id) : next.delete(id)));
+      return next;
+    });
+  }
+
+  async function handleBulkApply() {
+    if (!bulkAction || selected.size === 0) return;
+    try {
+      const result = await bulkMutation.mutateAsync({ ids: [...selected], action: bulkAction });
+      toast({
+        title: 'Bulk action complete',
+        description: `${result.updatedCount} of ${selected.size} selected sub-service(s) were updated.`,
+        variant: 'success',
+      });
+      setSelected(new Set());
+      setBulkAction('');
+      setBulkConfirm(false);
+    } catch (err) {
+      toast({
+        title: 'Bulk action failed',
+        description: err instanceof ApiError ? err.message : 'Something went wrong.',
+        variant: 'danger',
+      });
+    }
+  }
+
+  function handleBulkSelect(value: string) {
+    const action = value as BulkCatalogAction;
+    setBulkAction(action);
+    const isDestructive = BULK_OPTIONS.find((o) => o.value === action)?.destructive;
+    if (isDestructive) setBulkConfirm(true);
+    else void handleBulkApply();
+  }
 
   async function handleReorder(sub: SubService, direction: 'up' | 'down') {
     const ordered = [...(data?.items ?? [])];
@@ -154,6 +288,25 @@ export function SubServicesTab({ service }: { service: Service }) {
   const columns = useMemo<ColumnDef<SubService, any>[]>(
     () => [
       {
+        id: 'select',
+        header: () => (
+          <Checkbox
+            checked={currentIds.length > 0 && currentIds.every((id) => selected.has(id))}
+            onCheckedChange={(checked) => toggleSelectAll(checked === true)}
+            aria-label="Select all sub-services on this page"
+          />
+        ),
+        cell: (info) => (
+          <div onClick={(e) => e.stopPropagation()}>
+            <Checkbox
+              checked={selected.has(info.row.original.id)}
+              onCheckedChange={(checked) => toggleSelected(info.row.original.id, checked === true)}
+              aria-label={`Select ${info.row.original.name}`}
+            />
+          </div>
+        ),
+      },
+      {
         accessorKey: 'name',
         header: 'Sub Service',
         cell: (info) => (
@@ -187,7 +340,12 @@ export function SubServicesTab({ service }: { service: Service }) {
       {
         id: 'status',
         header: 'Status',
-        cell: (info) => <SubServiceStatusPill sub={info.row.original} />,
+        cell: (info) => (
+          <div className="flex items-center gap-1.5">
+            <SubServiceStatusPill sub={info.row.original} />
+            <PublicationStatePill publicationState={info.row.original.publicationState} />
+          </div>
+        ),
       },
       {
         accessorKey: 'sortOrder',
@@ -205,7 +363,7 @@ export function SubServicesTab({ service }: { service: Service }) {
         ),
       },
     ],
-    []
+    [selected, currentIds]
   );
 
   return (
@@ -231,12 +389,14 @@ export function SubServicesTab({ service }: { service: Service }) {
           activeFilters={activeFilters}
           onRemoveFilter={(key) => {
             if (key === 'status') setStatus('ALL');
+            if (key === 'publication') setPublication('ALL');
             setPage(1);
           }}
           onClearAll={
             activeFilters.length
               ? () => {
                   setStatus('ALL');
+                  setPublication('ALL');
                   setPage(1);
                 }
               : undefined
@@ -260,8 +420,55 @@ export function SubServicesTab({ service }: { service: Service }) {
               ))}
             </SelectContent>
           </Select>
+
+          <Select
+            value={publication}
+            onValueChange={(value) => {
+              setPublication(value as PublicationFilter);
+              setPage(1);
+            }}
+          >
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="Publication" />
+            </SelectTrigger>
+            <SelectContent>
+              {PUBLICATION_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </FilterBar>
       </div>
+
+      {selected.size > 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-3 rounded-md border border-border bg-surface px-3 py-2.5 shadow-xs">
+          <span className="text-sm font-medium text-ink">
+            {selected.size} selected
+            <button
+              onClick={() => setSelected(new Set())}
+              className="ml-2 inline-flex items-center gap-1 text-xs text-ink-faint transition-colors hover:text-danger"
+            >
+              <X className="h-3 w-3" /> Clear
+            </button>
+          </span>
+          <div className="ml-auto flex items-center gap-2">
+            <Select value={bulkAction} onValueChange={handleBulkSelect}>
+              <SelectTrigger className="w-44">
+                <SelectValue placeholder="Bulk action" />
+              </SelectTrigger>
+              <SelectContent>
+                {BULK_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      )}
 
       <DataTable
         columns={columns}
@@ -313,6 +520,12 @@ export function SubServicesTab({ service }: { service: Service }) {
                       <ChevronDown className="h-3.5 w-3.5" />
                     </button>
                   </>
+                )}
+                {sub.publicationState === 'DRAFT' && !sub.archivedAt && (
+                  <SubPublishButton sub={sub} serviceRef={serviceRef} />
+                )}
+                {sub.publicationState !== 'DRAFT' && !sub.archivedAt && (
+                  <SubDraftButton sub={sub} serviceRef={serviceRef} />
                 )}
                 <button
                   onClick={() => {
@@ -411,6 +624,20 @@ export function SubServicesTab({ service }: { service: Service }) {
           onConfirm={handleConfirm}
         />
       )}
+
+      <ConfirmDialog
+        open={bulkConfirm}
+        onOpenChange={(open) => {
+          setBulkConfirm(open);
+          if (!open) setBulkAction('');
+        }}
+        title="Confirm bulk action"
+        description={`This will ${BULK_OPTIONS.find((o) => o.value === bulkAction)?.label.toLowerCase() ?? 'update'} ${selected.size} selected sub-service(s). This cannot be undone.`}
+        confirmLabel="Confirm"
+        destructive={BULK_OPTIONS.find((o) => o.value === bulkAction)?.destructive}
+        loading={bulkMutation.isPending}
+        onConfirm={handleBulkApply}
+      />
     </div>
   );
 }

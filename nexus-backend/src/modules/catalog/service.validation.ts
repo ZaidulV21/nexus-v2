@@ -49,11 +49,13 @@ export const createServiceSchema = z.object({
   metaKeywords: z.string().max(300).optional(),
   ogImage: z.string().url().optional().or(z.literal('')),
   canonicalUrl: z.string().url().optional().or(z.literal('')),
+  structuredData: z.union([z.record(z.unknown()), z.array(z.record(z.unknown()))]).optional(),
   features: z.array(z.string().min(1).max(500)).max(100).optional(),
   whatsIncluded: z.array(z.string().min(1).max(500)).max(100).optional(),
   process: z.array(processStepSchema).max(50).optional(),
   faqs: z.array(faqSchema).max(100).optional(),
   testimonials: z.array(testimonialSchema).max(100).optional(),
+  publicationState: z.enum(['DRAFT', 'PUBLISHED']).optional(),
 });
 
 export const updateServiceSchema = createServiceSchema.partial().extend({
@@ -65,4 +67,20 @@ export const serviceListFiltersSchema = z.object({
   categoryId: z.string().min(1).optional(),
   featured: z.enum(['true', 'false']).transform((v) => v === 'true').optional(),
   popular: z.enum(['true', 'false']).transform((v) => v === 'true').optional(),
+  publication: z.enum(['ALL', 'DRAFT', 'PUBLISHED']).optional(),
+});
+
+// Shared payload for the bulk-action endpoints (services + sub-services).
+export const bulkCatalogActionSchema = z.object({
+  ids: z.array(z.string().min(1)).min(1).max(100),
+  action: z.enum([
+    'archive',
+    'restore',
+    'delete',
+    'undelete',
+    'activate',
+    'deactivate',
+    'publish',
+    'draft',
+  ]),
 });

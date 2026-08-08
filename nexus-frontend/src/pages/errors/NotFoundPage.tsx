@@ -2,10 +2,12 @@ import { Link } from 'react-router-dom';
 import { CompassIcon } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { ROUTES } from '@/routes/routes';
+import { SeoHead } from '@/public-site/seo';
 
 export function NotFoundPage() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-canvas px-6 text-center">
+      <SeoHead title="Page Not Found" noindex />
       <div className="flex h-11 w-11 items-center justify-center rounded-full bg-canvas ring-1 ring-border">
         <CompassIcon className="h-5 w-5 text-ink-faint" strokeWidth={1.75} />
       </div>

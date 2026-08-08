@@ -10,16 +10,54 @@ const ADMIN_EMAIL = 'admin@nexus.local';
 const ADMIN_PASSWORD = 'ChangeMe123!';
 const TEST_PASSWORD = 'RegressionPass!123';
 
-// Catalog ids (verified against the live DB)
-const INTERIOR = '7748995b-f0d6-4948-a3f3-7939b321667b';
-const ELECTRICAL = '474f86bc-fef2-431b-8239-6f2157f49e71';
-const WEBSITE = '4bc69d5a-73ce-4a24-b94d-061d23ce6e70';
-const CCTV = '17898915-f8ca-42e7-af0c-d7826c6da523';
-const PAINTING = '91d89094-802a-4e27-b8d4-77427bcabdc7';
-const FLOORING = '68092941-40a4-4ecc-8581-c128a1d8bdd8';
-const LIGHTING = '61c6f50d-8e70-44e1-a55b-53e1eca55ab2';
-const OFFICE_FITOUT = 'f73dfc4a-7647-4a04-ae78-7f9612c09f65';
-const INACTIVE_CCTV_SUB = '78eab0fd-0dc4-4e44-9c6c-434c29b4226f';
+// Catalog ids are resolved by slug against the live DB (see resolveCatalog)
+// so the harness is idempotent against a clean baseline - a `prisma migrate
+// reset` regenerates every UUID, so hard-coding them would leave the harness
+// permanently broken after a reset. Sub-services that the seed does not ship
+// (Painting/Flooring/Lighting under Interior, an inactive CCTV sub) are
+// created on demand, mirroring what Test 1 does for Wiring/DB Panel.
+const SERVICE_SLUGS = {
+  INTERIOR: 'interior-design',
+  ELECTRICAL: 'electrical-work',
+  WEBSITE: 'website-it-services',
+  CCTV: 'cctv-installation',
+};
+
+// { name, slug, isActive } for sub-services the harness depends on, keyed by
+// the exported constant name. Slugs are unique per parent service.
+const SUB_SERVICE_FIXTURES = {
+  PAINTING: { name: 'Painting', slug: 'interior-painting', isActive: true },
+  FLOORING: { name: 'Flooring', slug: 'interior-flooring', isActive: true },
+  LIGHTING: { name: 'Lighting', slug: 'interior-lighting', isActive: true },
+  INACTIVE_CCTV_SUB: { name: 'Inactive CCTV sub-service', slug: 'cctv-inactive-sub', isActive: false },
+};
+
+const catalog = {};
+
+async function ensureSubService(serviceId, { name, slug, isActive }) {
+  const row = await prisma.subService.upsert({
+    where: { serviceId_slug: { serviceId, slug } },
+    update: { name, isActive },
+    create: { serviceId, name, slug, isActive },
+  });
+  return row.id;
+}
+
+// Populates `catalog` and returns a snapshot of the resolved ids. Must be
+// awaited in main() before any test runs; the tests read the module-level
+// constants in regression-run.js, which are assigned from the snapshot.
+async function resolveCatalog() {
+  for (const [key, slug] of Object.entries(SERVICE_SLUGS)) {
+    const svc = await prisma.service.findFirst({ where: { slug, isActive: true } });
+    if (!svc) throw new Error(`resolveCatalog: seed is missing active service with slug="${slug}" (re-run prisma db seed)`);
+    catalog[key] = svc.id;
+  }
+  for (const [key, fixture] of Object.entries(SUB_SERVICE_FIXTURES)) {
+    const parentKey = key === 'INACTIVE_CCTV_SUB' ? 'CCTV' : 'INTERIOR';
+    catalog[key] = await ensureSubService(catalog[parentKey], fixture);
+  }
+  return { ...catalog };
+}
 
 function check(name, ok, details) {
   results.push({ name, ok: !!ok, details });
@@ -101,7 +139,6 @@ function summary() {
 }
 
 module.exports = {
-  prisma, check, req, loginAdmin, setClientPassword, loginClient, qualifyLeadServices, summary,
+  prisma, check, req, loginAdmin, setClientPassword, loginClient, qualifyLeadServices, summary, resolveCatalog,
   BASE, ADMIN_EMAIL, ADMIN_PASSWORD, TEST_PASSWORD,
-  INTERIOR, ELECTRICAL, WEBSITE, CCTV, PAINTING, FLOORING, LIGHTING, OFFICE_FITOUT, INACTIVE_CCTV_SUB,
 };

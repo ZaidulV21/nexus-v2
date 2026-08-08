@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+// Shared bulk-action payload, defined alongside the service validation.
+export { bulkCatalogActionSchema } from './service.validation';
+
 // Same rules as the service slug: lowercase letters, numbers, single hyphens.
 export const subServiceSlugSchema = z
   .string()
@@ -38,6 +41,8 @@ export const createSubServiceSchema = z.object({
   metaKeywords: z.string().max(300).optional(),
   ogImage: z.string().url().optional().or(z.literal('')),
   canonicalUrl: z.string().url().optional().or(z.literal('')),
+  structuredData: z.union([z.record(z.unknown()), z.array(z.record(z.unknown()))]).optional(),
+  publicationState: z.enum(['DRAFT', 'PUBLISHED']).optional(),
 });
 
 export const updateSubServiceSchema = createSubServiceSchema.partial();
@@ -45,6 +50,7 @@ export const updateSubServiceSchema = createSubServiceSchema.partial();
 export const subServiceListFiltersSchema = z.object({
   status: z.enum(['ALL', 'ACTIVE', 'INACTIVE', 'ARCHIVED', 'DELETED']).optional(),
   search: z.string().max(120).optional(),
+  publication: z.enum(['ALL', 'DRAFT', 'PUBLISHED']).optional(),
 });
 
 export const subServiceReorderSchema = z.object({

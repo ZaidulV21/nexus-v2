@@ -1,11 +1,17 @@
 import { subServiceRepository } from './subService.repository';
 import { serviceRepository } from './service.repository';
-import { CreateSubServiceInput, UpdateSubServiceInput, SubServiceListFilters } from './catalog.types';
+import {
+  CreateSubServiceInput,
+  UpdateSubServiceInput,
+  SubServiceListFilters,
+  BulkCatalogAction,
+} from './catalog.types';
 import { PaginationParams } from '../../core/utils/pagination';
 import { ConflictError, NotFoundError, ValidationError } from '../../core/errors/AppError';
 import { timelineService } from '../timeline/timeline.service';
 import { auditService } from '../audit/audit.service';
 import { slugify } from './service.service';
+import { sanitizeRichText } from './richText.util';
 
 // Every image slot the CMS can manage on a sub-service. `gallery` is a
 // multi-image JSON array (uploads append, removals filter by URL).
@@ -140,6 +146,101 @@ export const subServiceService = {
     return updated;
   },
 
+  async publish(id: string, actorUserId?: string) {
+    const existing = await subServiceRepository.findById(id);
+    if (!existing) throw new NotFoundError('Sub-service not found');
+    if (existing.deletedAt) throw new ValidationError('Deleted sub-services cannot be published - restore first');
+
+    const updated = await subServiceRepository.publish(id);
+
+    await timelineService.recordEvent({
+      entityType: 'SUB_SERVICE',
+      entityId: id,
+      eventType: 'SUB_SERVICE_PUBLISHED',
+      description: `Sub-service "${existing.name}" was published to the website`,
+      actorUserId,
+    });
+
+    await auditService.recordAudit({
+      entityType: 'SUB_SERVICE',
+      entityId: id,
+      action: 'PUBLISH',
+      beforeState: { publicationState: existing.publicationState },
+      afterState: { publicationState: 'PUBLISHED' },
+      actorUserId,
+    });
+
+    return updated;
+  },
+
+  async draft(id: string, actorUserId?: string) {
+    const existing = await subServiceRepository.findById(id);
+    if (!existing) throw new NotFoundError('Sub-service not found');
+    if (existing.deletedAt) throw new ValidationError('Deleted sub-services cannot be moved to draft - restore first');
+
+    const updated = await subServiceRepository.draft(id);
+
+    await timelineService.recordEvent({
+      entityType: 'SUB_SERVICE',
+      entityId: id,
+      eventType: 'SUB_SERVICE_DRAFTED',
+      description: `Sub-service "${existing.name}" was moved to draft and is hidden from the website`,
+      actorUserId,
+    });
+
+    await auditService.recordAudit({
+      entityType: 'SUB_SERVICE',
+      entityId: id,
+      action: 'DRAFT',
+      beforeState: { publicationState: existing.publicationState },
+      afterState: { publicationState: 'DRAFT' },
+      actorUserId,
+    });
+
+    return updated;
+  },
+
+  // Bulk operations drive the sub-services toolbar. All ids must belong to
+  // this service and be in a mutable state before the transaction runs.
+  async bulk(serviceRef: string, ids: string[], action: BulkCatalogAction, actorUserId?: string) {
+    const service = await this.resolveService(serviceRef);
+    if (!service) throw new NotFoundError('Service not found');
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      throw new ValidationError('ids must be a non-empty array');
+    }
+
+    const rows = await subServiceRepository.findManyByIds(service.id, ids);
+    if (rows.length !== ids.length) {
+      const missing = ids.filter((id) => !rows.some((r) => r.id === id));
+      throw new NotFoundError(`Some sub-services were not found: ${missing.join(', ')}`);
+    }
+    if (rows.some((r) => r.deletedAt)) {
+      throw new ValidationError('Soft-deleted sub-services cannot be bulk-edited - restore them individually first');
+    }
+
+    const updated = await subServiceRepository.bulk(service.id, ids, action);
+
+    await timelineService.recordEvent({
+      entityType: 'SUB_SERVICE',
+      entityId: service.id,
+      eventType: 'SUB_SERVICE_BULK',
+      description: `Bulk ${action} applied to ${updated.length} sub-service(s) under "${service.name}"`,
+      actorUserId,
+      metadata: { ids, count: updated.length },
+    });
+
+    await auditService.recordAudit({
+      entityType: 'SUB_SERVICE',
+      entityId: service.id,
+      action: `BULK_${action.toUpperCase()}`,
+      afterState: { ids, count: updated.length },
+      actorUserId,
+    });
+
+    return { items: updated, count: updated.length };
+  },
+
   async archive(id: string, actorUserId?: string) {
     const existing = await subServiceRepository.findById(id);
     if (!existing) throw new NotFoundError('Sub-service not found');
@@ -249,7 +350,8 @@ export const subServiceService = {
   },
 
   // Duplicates every content field into a new draft (name + " (Copy)") so the
-  // admin gets a ready-to-edit starting point.
+  // admin gets a ready-to-edit starting point. Rich text is sanitized on the
+  // way through so scripts never propagate into the copied record.
   async duplicate(id: string, actorUserId?: string) {
     const existing = await subServiceRepository.findById(id);
     if (!existing) throw new NotFoundError('Sub-service not found');
@@ -259,7 +361,7 @@ export const subServiceService = {
       name,
       slug: await this.ensureUniqueSlug(existing.serviceId, slugify(name)),
       shortDescription: existing.shortDescription ?? undefined,
-      description: existing.description ?? undefined,
+      description: sanitizeRichText(existing.description) || undefined,
       icon: existing.icon ?? undefined,
       heroImage: existing.heroImage ?? undefined,
       gallery: (existing.gallery as string[]) ?? undefined,
@@ -276,6 +378,10 @@ export const subServiceService = {
       ogImage: existing.ogImage ?? undefined,
       canonicalUrl: existing.canonicalUrl ?? undefined,
     };
+
+    // Duplicates are always created as drafts so they never surface on the
+    // public site before the admin has finished editing them.
+    input.publicationState = 'DRAFT';
 
     const subService = await subServiceRepository.create(existing.serviceId, input);
 
@@ -306,6 +412,11 @@ export const subServiceService = {
     // Soft-deleted rows are only reachable by authenticated admins (restore
     // flow); anonymous/public callers get a 404.
     if (subService.deletedAt && actorUser?.type !== 'ADMIN') {
+      throw new NotFoundError('Sub-service not found');
+    }
+
+    // Drafts are invisible to everyone except admins.
+    if (subService.publicationState === 'DRAFT' && actorUser?.type !== 'ADMIN') {
       throw new NotFoundError('Sub-service not found');
     }
 

@@ -10,7 +10,9 @@ import { Textarea } from '@/components/ui/Textarea';
 import { FormField } from '@/components/ui/FormField';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/Select';
 import { Switch } from '@/components/ui/Switch';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/Tabs';
 import { Skeleton } from '@/components/ui/Skeleton';
+import { RichTextEditor } from '@/components/rich-text/RichTextEditor';
 import { useCategoryTree, useCreateService, useUpdateService } from '@/queries/useServices';
 import {
   serviceCatalogService,
@@ -21,9 +23,10 @@ import {
 import { useToast } from '@/hooks/useToast';
 import { ApiError } from '@/lib/api';
 import { slugify } from '@/lib/utils';
+import { normalizeRichText } from '@/lib/richText';
 import { SERVICE_ICON_OPTIONS, ServiceIcon } from '@/components/common/ServiceIcon';
 import { StringListEditor, ProcessEditor, FaqEditor, TestimonialsEditor } from './contentEditors';
-import type { Category, Service, ServiceProcessStep, ServiceFaq, ServiceTestimonial } from '@/types';
+import type { Category, Service, ServiceProcessStep, ServiceFaq, ServiceTestimonial, PublicationState } from '@/types';
 
 const IMAGE_FIELD_META: Record<ServiceImageField, { label: string; hint: string }> = {
   imageUrl: { label: 'Service image', hint: 'Card thumbnail on the website' },
@@ -51,11 +54,13 @@ const serviceFormSchema = z.object({
   isFeatured: z.boolean().optional(),
   isPopular: z.boolean().optional(),
   isActive: z.boolean().optional(),
+  publicationState: z.enum(['DRAFT', 'PUBLISHED']).optional(),
   sortOrder: z.string().optional(),
   seoTitle: z.string().max(160).optional(),
   metaDescription: z.string().max(300).optional(),
   metaKeywords: z.string().max(300).optional(),
   canonicalUrl: z.string().url('Enter a valid URL').optional().or(z.literal('')),
+  structuredData: z.string().optional(),
 });
 
 type ServiceFormValues = z.infer<typeof serviceFormSchema>;
@@ -65,6 +70,11 @@ const SITE_VISIT_OPTIONS = [
   { value: 'YES', label: 'Always required' },
   { value: 'NO', label: 'Never required' },
 ] as const;
+
+const PUBLICATION_OPTIONS: Array<{ value: PublicationState; label: string }> = [
+  { value: 'PUBLISHED', label: 'Published (visible on website)' },
+  { value: 'DRAFT', label: 'Draft (hidden until published)' },
+];
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
@@ -91,11 +101,13 @@ function toFormValues(service?: Service): ServiceFormValues {
     isFeatured: service?.isFeatured ?? false,
     isPopular: service?.isPopular ?? false,
     isActive: service?.isActive ?? true,
+    publicationState: service?.publicationState ?? 'PUBLISHED',
     sortOrder: service?.sortOrder != null ? String(service.sortOrder) : '0',
     seoTitle: service?.seoTitle ?? '',
     metaDescription: service?.metaDescription ?? '',
     metaKeywords: service?.metaKeywords ?? '',
     canonicalUrl: service?.canonicalUrl ?? '',
+    structuredData: service?.structuredData ? JSON.stringify(service.structuredData, null, 2) : '',
   };
 }
 
@@ -326,13 +338,36 @@ export function ServiceFormDrawer({
       return;
     }
 
+    // Optional custom schema.org JSON-LD (object or @graph array). Parsed here
+    // so malformed JSON surfaces before the request leaves the browser.
+    let structuredData: Record<string, unknown> | Array<Record<string, unknown>> | undefined;
+    const rawStructuredData = values.structuredData?.trim();
+    if (rawStructuredData) {
+      try {
+        const parsed = JSON.parse(rawStructuredData);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          structuredData = parsed as Record<string, unknown>;
+        } else if (Array.isArray(parsed)) {
+          structuredData = parsed as Array<Record<string, unknown>>;
+        } else {
+          toast({ title: 'Invalid structured data', description: 'Enter a JSON object or array.', variant: 'danger' });
+          return;
+        }
+      } catch {
+        toast({ title: 'Invalid structured data', description: 'Enter valid JSON (e.g. { "@type": "Service" }).', variant: 'danger' });
+        return;
+      }
+    }
+
+    const description = normalizeRichText(values.description ?? '');
+
     const payload: CreateServiceInput = {
       name: values.name.trim(),
       slug: values.slug?.trim() || undefined,
       categoryId: values.categoryId,
       icon: values.icon?.trim() || undefined,
       shortDescription: values.shortDescription?.trim() || undefined,
-      description: values.description?.trim() || undefined,
+      description: description || undefined,
       basePrice,
       estimatedDuration: values.estimatedDuration?.trim() || undefined,
       requiresSiteVisit: values.requiresSiteVisit,
@@ -357,8 +392,14 @@ export function ServiceFormDrawer({
       metaDescription: values.metaDescription?.trim() || undefined,
       metaKeywords: values.metaKeywords?.trim() || undefined,
       canonicalUrl: values.canonicalUrl?.trim() || undefined,
+      structuredData,
     };
     if (isEdit) (payload as { isActive?: boolean }).isActive = values.isActive;
+    // Publication state is set at creation time (the header buttons manage it
+    // afterwards, so those go through the timeline/audit-aware endpoints).
+    if (!isEdit && values.publicationState) {
+      (payload as { publicationState?: PublicationState }).publicationState = values.publicationState;
+    }
 
     try {
       const saved = isEdit ? await updateService.mutateAsync(payload) : await createService.mutateAsync(payload);
@@ -387,7 +428,7 @@ export function ServiceFormDrawer({
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
       <DrawerContent
-        className="max-w-2xl"
+        className="max-w-3xl"
         title={isEdit ? `Edit ${service?.name}` : 'New Service'}
         description={
           isEdit
@@ -395,286 +436,340 @@ export function ServiceFormDrawer({
             : 'Add a service to the master catalog. Leads, quotations, and projects all select from here.'
         }
       >
-        <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-7" noValidate>
-          {/* ── Basic Information ─────────────────────────────────── */}
-          <section className="space-y-4">
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-ink-faint">Basic Information</h3>
+        <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col" noValidate>
+          <Tabs defaultValue="basic">
+            <TabsList className="mb-6 w-full justify-start overflow-x-auto">
+              <TabsTrigger value="basic">Details</TabsTrigger>
+              <TabsTrigger value="content">Content</TabsTrigger>
+              <TabsTrigger value="media">Media</TabsTrigger>
+              <TabsTrigger value="seo">SEO</TabsTrigger>
+              <TabsTrigger value="display">Display</TabsTrigger>
+            </TabsList>
 
-            <FormField label="Service name" htmlFor="svc-name" required error={errors.name?.message}>
-              <Input id="svc-name" placeholder="Solar Installation" error={!!errors.name} {...register('name')} />
-            </FormField>
+            {/* ── Details ──────────────────────────────────────────── */}
+            <TabsContent value="basic" className="space-y-7">
+              <section className="space-y-4">
+                <FormField label="Service name" htmlFor="svc-name" required error={errors.name?.message}>
+                  <Input id="svc-name" placeholder="Solar Installation" error={!!errors.name} {...register('name')} />
+                </FormField>
 
-            <FormField
-              label="Slug"
-              htmlFor="svc-slug"
-              hint="URL: /services/<slug>. Auto-generated from the name until you edit it."
-              error={errors.slug?.message}
-            >
-              <Input
-                id="svc-slug"
-                placeholder="solar-installation"
-                error={!!errors.slug}
-                disabled={isEdit && !service?.slug}
-                {...register('slug', {
-                  onChange: () => setSlugTouched(true),
-                })}
-              />
-            </FormField>
+                <FormField
+                  label="Slug"
+                  htmlFor="svc-slug"
+                  hint="URL: /services/<slug>. Auto-generated from the name until you edit it."
+                  error={errors.slug?.message}
+                >
+                  <Input
+                    id="svc-slug"
+                    placeholder="solar-installation"
+                    error={!!errors.slug}
+                    disabled={isEdit && !service?.slug}
+                    {...register('slug', {
+                      onChange: () => setSlugTouched(true),
+                    })}
+                  />
+                </FormField>
 
-            <FormField label="Category" htmlFor="svc-category" required error={errors.categoryId?.message}>
-              {categoriesLoading ? (
-                <Skeleton className="h-9 w-full" />
-              ) : (
-                <Controller
-                  control={control}
-                  name="categoryId"
-                  render={({ field }) => (
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <SelectTrigger id="svc-category">
-                        <SelectValue placeholder="Select a category" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {categoryOptions.map((cat) => (
-                          <SelectItem key={cat.id} value={cat.id}>
-                            {cat.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                <FormField label="Category" htmlFor="svc-category" required error={errors.categoryId?.message}>
+                  {categoriesLoading ? (
+                    <Skeleton className="h-9 w-full" />
+                  ) : (
+                    <Controller
+                      control={control}
+                      name="categoryId"
+                      render={({ field }) => (
+                        <Select value={field.value} onValueChange={field.onChange}>
+                          <SelectTrigger id="svc-category">
+                            <SelectValue placeholder="Select a category" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {categoryOptions.map((cat) => (
+                              <SelectItem key={cat.id} value={cat.id}>
+                                {cat.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    />
                   )}
-                />
-              )}
-            </FormField>
+                </FormField>
 
-            <FormField label="Icon" htmlFor="svc-icon" hint="Shown on cards when no image is set.">
-              <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-subtle text-accent">
-                  <ServiceIcon name={watchedIcon || undefined} className="h-5 w-5" />
+                <FormField label="Icon" htmlFor="svc-icon" hint="Shown on cards when no image is set.">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-subtle text-accent">
+                      <ServiceIcon name={watchedIcon || undefined} className="h-5 w-5" />
+                    </div>
+                    <Controller
+                      control={control}
+                      name="icon"
+                      render={({ field }) => (
+                        <Select value={field.value || 'NONE'} onValueChange={(v) => field.onChange(v === 'NONE' ? '' : v)}>
+                          <SelectTrigger id="svc-icon" className="flex-1">
+                            <SelectValue placeholder="Select an icon" />
+                          </SelectTrigger>
+                          <SelectContent className="max-h-80">
+                            <SelectItem value="NONE">No icon</SelectItem>
+                            {SERVICE_ICON_OPTIONS.map((name) => (
+                              <SelectItem key={name} value={name}>
+                                <span className="flex items-center gap-2">
+                                  <ServiceIcon name={name} className="h-4 w-4 text-accent" />
+                                  {name}
+                                </span>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    />
+                  </div>
+                </FormField>
+
+                <FormField
+                  label="Short description"
+                  htmlFor="svc-shortDescription"
+                  hint="Card copy on the public website. Max 300 characters."
+                  error={errors.shortDescription?.message}
+                >
+                  <Textarea
+                    id="svc-shortDescription"
+                    rows={2}
+                    placeholder="Compact summary shown on service cards."
+                    error={!!errors.shortDescription}
+                    {...register('shortDescription')}
+                  />
+                </FormField>
+              </section>
+
+              <section className="space-y-4">
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-ink-faint">Pricing & Delivery</h3>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <FormField label="Base price (₹)" htmlFor="svc-basePrice" hint="Optional starting price">
+                    <Input id="svc-basePrice" type="number" min="0" step="0.01" placeholder="25000" {...register('basePrice')} />
+                  </FormField>
+                  <FormField label="Estimated duration" htmlFor="svc-duration" hint="e.g. 2-3 weeks">
+                    <Input id="svc-duration" placeholder="2-3 weeks" {...register('estimatedDuration')} />
+                  </FormField>
                 </div>
-                <Controller
-                  control={control}
-                  name="icon"
-                  render={({ field }) => (
-                    <Select value={field.value || 'NONE'} onValueChange={(v) => field.onChange(v === 'NONE' ? '' : v)}>
-                      <SelectTrigger id="svc-icon" className="flex-1">
-                        <SelectValue placeholder="Select an icon" />
-                      </SelectTrigger>
-                      <SelectContent className="max-h-80">
-                        <SelectItem value="NONE">No icon</SelectItem>
-                        {SERVICE_ICON_OPTIONS.map((name) => (
-                          <SelectItem key={name} value={name}>
-                            <span className="flex items-center gap-2">
-                              <ServiceIcon name={name} className="h-4 w-4 text-accent" />
-                              {name}
-                            </span>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                />
+
+                <FormField label="Site visit" htmlFor="svc-siteVisit" required error={errors.requiresSiteVisit?.message}>
+                  <Controller
+                    control={control}
+                    name="requiresSiteVisit"
+                    render={({ field }) => (
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <SelectTrigger id="svc-siteVisit">
+                          <SelectValue placeholder="Site visit requirement" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {SITE_VISIT_OPTIONS.map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
+                </FormField>
+              </section>
+
+              <section className="space-y-4">
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-ink-faint">Description</h3>
+                <FormField
+                  label="Long description"
+                  hint="Rich text powers the public detail page and the enquiry wizard. Use headings, lists, and links to structure it."
+                >
+                  <Controller
+                    control={control}
+                    name="description"
+                    render={({ field }) => (
+                      <RichTextEditor
+                        value={field.value ?? ''}
+                        onChange={field.onChange}
+                        placeholder="Everything this service covers, for the public detail page."
+                      />
+                    )}
+                  />
+                </FormField>
+              </section>
+            </TabsContent>
+
+            {/* ── Content ──────────────────────────────────────────── */}
+            <TabsContent value="content" className="space-y-5">
+              <StringListEditor
+                label="Key features"
+                values={features}
+                onChange={setFeatures}
+                placeholder="e.g. Space planning and layout optimization"
+              />
+              <StringListEditor
+                label="What's included"
+                values={whatsIncluded}
+                onChange={setWhatsIncluded}
+                placeholder="e.g. Quality inspection before handover"
+              />
+              <ProcessEditor values={process} onChange={setProcess} />
+              <FaqEditor values={faqs} onChange={setFaqs} />
+              <TestimonialsEditor values={testimonials} onChange={setTestimonials} />
+              <p className="text-xs text-ink-muted">
+                These blocks power the public detail page. Sections stay hidden on the website until they have
+                content.
+              </p>
+            </TabsContent>
+
+            {/* ── Media ────────────────────────────────────────────── */}
+            <TabsContent value="media" className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                {SERVICE_IMAGE_FIELDS.map((field) => (
+                  <ImageSlotField
+                    key={field}
+                    field={field}
+                    service={service}
+                    state={imageState[field]}
+                    previews={previews}
+                    onFile={handleFile}
+                    onClear={handleClear}
+                  />
+                ))}
               </div>
-            </FormField>
+            </TabsContent>
 
-            <FormField
-              label="Short description"
-              htmlFor="svc-shortDescription"
-              hint="Card copy on the public website. Max 300 characters."
-              error={errors.shortDescription?.message}
-            >
-              <Textarea
-                id="svc-shortDescription"
-                rows={2}
-                placeholder="Compact summary shown on service cards."
-                error={!!errors.shortDescription}
-                {...register('shortDescription')}
-              />
-            </FormField>
-
-            <FormField label="Long description" htmlFor="svc-description" hint="Full detail page copy.">
-              <Textarea
-                id="svc-description"
-                rows={4}
-                placeholder="Everything this service covers, for the public detail page and the enquiry wizard."
-                {...register('description')}
-              />
-            </FormField>
-          </section>
-
-          {/* ── Pricing & Delivery ────────────────────────────────── */}
-          <section className="space-y-4">
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-ink-faint">Pricing & Delivery</h3>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <FormField label="Base price (₹)" htmlFor="svc-basePrice" hint="Optional starting price">
-                <Input id="svc-basePrice" type="number" min="0" step="0.01" placeholder="25000" {...register('basePrice')} />
-              </FormField>
-              <FormField label="Estimated duration" htmlFor="svc-duration" hint="e.g. 2-3 weeks">
-                <Input id="svc-duration" placeholder="2-3 weeks" {...register('estimatedDuration')} />
-              </FormField>
-            </div>
-
-            <FormField label="Site visit" htmlFor="svc-siteVisit" required error={errors.requiresSiteVisit?.message}>
-              <Controller
-                control={control}
-                name="requiresSiteVisit"
-                render={({ field }) => (
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <SelectTrigger id="svc-siteVisit">
-                      <SelectValue placeholder="Site visit requirement" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {SITE_VISIT_OPTIONS.map((opt) => (
-                        <SelectItem key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              />
-            </FormField>
-          </section>
-
-          {/* ── Display & Discovery ───────────────────────────────── */}
-          <section className="space-y-4">
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-ink-faint">Display & Discovery</h3>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Controller
-                control={control}
-                name="isFeatured"
-                render={({ field }) => (
-                  <div className="flex items-center justify-between rounded-xl border border-border bg-surface px-4 py-3">
-                    <div>
-                      <p className="text-sm font-medium text-ink">Featured</p>
-                      <p className="text-xs text-ink-muted">Promoted on the homepage</p>
-                    </div>
-                    <Switch checked={!!field.value} onCheckedChange={field.onChange} />
-                  </div>
-                )}
-              />
-              <Controller
-                control={control}
-                name="isPopular"
-                render={({ field }) => (
-                  <div className="flex items-center justify-between rounded-xl border border-border bg-surface px-4 py-3">
-                    <div>
-                      <p className="text-sm font-medium text-ink">Popular</p>
-                      <p className="text-xs text-ink-muted">Shown in "Popular" listings</p>
-                    </div>
-                    <Switch checked={!!field.value} onCheckedChange={field.onChange} />
-                  </div>
-                )}
-              />
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <FormField label="Sort order" htmlFor="svc-sortOrder" hint="Lower numbers appear first.">
-                <Input id="svc-sortOrder" type="number" min="0" step="1" placeholder="0" {...register('sortOrder')} />
+            {/* ── SEO ──────────────────────────────────────────────── */}
+            <TabsContent value="seo" className="space-y-4">
+              <FormField label="Meta title" htmlFor="svc-seoTitle" hint="Max 160 characters." error={errors.seoTitle?.message}>
+                <Input id="svc-seoTitle" placeholder="Solar Installation Services | Company Name" {...register('seoTitle')} />
               </FormField>
 
-              {isEdit && (
+              <FormField
+                label="Meta description"
+                htmlFor="svc-metaDescription"
+                hint="Max 300 characters."
+                error={errors.metaDescription?.message}
+              >
+                <Textarea
+                  id="svc-metaDescription"
+                  rows={2}
+                  placeholder="A short summary shown under the page title in search results."
+                  {...register('metaDescription')}
+                />
+              </FormField>
+
+              <FormField
+                label="Keywords"
+                htmlFor="svc-metaKeywords"
+                hint="Comma-separated. Max 300 characters."
+                error={errors.metaKeywords?.message}
+              >
+                <Input
+                  id="svc-metaKeywords"
+                  placeholder="solar, installation, rooftop, renewable energy"
+                  {...register('metaKeywords')}
+                />
+              </FormField>
+
+              <FormField label="Canonical URL" htmlFor="svc-canonicalUrl" error={errors.canonicalUrl?.message}>
+                <Input id="svc-canonicalUrl" placeholder="https://example.com/services/solar-installation" {...register('canonicalUrl')} />
+              </FormField>
+
+              <FormField
+                label="Structured data (JSON-LD)"
+                htmlFor="svc-structuredData"
+                hint="Optional custom schema.org JSON-LD. Leave empty to auto-generate from this service. Must be valid JSON (object or array)."
+              >
+                <Textarea
+                  id="svc-structuredData"
+                  rows={6}
+                  className="font-mono text-xs"
+                  placeholder={'{\n  "@type": "Service",\n  "areaServed": "IN"\n}'}
+                  {...register('structuredData')}
+                />
+              </FormField>
+            </TabsContent>
+
+            {/* ── Display ──────────────────────────────────────────── */}
+            <TabsContent value="display" className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
                 <Controller
                   control={control}
-                  name="isActive"
+                  name="isFeatured"
                   render={({ field }) => (
                     <div className="flex items-center justify-between rounded-xl border border-border bg-surface px-4 py-3">
                       <div>
-                        <p className="text-sm font-medium text-ink">Active</p>
-                        <p className="text-xs text-ink-muted">Selectable in Leads & Quotations</p>
+                        <p className="text-sm font-medium text-ink">Featured</p>
+                        <p className="text-xs text-ink-muted">Promoted on the homepage</p>
                       </div>
-                      <Switch checked={!!field.value} onCheckedChange={field.onChange} disabled={isArchived} />
+                      <Switch checked={!!field.value} onCheckedChange={field.onChange} />
                     </div>
                   )}
                 />
-              )}
-            </div>
-          </section>
-
-          {/* ── Images ────────────────────────────────────────────── */}
-          <section className="space-y-4">
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-ink-faint">Images</h3>
-            <div className="grid gap-4 sm:grid-cols-2">
-              {SERVICE_IMAGE_FIELDS.map((field) => (
-                <ImageSlotField
-                  key={field}
-                  field={field}
-                  service={service}
-                  state={imageState[field]}
-                  previews={previews}
-                  onFile={handleFile}
-                  onClear={handleClear}
+                <Controller
+                  control={control}
+                  name="isPopular"
+                  render={({ field }) => (
+                    <div className="flex items-center justify-between rounded-xl border border-border bg-surface px-4 py-3">
+                      <div>
+                        <p className="text-sm font-medium text-ink">Popular</p>
+                        <p className="text-xs text-ink-muted">Shown in "Popular" listings</p>
+                      </div>
+                      <Switch checked={!!field.value} onCheckedChange={field.onChange} />
+                    </div>
+                  )}
                 />
-              ))}
-            </div>
-          </section>
+              </div>
 
-          {/* ── Content ────────────────────────────────────────────── */}
-          <section className="space-y-5">
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-ink-faint">Content</h3>
-            <StringListEditor
-              label="Key features"
-              values={features}
-              onChange={setFeatures}
-              placeholder="e.g. Space planning and layout optimization"
-            />
-            <StringListEditor
-              label="What's included"
-              values={whatsIncluded}
-              onChange={setWhatsIncluded}
-              placeholder="e.g. Quality inspection before handover"
-            />
-            <ProcessEditor values={process} onChange={setProcess} />
-            <FaqEditor values={faqs} onChange={setFaqs} />
-            <TestimonialsEditor values={testimonials} onChange={setTestimonials} />
-            <p className="text-xs text-ink-muted">
-              These blocks power the public detail page. Sections stay hidden on the website until they have
-              content.
-            </p>
-          </section>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <FormField label="Sort order" htmlFor="svc-sortOrder" hint="Lower numbers appear first.">
+                  <Input id="svc-sortOrder" type="number" min="0" step="1" placeholder="0" {...register('sortOrder')} />
+                </FormField>
 
-          {/* ── SEO ───────────────────────────────────────────────── */}
-          <section className="space-y-4">
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-ink-faint">Search Engine Optimization</h3>
+                {isEdit && (
+                  <Controller
+                    control={control}
+                    name="isActive"
+                    render={({ field }) => (
+                      <div className="flex items-center justify-between rounded-xl border border-border bg-surface px-4 py-3">
+                        <div>
+                          <p className="text-sm font-medium text-ink">Active</p>
+                          <p className="text-xs text-ink-muted">Selectable in Leads & Quotations</p>
+                        </div>
+                        <Switch checked={!!field.value} onCheckedChange={field.onChange} disabled={isArchived} />
+                      </div>
+                    )}
+                  />
+                )}
+              </div>
 
-            <FormField label="Meta title" htmlFor="svc-seoTitle" hint="Max 160 characters." error={errors.seoTitle?.message}>
-              <Input id="svc-seoTitle" placeholder="Solar Installation Services | Company Name" {...register('seoTitle')} />
-            </FormField>
+              {!isEdit && (
+                <FormField
+                  label="Publication state"
+                  htmlFor="svc-publication"
+                  hint="Published services are live on the website. Draft keeps this hidden until you publish it from the detail page."
+                >
+                  <Controller
+                    control={control}
+                    name="publicationState"
+                    render={({ field }) => (
+                      <Select value={field.value ?? 'PUBLISHED'} onValueChange={field.onChange}>
+                        <SelectTrigger id="svc-publication">
+                          <SelectValue placeholder="Publication state" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {PUBLICATION_OPTIONS.map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
+                </FormField>
+              )}
+            </TabsContent>
+          </Tabs>
 
-            <FormField
-              label="Meta description"
-              htmlFor="svc-metaDescription"
-              hint="Max 300 characters."
-              error={errors.metaDescription?.message}
-            >
-              <Textarea
-                id="svc-metaDescription"
-                rows={2}
-                placeholder="A short summary shown under the page title in search results."
-                {...register('metaDescription')}
-              />
-            </FormField>
-
-            <FormField
-              label="Keywords"
-              htmlFor="svc-metaKeywords"
-              hint="Comma-separated. Max 300 characters."
-              error={errors.metaKeywords?.message}
-            >
-              <Input
-                id="svc-metaKeywords"
-                placeholder="solar, installation, rooftop, renewable energy"
-                {...register('metaKeywords')}
-              />
-            </FormField>
-
-            <FormField label="Canonical URL" htmlFor="svc-canonicalUrl" error={errors.canonicalUrl?.message}>
-              <Input id="svc-canonicalUrl" placeholder="https://example.com/services/solar-installation" {...register('canonicalUrl')} />
-            </FormField>
-          </section>
-
-          <div className="flex justify-end gap-2 border-t border-border pt-4">
+          <div className="mt-7 flex justify-end gap-2 border-t border-border pt-4">
             <Button type="button" variant="secondary" size="sm" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>

@@ -68,8 +68,8 @@ Nexus/
 cd nexus-backend
 npm install
 cp .env.example .env          # configure DATABASE_URL, JWT_SECRET, RAZORPAY_KEY_ID/SECRET, etc.
+npx prisma migrate deploy          # applies the single baseline migration
 npx prisma generate
-npx prisma migrate dev --name init
 npm run prisma:seed            # seeds admin user + baseline services
 npm run dev                    # starts on http://localhost:4000
 ```

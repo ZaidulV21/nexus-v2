@@ -25,6 +25,37 @@ export type ServiceMediaType = 'IMAGE' | 'VIDEO';
 export type ProjectMediaType = 'IMAGE' | 'VIDEO' | 'DOCUMENT';
 
 /**
+ * Draft/publish lifecycle for CMS content. DRAFT rows are never served to the
+ * public website; PUBLISHED rows appear when their other status flags allow.
+ * Mirrors the backend's `PublicationState` enum.
+ */
+export type PublicationState = 'DRAFT' | 'PUBLISHED';
+
+/**
+ * Lifecycle of a Contact/Support inbox message (backend `ContactMessageStatus`).
+ */
+export type ContactMessageStatus = 'NEW' | 'READ' | 'REPLIED' | 'ARCHIVED';
+
+/** A visitor message in the Support inbox. Public submissions never
+ *  auto-create Leads or Clients. */
+export interface ContactMessage {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string | null;
+  company?: string | null;
+  subject: string;
+  message: string;
+  status: ContactMessageStatus;
+  replyBody?: string | null;
+  repliedAt?: string | null;
+  repliedById?: string | null;
+  archivedAt?: string | null;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+/**
  * A single completion item attached to a finished Project (the public
  * Portfolio gallery): images, videos and documents. Mirrored from the
  * backend's `ProjectMedia` Prisma model. Completely independent from the
@@ -108,6 +139,8 @@ export interface Service {
   estimatedDuration?: string | null;
   requiresSiteVisit: SiteVisitRequirement;
   isActive: boolean;
+  /** Draft/publish lifecycle: DRAFT rows are hidden from the public site. */
+  publicationState?: PublicationState;
   isFeatured?: boolean;
   isPopular?: boolean;
   sortOrder?: number;
@@ -126,6 +159,8 @@ export interface Service {
   process?: ServiceProcessStep[] | null;
   faqs?: ServiceFaq[] | null;
   testimonials?: ServiceTestimonial[] | null;
+  /** Optional custom schema.org JSON-LD. */
+  structuredData?: Record<string, unknown> | Array<Record<string, unknown>> | null;
   /** Present only on the service detail endpoint. */
   usage?: ServiceUsage;
 }
@@ -184,6 +219,8 @@ export interface SubService {
   startingPrice?: string | null;
   completionTime?: string | null;
   isActive: boolean;
+  /** Draft/publish lifecycle: DRAFT rows are hidden from the public site. */
+  publicationState?: PublicationState;
   sortOrder?: number;
   seoTitle?: string | null;
   metaDescription?: string | null;
@@ -194,6 +231,8 @@ export interface SubService {
   deletedAt?: string | null;
   createdAt?: string;
   updatedAt?: string;
+  /** Optional custom schema.org JSON-LD. */
+  structuredData?: Record<string, unknown> | Array<Record<string, unknown>> | null;
 }
 
 export const LEAD_SERVICE_STATUSES = [

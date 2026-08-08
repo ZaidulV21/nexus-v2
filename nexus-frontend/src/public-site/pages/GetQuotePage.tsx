@@ -23,6 +23,7 @@ import { getQuestionsForService } from '../wizard/serviceQuestions';
 import { publicAuthService } from '@/services/publicAuthService';
 import { useAuth } from '@/app/AuthContext';
 import type { CreateLeadInput } from '@/services/leadService';
+import { SeoHead, siteUrl } from '../seo';
 
 // Step order: 0=Services, 1=Questions, 2=Contact, 3=Review, 4=Account/Login, 5=OTP, 6=Submit
 const BASE_STEP_LABELS = ['Services', 'Details', 'Contact', 'Review', 'Account', 'Verify', 'Submit'];
@@ -318,6 +319,12 @@ export function GetQuotePage() {
 
   return (
     <div className="min-h-screen bg-canvas pt-24 pb-16">
+      <SeoHead
+        title="Get a Free Quote | Nexus"
+        description="Tell us about your project and receive a detailed quotation within 24 hours. Free consultation, no obligation."
+        canonical={siteUrl('/get-quote')}
+        noindex
+      />
       <div className="mx-auto max-w-4xl px-4 sm:px-6">
         <motion.div
           initial={{ opacity: 0, y: 20 }}

@@ -20,6 +20,14 @@ export interface ServiceItem {
   testimonials?: ServiceTestimonial[];
   basePrice?: number;
   estimatedDuration?: string;
+  // SEO metadata surfaced to the public detail page (Phase 11).
+  seoTitle?: string | null;
+  metaDescription?: string | null;
+  metaKeywords?: string | null;
+  ogImage?: string | null;
+  canonicalUrl?: string | null;
+  /** Optional custom schema.org JSON-LD stored by the admin. */
+  structuredData?: Record<string, unknown> | Array<Record<string, unknown>> | null;
 }
 
 export interface IndustryItem {

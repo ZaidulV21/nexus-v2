@@ -4,14 +4,26 @@ import { ArrowRight } from 'lucide-react';
 import { usePublicServices } from '@/queries/usePublicServices';
 import { PageHero } from '../components/PageHero';
 import { ServiceCard } from '../components/ServiceCard';
+import { usePublicCompany } from '../hooks';
+import { SeoHead, siteUrl, buildBreadcrumbJsonLd } from '../seo';
 
 export function ServicesPage() {
   const { data: services = [], isLoading } = usePublicServices();
   const { pathname } = useLocation();
   const activeSlug = pathname.split('/').pop() ?? '';
+  const company = usePublicCompany();
 
   return (
     <div>
+      <SeoHead
+        title={`Our Services | ${company.name}`}
+        description="Comprehensive infrastructure solutions managed under one platform. From interior design to IT services, we coordinate trusted vendors for every project."
+        canonical={siteUrl('/services')}
+        jsonLd={buildBreadcrumbJsonLd([
+          { name: 'Home', url: siteUrl('/') },
+          { name: 'Services', url: siteUrl('/services') },
+        ])}
+      />
       <PageHero
         title="Our Services"
         description="Comprehensive infrastructure solutions managed under one platform. From interior design to IT services, we coordinate trusted vendors for every project."

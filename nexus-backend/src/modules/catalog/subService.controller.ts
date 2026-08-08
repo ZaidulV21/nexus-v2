@@ -9,6 +9,7 @@ import {
   updateSubServiceSchema,
   subServiceListFiltersSchema,
   subServiceReorderSchema,
+  bulkCatalogActionSchema,
 } from './subService.validation';
 import { ok, created, paginated } from '../../core/utils/response';
 import { parsePagination } from '../../core/utils/pagination';
@@ -58,6 +59,35 @@ export const subServiceController = {
     try {
       const subService = await subServiceService.disable(req.params.subId, req.user?.id);
       return ok(res, subService);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async publish(req: Request, res: Response, next: NextFunction) {
+    try {
+      const subService = await subServiceService.publish(req.params.subId, req.user?.id);
+      return ok(res, subService);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async draft(req: Request, res: Response, next: NextFunction) {
+    try {
+      const subService = await subServiceService.draft(req.params.subId, req.user?.id);
+      return ok(res, subService);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async bulk(req: Request, res: Response, next: NextFunction) {
+    try {
+      const parsed = bulkCatalogActionSchema.safeParse(req.body);
+      if (!parsed.success) throw new ValidationError('Invalid bulk action payload', parsed.error.flatten());
+      const result = await subServiceService.bulk(req.params.id, parsed.data.ids, parsed.data.action, req.user?.id);
+      return ok(res, result);
     } catch (err) {
       next(err);
     }
@@ -117,6 +147,7 @@ export const subServiceController = {
       const parsedFilters = subServiceListFiltersSchema.safeParse({
         status: typeof req.query.status === 'string' ? req.query.status : undefined,
         search: typeof req.query.search === 'string' ? req.query.search : undefined,
+        publication: typeof req.query.publication === 'string' ? req.query.publication : undefined,
       });
       if (!parsedFilters.success) throw new ValidationError('Invalid sub-service filters', parsedFilters.error.flatten());
 

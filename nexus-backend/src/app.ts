@@ -25,6 +25,8 @@ import companyRoutes from './modules/company/company.routes';
 import pdfRoutes from './modules/pdf/pdf.routes';
 import publicAuthRoutes from './modules/otp/otp.routes';
 import paymentsRoutes from './modules/payments/payments.routes';
+import seoRoutes from './modules/seo/seo.routes';
+import contactRoutes from './modules/contact/contact.routes';
 
 export function createApp(): Express {
   const app = express();
@@ -62,8 +64,13 @@ export function createApp(): Express {
   app.use('/api/company', companyRoutes);
   app.use('/api/pdf', pdfRoutes);
   app.use('/api/payments', paymentsRoutes);
+  app.use('/api/contact-messages', contactRoutes);
 
   app.use('/uploads', express.static(path.resolve(env.localStoragePath)));
+
+  // SEO endpoints (sitemap.xml, robots.txt) live at the app root so a
+  // reverse-proxy / hosting layer can expose them without /api.
+  app.use(seoRoutes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

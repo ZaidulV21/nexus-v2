@@ -9,6 +9,8 @@ export interface EmailBranding {
   state?: string;
   country?: string;
   pincode?: string;
+  /** Preferred reply-to mailbox for emails sent on behalf of the company. */
+  replyToEmail?: string;
 }
 
 export interface BaseEmailOptions {

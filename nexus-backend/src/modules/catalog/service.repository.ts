@@ -1,5 +1,5 @@
 import { prisma } from '../../config/database';
-import { CreateServiceInput, UpdateServiceInput, ServiceListFilters } from './catalog.types';
+import { CreateServiceInput, UpdateServiceInput, ServiceListFilters, BulkCatalogAction } from './catalog.types';
 import { PaginationParams } from '../../core/utils/pagination';
 
 export const serviceRepository = {
@@ -13,6 +13,22 @@ export const serviceRepository = {
 
   disable(id: string) {
     return prisma.service.update({ where: { id }, data: { isActive: false }, include: { category: true } });
+  },
+
+  publish(id: string) {
+    return prisma.service.update({
+      where: { id },
+      data: { publicationState: 'PUBLISHED' },
+      include: { category: true },
+    });
+  },
+
+  draft(id: string) {
+    return prisma.service.update({
+      where: { id },
+      data: { publicationState: 'DRAFT' },
+      include: { category: true },
+    });
   },
 
   archive(id: string) {
@@ -90,12 +106,57 @@ export const serviceRepository = {
     };
   },
 
+  // Fetch the rows backing a bulk operation so the service layer can validate
+  // every id exists and belongs to the right state before mutating.
+  findManyByIds(ids: string[]) {
+    return prisma.service.findMany({ where: { id: { in: ids } }, include: { category: true } });
+  },
+
+  // Applies one bulk action across many rows in a single transaction so a
+  // partial application can never be observed. Deleted services always have
+  // their isActive forced back to false by the same data that drives archive.
+  bulk(ids: string[], action: BulkCatalogAction) {
+    const data: Record<string, unknown> = { isActive: false };
+    switch (action) {
+      case 'archive':
+        data.archivedAt = new Date();
+        break;
+      case 'restore':
+        data.archivedAt = null;
+        data.isActive = true;
+        break;
+      case 'delete':
+        data.deletedAt = new Date();
+        break;
+      case 'undelete':
+        data.deletedAt = null;
+        break;
+      case 'activate':
+        data.isActive = true;
+        break;
+      case 'deactivate':
+        data.isActive = false;
+        break;
+      case 'publish':
+        data.publicationState = 'PUBLISHED';
+        data.isActive = true;
+        break;
+      case 'draft':
+        data.publicationState = 'DRAFT';
+        break;
+    }
+    return prisma.$transaction(
+      ids.map((id) => prisma.service.update({ where: { id }, data, include: { category: true } })),
+    );
+  },
+
   async list(pagination: PaginationParams, onlyActive: boolean, filters: ServiceListFilters = {}) {
     const where: any = {};
 
     if (onlyActive) {
-      // Public callers only ever see selectable (active, non-archived,
-      // non-deleted) services.
+      // Public callers only ever see published, selectable (active,
+      // non-archived, non-deleted) services.
+      where.publicationState = 'PUBLISHED';
       where.isActive = true;
       where.archivedAt = null;
       where.deletedAt = null;
@@ -123,6 +184,10 @@ export const serviceRepository = {
         default:
           where.deletedAt = null;
       }
+
+      // Admin draft/published triage lives on top of the status filter.
+      if (filters.publication === 'DRAFT') where.publicationState = 'DRAFT';
+      if (filters.publication === 'PUBLISHED') where.publicationState = 'PUBLISHED';
     }
 
     if (filters.categoryId) {

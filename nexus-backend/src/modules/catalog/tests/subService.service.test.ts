@@ -12,6 +12,10 @@ jest.mock('../subService.repository', () => ({
     findByServiceAndSlug: jest.fn(),
     listByService: jest.fn(),
     reorder: jest.fn(),
+    publish: jest.fn(),
+    draft: jest.fn(),
+    findManyByIds: jest.fn(),
+    bulk: jest.fn(),
   },
 }));
 jest.mock('../service.repository', () => ({
@@ -233,6 +237,7 @@ describe('subServiceService.duplicate', () => {
       expect.objectContaining({
         name: 'False Ceiling (Copy)',
         slug: 'false-ceiling-copy',
+        publicationState: 'DRAFT',
         gallery: ['/uploads/a.png', '/uploads/b.png'],
         features: ['Cove lighting'],
         startingPrice: '₹95 / sq ft',
@@ -261,6 +266,130 @@ describe('subServiceService.getById visibility', () => {
     const result = await subServiceService.getById('sub1', { id: 'admin1', type: 'ADMIN' });
 
     expect(result).toMatchObject({ id: 'sub1', name: 'False Ceiling' });
+  });
+
+  it('hides a draft sub-service from public/anonymous callers', async () => {
+    (subServiceRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'sub1',
+      name: 'False Ceiling',
+      deletedAt: null,
+      publicationState: 'DRAFT',
+    });
+    await expect(subServiceService.getById('sub1')).rejects.toThrow('Sub-service not found');
+  });
+
+  it('allows admins to fetch a draft sub-service (preview flow)', async () => {
+    (subServiceRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'sub1',
+      name: 'False Ceiling',
+      deletedAt: null,
+      publicationState: 'DRAFT',
+    });
+
+    const result = await subServiceService.getById('sub1', { id: 'admin1', type: 'ADMIN' });
+
+    expect(result).toMatchObject({ id: 'sub1', name: 'False Ceiling', publicationState: 'DRAFT' });
+  });
+});
+
+describe('subServiceService.publish / draft', () => {
+  it('publishes a sub-service and records timeline + audit', async () => {
+    (subServiceRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'sub1',
+      name: 'False Ceiling',
+      deletedAt: null,
+      publicationState: 'DRAFT',
+    });
+    (subServiceRepository.publish as jest.Mock).mockResolvedValue({
+      id: 'sub1',
+      name: 'False Ceiling',
+      publicationState: 'PUBLISHED',
+    });
+
+    const result = await subServiceService.publish('sub1', 'admin1');
+
+    expect(result).toMatchObject({ publicationState: 'PUBLISHED' });
+    expect(subServiceRepository.publish).toHaveBeenCalledWith('sub1');
+    expect(auditService.recordAudit).toHaveBeenCalledWith(
+      expect.objectContaining({ entityType: 'SUB_SERVICE', entityId: 'sub1', action: 'PUBLISH' })
+    );
+  });
+
+  it('rejects publishing a non-existent sub-service', async () => {
+    (subServiceRepository.findById as jest.Mock).mockResolvedValue(null);
+    await expect(subServiceService.publish('missing-id')).rejects.toThrow('Sub-service not found');
+  });
+
+  it('rejects publishing a soft-deleted sub-service', async () => {
+    (subServiceRepository.findById as jest.Mock).mockResolvedValue({ id: 'sub1', name: 'False Ceiling', deletedAt: new Date() });
+    await expect(subServiceService.publish('sub1')).rejects.toThrow('restore first');
+  });
+
+  it('moves a sub-service to draft and records timeline + audit', async () => {
+    (subServiceRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'sub1',
+      name: 'False Ceiling',
+      deletedAt: null,
+      publicationState: 'PUBLISHED',
+    });
+    (subServiceRepository.draft as jest.Mock).mockResolvedValue({
+      id: 'sub1',
+      name: 'False Ceiling',
+      publicationState: 'DRAFT',
+    });
+
+    await subServiceService.draft('sub1', 'admin1');
+
+    expect(subServiceRepository.draft).toHaveBeenCalledWith('sub1');
+    expect(auditService.recordAudit).toHaveBeenCalledWith(
+      expect.objectContaining({ entityType: 'SUB_SERVICE', entityId: 'sub1', action: 'DRAFT' })
+    );
+  });
+});
+
+describe('subServiceService.bulk', () => {
+  it('applies an action to every validated id and records timeline + audit', async () => {
+    (serviceRepository.findById as jest.Mock).mockResolvedValue(service);
+    (subServiceRepository.findManyByIds as jest.Mock).mockResolvedValue([
+      { id: 'sub1', deletedAt: null },
+      { id: 'sub2', deletedAt: null },
+    ]);
+    (subServiceRepository.bulk as jest.Mock).mockResolvedValue([
+      { id: 'sub1', publicationState: 'DRAFT' },
+      { id: 'sub2', publicationState: 'DRAFT' },
+    ]);
+
+    const result = await subServiceService.bulk('svc1', ['sub1', 'sub2'], 'draft', 'admin1');
+
+    expect(result).toEqual({
+      items: [{ id: 'sub1', publicationState: 'DRAFT' }, { id: 'sub2', publicationState: 'DRAFT' }],
+      count: 2,
+    });
+    expect(subServiceRepository.bulk).toHaveBeenCalledWith('svc1', ['sub1', 'sub2'], 'draft');
+    expect(auditService.recordAudit).toHaveBeenCalledWith(
+      expect.objectContaining({ entityType: 'SUB_SERVICE', entityId: 'svc1', action: 'BULK_DRAFT' })
+    );
+  });
+
+  it('rejects bulk actions for a non-existent service', async () => {
+    await expect(subServiceService.bulk('bad-ref', ['sub1'], 'archive')).rejects.toThrow('Service not found');
+  });
+
+  it('rejects bulk actions when some ids do not exist', async () => {
+    (serviceRepository.findById as jest.Mock).mockResolvedValue(service);
+    (subServiceRepository.findManyByIds as jest.Mock).mockResolvedValue([{ id: 'sub1', deletedAt: null }]);
+    await expect(subServiceService.bulk('svc1', ['sub1', 'ghost'], 'archive')).rejects.toThrow('ghost');
+  });
+
+  it('rejects bulk actions on soft-deleted sub-services', async () => {
+    (serviceRepository.findById as jest.Mock).mockResolvedValue(service);
+    (subServiceRepository.findManyByIds as jest.Mock).mockResolvedValue([{ id: 'sub1', deletedAt: new Date() }]);
+    await expect(subServiceService.bulk('svc1', ['sub1'], 'delete')).rejects.toThrow('Soft-deleted sub-services cannot be bulk-edited');
+  });
+
+  it('rejects an empty ids array', async () => {
+    (serviceRepository.findById as jest.Mock).mockResolvedValue(service);
+    await expect(subServiceService.bulk('svc1', [], 'publish')).rejects.toThrow('ids must be a non-empty array');
   });
 });
 

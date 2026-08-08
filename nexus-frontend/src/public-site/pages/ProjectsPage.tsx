@@ -2,14 +2,22 @@ import { useState } from 'react';
 import { useRecentProjects } from '@/queries/usePortfolio';
 import { PageHero } from '../components/PageHero';
 import { PortfolioProjectCard } from '../components/PortfolioProjectCard';
+import { usePublicCompany } from '../hooks';
+import { SeoHead, siteUrl } from '../seo';
 
 export function ProjectsPage() {
   const [limit, setLimit] = useState(9);
   const { data: projects = [], isLoading, isError } = useRecentProjects(limit);
   const visible = projects.slice(0, limit);
+  const company = usePublicCompany();
 
   return (
     <div>
+      <SeoHead
+        title={`Our Projects | ${company.name}`}
+        description="Explore our portfolio of successful infrastructure projects delivered across multiple industries."
+        canonical={siteUrl('/projects')}
+      />
       <PageHero
         title="Our Projects"
         description="Explore our portfolio of successful infrastructure projects delivered across multiple industries."

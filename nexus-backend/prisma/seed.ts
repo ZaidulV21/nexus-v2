@@ -53,6 +53,7 @@ const PERMISSION_KEYS = [
   'search.use',
   'dashboard.view',
   'audit.view',
+  'support.manage',
 ];
 
 async function main() {

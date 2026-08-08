@@ -40,6 +40,13 @@ function toServiceItem(service: Service): ServiceItem {
     testimonials: service.testimonials ?? [],
     basePrice: service.basePrice ? Number(service.basePrice) : undefined,
     estimatedDuration: service.estimatedDuration ?? undefined,
+    seoTitle: service.seoTitle ?? null,
+    metaDescription: service.metaDescription ?? null,
+    metaKeywords: service.metaKeywords ?? null,
+    ogImage: service.ogImage ?? null,
+    canonicalUrl: service.canonicalUrl ?? null,
+    structuredData:
+      service.structuredData && JSON.stringify(service.structuredData) !== '{}' ? service.structuredData : null,
   };
 }
 
