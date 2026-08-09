@@ -1,7 +1,8 @@
 /* eslint-disable no-console */
-// End-to-end verification of the quotation acceptance flow:
-// enquiry -> lead approval -> quotation -> approve -> convert client
-// -> send -> CLIENT accepts -> quotation ACCEPTED + project created.
+// End-to-end verification of the quotation acceptance flow under the CURRENT
+// application contract (client-owned quotations):
+// enquiry -> lead approval -> convert to Client -> quotation (clientId) ->
+// approve active version -> send -> CLIENT accepts -> ACCEPTED + project created.
 // Run: node scripts/verify-acceptance.js  (backend must be running on :4000)
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcrypt');
@@ -67,30 +68,41 @@ function check(name, ok, detail) {
     if (r.status !== 200) { check(`Lead service -> ${toStatus}`, false, JSON.stringify(r.json)); break; }
   }
 
-  // Quotation with one item
-  const quo = await req('POST', '/api/quotations', {
-    leadId,
-    items: [{ serviceId: svc.id, description: 'E2E item', quantity: 1, unitPrice: 10000, taxRate: 18 }],
-  }, adminToken);
-  const quotationId = quo.json?.data?.id;
-  const versionId = quo.json?.data?.versions?.[0]?.id;
-  check('Quotation created', !!quotationId && !!versionId, JSON.stringify(quo.json).slice(0, 300));
-
-  // Admin approves the version
-  const approve = await req('POST', `/api/quotations/versions/${versionId}/approve`,
-    { approvalMethod: 'PHONE' }, adminToken);
-  check('Quotation version approved', approve.status === 200, JSON.stringify(approve.json).slice(0, 200));
-
-  // Convert lead -> client, then set a known password so we can log in
+  // Quotations are Client-owned: the Lead must be converted BEFORE quoting, and
+  // the created Client gets a known password so the portal login later works.
   const client = await req('POST', `/api/clients/convert/${leadId}`, null, adminToken);
   const clientId = client.json?.data?.id;
-  check('Lead converted to Client', !!clientId, JSON.stringify(client.json).slice(0, 200));
+  check('Lead converted to Client before quoting', !!clientId, JSON.stringify(client.json).slice(0, 200));
 
   const clientPassword = 'E2eTest123!';
   await prisma.client.update({
     where: { id: clientId },
     data: { passwordHash: await bcrypt.hash(clientPassword, 10) },
   });
+
+  // Contract guard: a quotation without clientId must be rejected (400).
+  const noClient = await req('POST', '/api/quotations', {
+    leadId,
+    items: [{ serviceId: svc.id, description: 'E2E item', quantity: 1, unitPrice: 10000, taxRate: 18 }],
+  }, adminToken);
+  check('Quotation without clientId is rejected', noClient.status === 400,
+    `status=${noClient.status} ${JSON.stringify(noClient.json).slice(0, 200)}`);
+
+  // Quotation with one item, owned by the converted Client
+  const quo = await req('POST', '/api/quotations', {
+    clientId, leadId,
+    items: [{ serviceId: svc.id, description: 'E2E item', quantity: 1, unitPrice: 10000, taxRate: 18 }],
+  }, adminToken);
+  const quotationId = quo.json?.data?.id;
+  check('Quotation created with clientId', !!quotationId, JSON.stringify(quo.json).slice(0, 300));
+
+  // Approve the ACTIVE version (approval always targets the current version)
+  const quoDetail = await req('GET', `/api/quotations/${quotationId}`, null, adminToken);
+  const versionId = quoDetail.json?.data?.activeVersionId;
+  check('Active quotation version resolved', !!versionId, JSON.stringify(quoDetail.json).slice(0, 200));
+  const approve = await req('POST', `/api/quotations/versions/${versionId}/approve`,
+    { approvalMethod: 'PHONE' }, adminToken);
+  check('Quotation version approved', approve.status === 200, JSON.stringify(approve.json).slice(0, 200));
 
   // Admin sends the quotation
   const send = await req('POST', `/api/quotations/${quotationId}/send`, {}, adminToken);
