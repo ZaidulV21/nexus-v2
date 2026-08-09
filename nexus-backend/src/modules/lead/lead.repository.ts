@@ -82,8 +82,14 @@ export const leadRepository = {
   },
 
   async generateLeadNumber(tx: Prisma.TransactionClient): Promise<string> {
-    const count = await tx.lead.count();
-    const next = count + 1;
+    // Next number is derived from the MAX existing number, never the row count:
+    // hard-deleted rows create gaps, so a count-based sequence would reuse an
+    // existing number and collide on the unique constraint (surfacing as a 500
+    // instead of the intended validation error).
+    const rows = await tx.$queryRaw<{ maxSeq: number | null }[]>`
+      SELECT MAX(CAST(SPLIT_PART("leadNumber", '-', 2) AS INTEGER)) AS "maxSeq" FROM "leads"
+    `;
+    const next = (rows[0]?.maxSeq ?? 0) + 1;
     return `L-${String(next).padStart(5, '0')}`;
   },
 };

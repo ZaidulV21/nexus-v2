@@ -13,7 +13,9 @@
     "prisma:deploy": "prisma migrate deploy",
     "prisma:seed": "ts-node prisma/seed.ts",
     "smoke-test": "node scripts/smoke-test.js",
-    "regression:test": "node scripts/regression-run.js"
+    "regression:test": "node scripts/regression-run.js",
+    "verify:backward-compat": "node scripts/verify-backward-compat.js",
+    "verify:phase14": "node scripts/smoke-test.js && node scripts/regression-run.js && node scripts/verify-backward-compat.js"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

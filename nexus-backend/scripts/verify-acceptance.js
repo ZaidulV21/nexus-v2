@@ -58,7 +58,10 @@ function check(name, ok, detail) {
   check('Lead created', !!leadId && !!leadServiceId, JSON.stringify(lead.json).slice(0, 300));
 
   // Walk lead service to APPROVED
-  for (const toStatus of ['QUALIFIED', 'CONTACTED', 'QUOTE PREPARING', 'QUOTE SENT', 'NEGOTIATION', 'APPROVED']) {
+  // Walk the CURRENT manual pipeline: QUALIFIED is retired from the engine and
+  // QUOTE SENT is automatic-only (set when the quotation is sent), so neither
+  // appears in a manual path.
+  for (const toStatus of ['CONTACTED', 'QUOTE PREPARING', 'NEGOTIATION', 'APPROVED']) {
     const r = await req('PATCH', `/api/leads/${leadServiceId}/status`,
       { toStatus, reason: 'accept-flow e2e' }, adminToken);
     if (r.status !== 200) { check(`Lead service -> ${toStatus}`, false, JSON.stringify(r.json)); break; }

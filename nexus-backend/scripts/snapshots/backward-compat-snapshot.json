@@ -1,0 +1,32 @@
+{
+  "generatedAt": "2026-08-09T18:51:53.727Z",
+  "counts": {
+    "clients": 10,
+    "leads": 20,
+    "lead_services": 29,
+    "lead_sub_services": 7,
+    "quotations": 9,
+    "quotation_versions": 14,
+    "quotation_items": 23,
+    "projects": 8,
+    "project_services": 11,
+    "project_sub_services": 3,
+    "invoices": 6,
+    "invoice_items": 10,
+    "payments": 4,
+    "service_features": 2,
+    "service_included_items": 2,
+    "service_process_steps": 6,
+    "service_faqs": 5,
+    "service_testimonials": 2,
+    "service_seo": 1,
+    "sub_service_features": 2,
+    "sub_service_included_items": 2,
+    "sub_service_process_steps": 4,
+    "sub_service_faqs": 3,
+    "sub_service_media": 3,
+    "sub_service_seo": 1,
+    "portfolio_projects": 0,
+    "portfolio_project_media": 0
+  }
+}

@@ -10,6 +10,9 @@
  */
 
 const BASE = process.env.NEXUS_BASE_URL || 'http://localhost:4000';
+const { PrismaClient } = require('@prisma/client');
+const bcrypt = require('bcrypt');
+const prisma = new PrismaClient();
 const results = [];
 
 function pass(name) {
@@ -99,14 +102,16 @@ async function main() {
   illegalTransition.status === 400 ? pass('Illegal status transition (NEW -> COMPLETED) is rejected') : fail('Illegal status transition (NEW -> COMPLETED) is rejected', `got ${illegalTransition.status}`);
 
   // --- 7. Legal transition through to APPROVED so we can convert/quote ---
-  // CONTACTED -> QUOTE PREPARING skips the optional SITE VISIT stage, which
-  // the Status Engine correctly requires a reason for (business rule, not a
-  // bug) - see statusEngine.service.ts's isSkippingSiteVisit check.
+  // The manual pipeline is NEW -> CONTACTED -> QUOTE PREPARING -> NEGOTIATION
+  // -> APPROVED: QUALIFIED was retired from the engine, and QUOTE SENT /
+  // PROJECT CREATED are automatic-only (set by the quotation/project
+  // workflow) so they never appear in a manual path. CONTACTED -> QUOTE
+  // PREPARING skips the optional SITE VISIT stages, which the Status Engine
+  // correctly requires a reason for (business rule, not a bug) - see
+  // statusEngine.service.ts's isSkippingSiteVisit check.
   const path = [
-    { toStatus: 'QUALIFIED' },
     { toStatus: 'CONTACTED' },
     { toStatus: 'QUOTE PREPARING', reason: 'Site visit not required for this smoke-test service' },
-    { toStatus: 'QUOTE SENT' },
     { toStatus: 'NEGOTIATION' },
     { toStatus: 'APPROVED' },
   ];
@@ -116,11 +121,22 @@ async function main() {
     if (r.status !== 200) return fail(`Legal transition ${lastStatus} -> ${step.toStatus}`, JSON.stringify(r.json)), summarize();
     lastStatus = step.toStatus;
   }
-  pass('Lead Service progresses legally through the full pipeline to APPROVED');
+  pass('Lead Service progresses legally through the current pipeline to APPROVED');
 
-  // --- 8. Quotation creation with server-calculated totals ---
+  // --- 8. Convert Lead to Client FIRST (quotations are Client-owned) ---
+  const client = await req('POST', `/api/clients/convert/${leadId}`, null, adminToken);
+  const clientId = client.json?.data?.id;
+  clientId ? pass('Lead converts to Client successfully') : fail('Lead converts to Client successfully', JSON.stringify(client.json));
+
+  // --- 9. Re-converting the same Lead is idempotent (repeat-conversion contract) ---
+  const reconvert = await req('POST', `/api/clients/convert/${leadId}`, null, adminToken);
+  reconvert.json?.data?.id === clientId
+    ? pass('Re-converting an already-converted Lead is idempotent (same Client, no duplicate)')
+    : fail('Re-converting an already-converted Lead is idempotent', `status=${reconvert.status} ${JSON.stringify(reconvert.json).slice(0, 200)}`);
+
+  // --- 10. Quotation creation with server-calculated totals (clientId required) ---
   const quotation = await req('POST', '/api/quotations', {
-    leadId,
+    clientId, leadId,
     items: [{ serviceId: svc1.id, description: 'Smoke test item', quantity: 2, unitPrice: 1000, taxRate: 18 }],
   }, adminToken);
   const grandTotal = quotation.json?.data?.versions?.[0]?.grandTotal;
@@ -128,39 +144,50 @@ async function main() {
     ? pass('Quotation grand total is server-calculated correctly (2 x 1000 + 18% GST = 2360)')
     : fail('Quotation grand total is server-calculated correctly', `expected 2360, got ${grandTotal}`);
   const quotationId = quotation.json?.data?.id;
-  const versionId = quotation.json?.data?.versions?.[0]?.id;
 
-  // --- 9. Quotation revision preserves version history ---
+  // --- 11. Quotation revision preserves version history ---
   await req('POST', `/api/quotations/${quotationId}/revise`, {
     items: [{ serviceId: svc1.id, description: 'Revised item', quantity: 3, unitPrice: 1000, taxRate: 18 }],
   }, adminToken);
   const quoAfterRevision = await req('GET', `/api/quotations/${quotationId}`, null, adminToken);
   const versionCount = quoAfterRevision.json?.data?.versions?.length || 0;
   versionCount === 2 ? pass('Quotation revision creates v2 while v1 remains readable') : fail('Quotation revision creates v2 while v1 remains readable', `expected 2 versions, found ${versionCount}`);
+  const activeVersionId = quoAfterRevision.json?.data?.activeVersionId;
 
-  // --- 10. Approve the original (still-valid at time of creation) version ---
-  await req('POST', `/api/quotations/versions/${versionId}/approve`, { approvalMethod: 'PHONE' }, adminToken);
+  // --- 12. Approve the ACTIVE version, then send (both required before accept) ---
+  const approve = await req('POST', `/api/quotations/versions/${activeVersionId}/approve`, { approvalMethod: 'PHONE' }, adminToken);
+  approve.status === 200 ? pass('Active quotation version is approved') : fail('Active quotation version is approved', `got ${approve.status}`);
+  const send = await req('POST', `/api/quotations/${quotationId}/send`, {}, adminToken);
+  send.json?.data?.status === 'SENT' ? pass('Quotation is sent to the client') : fail('Quotation is sent to the client', JSON.stringify(send.json));
 
-  // --- 11. Convert Lead to Client ---
-  const client = await req('POST', `/api/clients/convert/${leadId}`, null, adminToken);
-  const clientId = client.json?.data?.id;
-  clientId ? pass('Lead converts to Client successfully') : fail('Lead converts to Client successfully', JSON.stringify(client.json));
+  // --- 13. Client accepts -> quotation ACCEPTED + Project auto-created ---
+  const clientPassword = 'SmokeClient123!';
+  await prisma.client.update({ where: { id: clientId }, data: { passwordHash: await bcrypt.hash(clientPassword, 10) } });
+  const clientLogin = await req('POST', '/api/auth/login', { email: client.json.data.email, password: clientPassword, actorType: 'CLIENT' });
+  const clientToken = clientLogin.json?.data?.token;
+  if (!clientToken) return fail('Client login succeeds', JSON.stringify(clientLogin.json)), summarize();
+  const accept = await req('POST', `/api/quotations/${quotationId}/accept`, {}, clientToken);
+  const acceptedStatus = accept.json?.data?.quotation?.status;
+  const projectId = accept.json?.data?.project?.id;
+  (acceptedStatus === 'ACCEPTED' && projectId)
+    ? pass('Client accept creates the Project from the accepted quotation')
+    : fail('Client accept creates the Project', JSON.stringify(accept.json).slice(0, 300));
 
-  // --- 12. Re-converting the same Lead should be rejected ---
-  const reconvert = await req('POST', `/api/clients/convert/${leadId}`, null, adminToken);
-  reconvert.status === 409 ? pass('Re-converting an already-converted Lead is rejected (409)') : fail('Re-converting an already-converted Lead is rejected (409)', `got ${reconvert.status}`);
+  // --- 14. Re-accepting an ACCEPTED quotation is rejected (idempotence guard) ---
+  const reaccept = await req('POST', `/api/quotations/${quotationId}/accept`, {}, clientToken);
+  reaccept.status === 400 ? pass('Re-accepting an ACCEPTED quotation is rejected') : fail('Re-accepting an ACCEPTED quotation is rejected', `got ${reaccept.status}`);
 
-  // --- 13. Create Project ---
-  const project = await req('POST', '/api/projects', { leadId, clientId }, adminToken);
-  const projectId = project.json?.data?.id;
-  const aggregateStatus = project.json?.data?.aggregateStatus;
-  projectId ? pass(`Project created with derived aggregateStatus: "${aggregateStatus}"`) : fail('Project created', JSON.stringify(project.json));
+  // --- 15. Project detail carries the derived aggregateStatus ---
+  const project = await req('GET', `/api/projects/${projectId}`, null, adminToken);
+  project.json?.data?.id === projectId && project.json?.data?.aggregateStatus
+    ? pass(`Project detail renders derived aggregateStatus: "${project.json.data.aggregateStatus}"`)
+    : fail('Project detail renders derived aggregateStatus', JSON.stringify(project.json).slice(0, 200));
 
-  // --- 14. Completing the project before services are done should be rejected ---
+  // --- 16. Completing the project before services are done should be rejected ---
   const earlyComplete = await req('POST', `/api/projects/${projectId}/complete`, null, adminToken);
   earlyComplete.status === 400 ? pass('Completing a Project with unfinished services is rejected') : fail('Completing a Project with unfinished services is rejected', `got ${earlyComplete.status}`);
 
-  // --- 15. Issue an invoice with mixed tax rates ---
+  // --- 17. Issue an invoice with mixed tax rates ---
   const invoice = await req('POST', '/api/invoices', {
     projectId, clientId, label: 'Smoke Test Invoice',
     items: [
@@ -174,7 +201,7 @@ async function main() {
     ? pass(`Invoice issued with sequential number: ${invoiceNumber}`)
     : fail('Invoice issued with correct number format', JSON.stringify(invoice.json));
 
-  // --- 16. Record a partial payment, then confirm financial summary math ---
+  // --- 18. Record a partial payment, then confirm financial summary math ---
   await req('POST', `/api/invoices/${invoiceId}/payments`, { amount: 5000, method: 'Bank Transfer' }, adminToken);
   const summary = await req('GET', `/api/invoices/project/${projectId}/financial-summary`, null, adminToken);
   const outstanding = summary.json?.data?.outstanding;
@@ -182,28 +209,38 @@ async function main() {
     ? pass('Financial summary correctly reflects partial payment (outstanding = 12400)')
     : fail('Financial summary correctly reflects partial payment', `expected 12400, got ${outstanding}`);
 
-  // --- 17. Overpayment should be rejected ---
+  // --- 19. Overpayment should be rejected ---
   const overpay = await req('POST', `/api/invoices/${invoiceId}/payments`, { amount: 999999, method: 'Cash' }, adminToken);
   overpay.status === 400 ? pass('Overpayment beyond outstanding balance is rejected') : fail('Overpayment beyond outstanding balance is rejected', `got ${overpay.status}`);
 
-  // --- 18. Cancel invoice - number must be preserved ---
+  // --- 20. Cancel invoice - number must be preserved ---
   await req('PATCH', `/api/invoices/${invoiceId}/cancel`, { reason: 'Smoke test cancellation' }, adminToken);
   const afterCancel = await req('GET', `/api/invoices/${invoiceId}`, null, adminToken);
   (afterCancel.json?.data?.status === 'CANCELLED' && afterCancel.json?.data?.invoiceNumber === invoiceNumber)
     ? pass('Cancelled invoice preserves its number and remains queryable')
     : fail('Cancelled invoice preserves its number and remains queryable', JSON.stringify(afterCancel.json?.data));
 
-  // --- 19. Disabling a service removes it from the PUBLIC list but not admin history ---
+  // --- 21. Disabling a service removes it from the PUBLIC list but not admin history ---
   await req('PATCH', `/api/services/${svc2.id}/disable`, null, adminToken);
   const publicAfterDisable = await req('GET', '/api/services');
   const stillPublic = (publicAfterDisable.json?.data || []).some((s) => s.id === svc2.id);
   !stillPublic ? pass('Disabled service disappears from the public catalog') : fail('Disabled service disappears from the public catalog', 'still visible publicly');
 
-  // --- 20. Global search finds the smoke-test lead by phone ---
+  // Restore the service so the smoke test never degrades the seeded baseline
+  // (verify:phase14 runs the regression harness right after this script).
+  // disable only flips isActive (not archivedAt), so the bulk 'activate'
+  // action is the correct re-enable path.
+  const restored = await req('POST', `/api/services/bulk`, { ids: [svc2.id], action: 'activate' }, adminToken);
+  const publicAfterRestore = await req('GET', '/api/services');
+  const backPublic = (publicAfterRestore.json?.data || []).some((s) => s.id === svc2.id);
+  (restored.status === 200 && backPublic) ? pass('Service is restored after the disable check') : fail('Service is restored after the disable check', `got ${restored.status}`);
+
+  // --- 22. Global search finds the smoke-test lead by phone ---
   const search = await req('GET', `/api/search?q=${smokeTestPhone}`, null, adminToken);
   const foundLead = (search.json?.data?.leads || []).some((l) => l.id === leadId);
   foundLead ? pass('Global search finds the Lead by phone number') : fail('Global search finds the Lead by phone number', JSON.stringify(search.json?.data?.leads));
 
+  await prisma.$disconnect();
   summarize();
 }
 

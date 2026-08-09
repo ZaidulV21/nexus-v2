@@ -13,8 +13,14 @@ export const clientRepository = {
   },
 
   async generateClientNumber(tx: Prisma.TransactionClient): Promise<string> {
-    const count = await tx.client.count();
-    return `C-${String(count + 1).padStart(5, '0')}`;
+    // Same max-based sequence as Lead numbering: count-based sequences reuse
+    // numbers after hard-deleted rows leave gaps, colliding on the unique
+    // constraint.
+    const rows = await tx.$queryRaw<{ maxSeq: number | null }[]>`
+      SELECT MAX(CAST(SPLIT_PART("clientNumber", '-', 2) AS INTEGER)) AS "maxSeq" FROM "clients"
+    `;
+    const next = (rows[0]?.maxSeq ?? 0) + 1;
+    return `C-${String(next).padStart(5, '0')}`;
   },
 
   findBySourceLeadId(leadId: string) {
