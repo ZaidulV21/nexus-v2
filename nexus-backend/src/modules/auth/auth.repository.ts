@@ -6,7 +6,11 @@ export const authRepository = {
   },
 
   findClientByEmail(email: string) {
-    return prisma.client.findFirst({ where: { email, deletedAt: null } });
+    // Case-insensitive so "John@Example.com" and "john@example.com" resolve to
+    // the same account for login, OTP and account checks.
+    return prisma.client.findFirst({
+      where: { email: { equals: email.trim(), mode: 'insensitive' }, deletedAt: null },
+    });
   },
 
   findUserById(id: string) {

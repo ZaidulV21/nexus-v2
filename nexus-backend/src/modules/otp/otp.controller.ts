@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { otpService } from './otp.service';
-import { sendOtpSchema, verifyOtpSchema, checkEmailSchema } from './otp.validation';
+import { sendOtpSchema, verifyOtpSchema, checkEmailSchema, checkAccountSchema, sendOtpLoginSchema, verifyOtpLoginSchema } from './otp.validation';
 import { ok } from '../../core/utils/response';
 import { ValidationError } from '../../core/errors/AppError';
 
@@ -32,6 +32,39 @@ export const otpController = {
       const parsed = checkEmailSchema.safeParse(req.body);
       if (!parsed.success) throw new ValidationError('Invalid email', parsed.error.flatten());
       const result = await otpService.checkEmail(parsed.data.email);
+      return ok(res, result);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async checkAccount(req: Request, res: Response, next: NextFunction) {
+    try {
+      const parsed = checkAccountSchema.safeParse(req.body);
+      if (!parsed.success) throw new ValidationError('Invalid payload', parsed.error.flatten());
+      const result = await otpService.checkAccount(parsed.data);
+      return ok(res, result);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async sendOtpLogin(req: Request, res: Response, next: NextFunction) {
+    try {
+      const parsed = sendOtpLoginSchema.safeParse(req.body);
+      if (!parsed.success) throw new ValidationError('Invalid payload', parsed.error.flatten());
+      const result = await otpService.sendOtpLogin(parsed.data.clientId);
+      return ok(res, result);
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async verifyOtpLogin(req: Request, res: Response, next: NextFunction) {
+    try {
+      const parsed = verifyOtpLoginSchema.safeParse(req.body);
+      if (!parsed.success) throw new ValidationError('Invalid payload', parsed.error.flatten());
+      const result = await otpService.verifyOtpLogin(parsed.data.clientId, parsed.data.otp);
       return ok(res, result);
     } catch (err) {
       next(err);

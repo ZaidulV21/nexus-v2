@@ -20,7 +20,7 @@ import { useCreateLead } from '@/queries/useLeads';
 import { usePublicServices } from '@/queries/usePublicServices';
 import { usePublicSubServices } from '@/queries/usePublicSubServices';
 import { getQuestionsForService } from '../wizard/serviceQuestions';
-import { publicAuthService } from '@/services/publicAuthService';
+import { publicAuthService, type AccountCheckResult } from '@/services/publicAuthService';
 import { useAuth } from '@/app/AuthContext';
 import type { CreateLeadInput } from '@/services/leadService';
 import { SeoHead, siteUrl } from '../seo';
@@ -76,7 +76,7 @@ function validateRequiredQuestions(
 export function GetQuotePage() {
   const wizard = useWizardState();
   const { state } = wizard;
-  const { login: authLogin, actor } = useAuth();
+  const { login: authLogin, setSession: authSetSession, actor } = useAuth();
   const { data: services = [] } = usePublicServices();
   const [searchParams] = useSearchParams();
 
@@ -91,6 +91,11 @@ export function GetQuotePage() {
   const [showAccountErrors, setShowAccountErrors] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const createLeadMutation = useCreateLead();
+
+  // True when the submitted contact matched an EXISTING client account (by
+  // verified email and/or phone). Those visitors go through the Welcome Back
+  // login/OTP flow instead of registering again.
+  const isExistingUser = state.accountCheck?.exists === true;
 
   // Deep-linked preselection: /get-quote?service=<id|slug>[&subService=<id>...]
   // opens the wizard with the service (and zero or more specific sub-services)
@@ -132,21 +137,21 @@ export function GetQuotePage() {
   const returnedFromReset = searchParams.get('returned') === 'true';
 
   useEffect(() => {
-    if (returnedFromReset && state.currentStep === 4 && state.emailExists === true) {
+    if (returnedFromReset && state.currentStep === 4 && state.accountCheck?.exists === true) {
       // User returned from password reset — show login step with preserved data
     }
-  }, [returnedFromReset, state.currentStep, state.emailExists]);
+  }, [returnedFromReset, state.currentStep, state.accountCheck]);
 
-  // Dynamic step labels based on email check result
+  // Dynamic step labels based on account check result
   const stepLabels = useMemo(() => {
     const labels = [...BASE_STEP_LABELS];
-    if (state.emailExists === true && loginSuccess) {
+    if (isExistingUser && loginSuccess) {
       labels[5] = 'Review & Submit';
-    } else if (state.emailExists === true) {
+    } else if (isExistingUser) {
       labels[5] = 'Login';
     }
     return labels;
-  }, [state.emailExists, loginSuccess]);
+  }, [isExistingUser, loginSuccess]);
 
   // Completed steps
   const completedSteps = useMemo(() => {
@@ -154,15 +159,15 @@ export function GetQuotePage() {
     if (state.selectedServices.length > 0) steps.add(0);
     if (Object.keys(state.answers).length > 0) steps.add(1);
     if (state.contact.name.trim() && state.contact.email.trim() && state.contact.phone.trim()) steps.add(2);
-    if (state.emailExists === false) {
+    if (state.accountCheck?.exists === false) {
       if (state.account.password && state.account.password.length >= 8 && state.account.password === state.account.confirmPassword) steps.add(4);
       if (state.otpVerified) steps.add(5);
     }
-    if (state.emailExists === true && loginSuccess) {
+    if (isExistingUser && loginSuccess) {
       steps.add(4); // Login complete
     }
     return steps;
-  }, [state, loginSuccess]);
+  }, [state, loginSuccess, isExistingUser]);
 
   // Can proceed current step
   const canProceedCurrentStep = useMemo(() => {
@@ -173,7 +178,7 @@ export function GetQuotePage() {
       case 3: return true;
       case 4: {
         if (loginSuccess) return true; // Post-login review — Submit button in review handles it
-        if (state.emailExists === true) return true; // Login step — handled internally
+        if (isExistingUser) return true; // Login step — handled internally
         return !!(
           state.account.password &&
           state.account.password.length >= 8 &&
@@ -184,7 +189,7 @@ export function GetQuotePage() {
       case 5: return state.otpVerified;
       default: return true;
     }
-  }, [state, services, loginSuccess]);
+  }, [state, services, loginSuccess, isExistingUser]);
 
   // Reset validation flags when leaving a step
   useEffect(() => {
@@ -213,20 +218,31 @@ export function GetQuotePage() {
       return;
     }
 
-    // After Contact step (2): check email
+    // After Contact step (2): check the submitted identifiers for an existing account
     if (state.currentStep === 2) {
-      if (state.emailExists !== null) {
+      if (state.accountCheck !== null) {
         wizard.next();
         return;
       }
 
       setIsCheckingEmail(true);
       try {
-        const result = await publicAuthService.checkEmail(state.contact.email);
-        wizard.setEmailExists(result.exists);
+        const result = await publicAuthService.checkAccount({
+          email: state.contact.email,
+          phone: state.contact.phone,
+        });
+        wizard.setAccountCheck(result);
         wizard.next();
       } catch {
-        wizard.setEmailExists(false);
+        // Fall back to the new-user flow; the backend duplicate guard still
+        // prevents a second account for an existing email/phone.
+        const fallback: AccountCheckResult = {
+          exists: false,
+          match: null,
+          account: null,
+          flags: { phoneMismatch: false, emailMismatch: false },
+        };
+        wizard.setAccountCheck(fallback);
         wizard.next();
       } finally {
         setIsCheckingEmail(false);
@@ -235,7 +251,7 @@ export function GetQuotePage() {
     }
 
     // After Login step (4) for existing users: go to post-login review summary
-    if (state.currentStep === 4 && state.emailExists === true && !loginSuccess) {
+    if (state.currentStep === 4 && isExistingUser && !loginSuccess) {
       // Login is handled by StepLogin — Next shouldn't advance
       // This path shouldn't be reached because WizardNavigation is hidden during login
       return;
@@ -248,20 +264,41 @@ export function GetQuotePage() {
     }
 
     wizard.next();
-  }, [canProceedCurrentStep, wizard, state.currentStep, state.emailExists, state.contact.email, loginSuccess]);
+  }, [canProceedCurrentStep, wizard, state.currentStep, isExistingUser, state.contact.email, state.contact.phone, loginSuccess]);
 
   const handleLoginSuccess = useCallback(async () => {
     setLoginError(null);
     setLoginSuccess(true);
-    // Don't advance — stay on step 5, show post-login review summary
+    // Don't advance — stay on step 4, show post-login review summary
   }, []);
+
+  // OTP sign-in for an existing client (Welcome Back flow). The code goes to
+  // the account's email ON FILE - the backend never reveals it to us, only a
+  // masked form. On verify the backend returns a real client token/session.
+  const handleSendOtpLogin = useCallback(async () => {
+    const account = state.accountCheck?.account;
+    if (!account) throw new Error('Account information is missing. Please try again.');
+    await publicAuthService.sendOtpLogin({ clientId: account.clientId });
+  }, [state.accountCheck]);
+
+  const handleVerifyOtpLogin = useCallback(
+    async (otp: string) => {
+      const account = state.accountCheck?.account;
+      if (!account) throw new Error('Account information is missing. Please try again.');
+      const result = await publicAuthService.verifyOtpLogin({ clientId: account.clientId, otp });
+      authSetSession(result);
+    },
+    [state.accountCheck, authSetSession]
+  );
 
   const handleSubmit = useCallback(async () => {
     if (isSubmitting) return;
     setIsSubmitting(true);
     setSubmitError(null);
     try {
-      const input = buildLeadInput(wizard, state.emailExists === true, actor?.type === 'CLIENT' ? actor.id : undefined);
+      // Existing clients submit attached to their account (clientId, no
+      // password); new visitors submit with the password they just created.
+      const input = buildLeadInput(wizard, loginSuccess, actor?.type === 'CLIENT' ? actor.id : undefined);
       await createLeadMutation.mutateAsync(input);
       setIsSuccess(true);
       wizard.reset();
@@ -270,7 +307,7 @@ export function GetQuotePage() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [isSubmitting, wizard, createLeadMutation, state.emailExists]);
+  }, [isSubmitting, wizard, createLeadMutation, loginSuccess, actor]);
 
   // ── Success screen ──────────────────────────────────────────────
   if (isSuccess) {
@@ -313,7 +350,7 @@ export function GetQuotePage() {
   }
 
   // ── Post-login review summary (existing user, step 4 after login) ──
-  const isPostLoginReview = state.currentStep === 4 && state.emailExists === true && loginSuccess;
+  const isPostLoginReview = state.currentStep === 4 && isExistingUser && loginSuccess;
 
   const selectedServiceData = services.filter((s) => state.selectedServices.includes(s.id));
 
@@ -361,7 +398,7 @@ export function GetQuotePage() {
                     </div>
                     <div>
                       <h2 className="text-xl font-bold text-ink">Authentication Successful</h2>
-                      <p className="text-sm text-ink-muted">You're signed in as <span className="font-medium text-ink">{state.contact.email}</span></p>
+                      <p className="text-sm text-ink-muted">You're signed in as <span className="font-medium text-ink">{state.accountCheck?.account?.emailMasked ?? state.contact.email}</span></p>
                     </div>
                   </div>
 
@@ -372,7 +409,7 @@ export function GetQuotePage() {
                         <User className="h-4 w-4 text-ink-faint" />
                         <h3 className="text-sm font-semibold text-ink">Account</h3>
                       </div>
-                      <p className="text-sm text-ink-muted">{state.contact.email}</p>
+                      <p className="text-sm text-ink-muted">{state.accountCheck?.account?.emailMasked ?? state.contact.email}</p>
                     </div>
 
                     {/* Selected services */}
@@ -510,7 +547,7 @@ export function GetQuotePage() {
                   {state.currentStep === 3 && (
                     <StepReview state={state} goTo={wizard.goTo} subServiceNames={subServiceNames} />
                   )}
-                  {state.currentStep === 4 && state.emailExists === false && (
+                  {state.currentStep === 4 && state.accountCheck?.exists === false && (
                     <StepAccount
                       contact={state.contact}
                       account={state.account}
@@ -518,19 +555,23 @@ export function GetQuotePage() {
                       showErrors={showAccountErrors}
                     />
                   )}
-                  {state.currentStep === 4 && state.emailExists === true && !loginSuccess && (
+                  {state.currentStep === 4 && isExistingUser && !loginSuccess && (
                     <StepLogin
-                      email={state.contact.email}
+                      enteredEmail={state.contact.email}
+                      account={state.accountCheck?.account ?? null}
+                      flags={state.accountCheck?.flags ?? { phoneMismatch: false, emailMismatch: false }}
                       authLogin={authLogin}
                       onLoginSuccess={handleLoginSuccess}
                       loginError={loginError}
                       onClearError={() => setLoginError(null)}
+                      sendOtpLogin={handleSendOtpLogin}
+                      verifyOtpLogin={handleVerifyOtpLogin}
                     />
                   )}
-                  {state.currentStep === 4 && state.emailExists === null && (
+                  {state.currentStep === 4 && state.accountCheck === null && (
                     <div className="p-6 sm:p-8 text-center">
                       <span className="inline-block h-8 w-8 animate-spin rounded-full border-2 border-accent border-t-transparent" />
-                      <p className="mt-3 text-sm text-ink-muted">Checking your email...</p>
+                      <p className="mt-3 text-sm text-ink-muted">Checking your details...</p>
                     </div>
                   )}
                   {state.currentStep === 5 && (

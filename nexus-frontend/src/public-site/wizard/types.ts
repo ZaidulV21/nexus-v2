@@ -1,5 +1,7 @@
 // ── Question Engine Types ──────────────────────────────────────────────
 
+import type { AccountCheckResult } from '@/services/publicAuthService';
+
 export type QuestionType = 'text' | 'textarea' | 'select' | 'radio' | 'checkbox' | 'number';
 
 export interface QuestionOption {
@@ -82,8 +84,13 @@ export interface WizardState {
   account: WizardAccountInfo;
   /** Whether OTP has been verified */
   otpVerified: boolean;
-  /** null = not checked yet, true = email exists (existing user), false = new user */
-  emailExists: boolean | null;
+  /**
+   * null = not checked yet. When set, describes whether the submitted
+   * contact identifies an EXISTING client account (by verified email and/or
+   * phone) and how it matched - new visitors get the account-creation flow,
+   * existing clients get the Welcome Back login/OTP flow.
+   */
+  accountCheck: AccountCheckResult | null;
 }
 
 export const INITIAL_WIZARD_STATE: WizardState = {
@@ -110,5 +117,5 @@ export const INITIAL_WIZARD_STATE: WizardState = {
     confirmPassword: '',
   },
   otpVerified: false,
-  emailExists: null,
+  accountCheck: null,
 };

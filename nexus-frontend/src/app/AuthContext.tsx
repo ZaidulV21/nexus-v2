@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { authService, type LoginInput } from '@/services/authService';
+import { authService, type LoginInput, type LoginResult } from '@/services/authService';
 import { setAuthToken, setUnauthorizedHandler } from '@/lib/api';
 import type { AuthActor } from '@/types';
 
@@ -9,6 +9,8 @@ interface AuthContextValue {
   isInitializing: boolean;
   isAuthenticated: boolean;
   login: (input: LoginInput) => Promise<void>;
+  /** Store a token/actor pair returned by a non-password sign-in (OTP login). */
+  setSession: (result: LoginResult) => void;
   logout: () => void;
 }
 
@@ -61,8 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsInitializing(false);
   }, [logout]);
 
-  const login = useCallback(async (input: LoginInput) => {
-    const result = await authService.login(input);
+  const setSession = useCallback((result: LoginResult) => {
     setAuthToken(result.token);
     setToken(result.token);
     setActor(result.actor);
@@ -70,9 +71,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(ACTOR_KEY, JSON.stringify(result.actor));
   }, []);
 
+  const login = useCallback(async (input: LoginInput) => {
+    setSession(await authService.login(input));
+  }, [setSession]);
+
   const value = useMemo(
-    () => ({ actor, token, isInitializing, isAuthenticated: !!token, login, logout }),
-    [actor, token, isInitializing, login, logout]
+    () => ({ actor, token, isInitializing, isAuthenticated: !!token, login, setSession, logout }),
+    [actor, token, isInitializing, login, setSession, logout]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -8,7 +8,7 @@ import { UnauthorizedError, ValidationError, NotFoundError } from '../../core/er
 import { LoginInput, ChangePasswordInput } from './auth.types';
 import { AuthPayload } from '../../core/middleware/authenticate';
 
-function signToken(payload: AuthPayload): string {
+export function signToken(payload: AuthPayload): string {
   return jwt.sign(payload, env.jwtSecret, { expiresIn: env.jwtExpiresIn } as jwt.SignOptions);
 }
 

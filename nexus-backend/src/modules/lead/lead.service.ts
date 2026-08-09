@@ -119,6 +119,16 @@ export const leadService = {
           throw new ValidationError('An account already exists for this email address');
         }
 
+        // A client account is uniquely identified by email OR phone. If the
+        // submitted phone already belongs to an account (even under a different
+        // email), creating another Client would silently duplicate the same
+        // person - reject instead and let the wizard send them through the
+        // Welcome Back verification flow.
+        const duplicatePhoneClient = input.phone ? await clientRepository.findByPhone(input.phone) : null;
+        if (duplicatePhoneClient) {
+          throw new ValidationError('An account already exists for this phone number');
+        }
+
         const passwordHash = await bcrypt.hash(input.password, env.bcryptSaltRounds);
         const clientNumber = await clientRepository.generateClientNumber(tx);
         client = await clientRepository.create(

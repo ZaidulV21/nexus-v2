@@ -2,6 +2,7 @@ import { prisma } from '../../config/database';
 import { Prisma } from '@prisma/client';
 import { PaginationParams } from '../../core/utils/pagination';
 import { computeAggregateStatus } from '../project/project.aggregateStatus';
+import { normalizePhone } from '../../core/utils/phone';
 
 export const clientRepository = {
   create(
@@ -21,7 +22,23 @@ export const clientRepository = {
   },
 
   findByEmail(email: string) {
-    return prisma.client.findFirst({ where: { email, deletedAt: null } });
+    // Case-insensitive: client emails are compared on the normalized form so
+    // "John@Example.com" and "john@example.com" resolve to the same account
+    // everywhere (check-account, duplicate guard, login).
+    return prisma.client.findFirst({
+      where: { email: { equals: email.trim(), mode: 'insensitive' }, deletedAt: null },
+    });
+  },
+
+  // Finds a client by phone after formatting-insensitive normalization (digits
+  // only). The clients table has no phone index, so this scans active rows and
+  // compares normalized forms - correct and fine at the current scale; if the
+  // client table ever grows large, add a dedicated normalized phone column.
+  async findByPhone(phone: string) {
+    const digits = normalizePhone(phone);
+    if (!digits) return null;
+    const candidates = await prisma.client.findMany({ where: { deletedAt: null } });
+    return candidates.find((c) => c.phone && normalizePhone(c.phone) === digits) ?? null;
   },
 
   findById(id: string) {

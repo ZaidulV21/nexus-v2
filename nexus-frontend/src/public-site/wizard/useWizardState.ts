@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import type { WizardState, WizardFileEntry, WizardContactInfo } from './types';
+import type { AccountCheckResult } from '@/services/publicAuthService';
 import { INITIAL_WIZARD_STATE } from './types';
 
 const STEP_LABELS = ['Services', 'Questions', 'Contact', 'Review', 'Account', 'Verify', 'Submit'];
@@ -94,9 +95,13 @@ export function useWizardState() {
   const updateContact = useCallback((partial: Partial<WizardContactInfo>) => {
     setState((s) => {
       const newContact = { ...s.contact, ...partial };
-      // If email changed, reset email check status so it re-validates
-      if (partial.email !== undefined && partial.email !== s.contact.email) {
-        return { ...s, contact: newContact, emailExists: null, otpVerified: false };
+      // If email OR phone changed, reset the account check so it re-validates
+      // against the new identifiers.
+      const identityChanged =
+        (partial.email !== undefined && partial.email !== s.contact.email) ||
+        (partial.phone !== undefined && partial.phone !== s.contact.phone);
+      if (identityChanged) {
+        return { ...s, contact: newContact, accountCheck: null, otpVerified: false };
       }
       return { ...s, contact: newContact };
     });
@@ -110,8 +115,8 @@ export function useWizardState() {
     setState((s) => ({ ...s, otpVerified: verified }));
   }, []);
 
-  const setEmailExists = useCallback((exists: boolean) => {
-    setState((s) => ({ ...s, emailExists: exists }));
+  const setAccountCheck = useCallback((accountCheck: AccountCheckResult) => {
+    setState((s) => ({ ...s, accountCheck }));
   }, []);
 
   const reset = useCallback(() => {
@@ -127,8 +132,8 @@ export function useWizardState() {
       case 2: return !!(state.contact.name && state.contact.email && state.contact.phone);
       case 3: return true; // Review
       case 4: {
-        // Account or Login step - different validation based on email check
-        if (state.emailExists === true) {
+        // Account or Login step - different validation based on account check
+        if (state.accountCheck?.exists === true) {
           // Existing user: login step - handled by StepLogin internally
           return true;
         }
@@ -161,7 +166,7 @@ export function useWizardState() {
     updateContact,
     updateAccount,
     setOtpVerified,
-    setEmailExists,
+    setAccountCheck,
     reset,
     canProceed,
   };
