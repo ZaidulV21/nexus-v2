@@ -202,7 +202,7 @@ model Service {
   // Draft/publish workflow: a DRAFT service never appears on the public
   // website, even when active. Published is the default so existing records
   // keep behaving exactly as before.
-  publicationState PublicationState @default(PUBLISHED)
+  publicationState  PublicationState       @default(PUBLISHED)
   isActive          Boolean                @default(true)
   // CMS display flags + ordering.
   isFeatured        Boolean                @default(false)
@@ -213,16 +213,6 @@ model Service {
   bannerImage       String?
   thumbnail         String?
   heroImage         String?
-  // SEO metadata.
-  seoTitle          String?
-  metaDescription   String?
-  metaKeywords      String?
-  ogImage           String?
-  canonicalUrl      String?
-  // Optional custom schema.org JSON-LD (an object or a @graph array). When
-  // empty, the public site auto-generates structured data from the service
-  // fields; when present it is rendered verbatim on the detail page.
-  structuredData    Json     @default("{}")
   createdAt         DateTime               @default(now())
   updatedAt         DateTime               @updatedAt
   archivedAt        DateTime?
@@ -230,23 +220,27 @@ model Service {
   // but stays attached to historical Leads/Quotations/Projects/Invoices.
   deletedAt         DateTime?
   estimatedDuration String?
-  // Public detail-page content blocks (JSON arrays, mirroring SubService).
-  // The website renders each section only when the array is non-empty, so a
-  // service with no content yet still renders a complete, graceful page.
-  features        Json     @default("[]")
-  whatsIncluded   Json     @default("[]")
-  // [{ title, description }]
-  process         Json     @default("[]")
-  // [{ question, answer }]
-  faqs            Json     @default("[]")
-  // [{ name, role, company, content, rating, avatar? }]
-  testimonials    Json     @default("[]")
+  // Public detail-page content blocks now live in normalized child tables
+  // (ServiceFeature, ServiceIncludedItem, ServiceProcessStep, ServiceFaq,
+  // ServiceTestimonial) and SEO in the 1:1 ServiceSeo row. The API still
+  // returns the assembled { features, whatsIncluded, process, faqs,
+  // testimonials, seo } shape so public callers are unaffected.
   leadServices      LeadService[]
   projectServices   ProjectService[]
   questionnaires    ServiceQuestionnaire[]
   subServices       SubService[]
   media             ServiceMedia[]
   category          Category               @relation(fields: [categoryId], references: [id])
+  // Phase 13: normalized CMS content blocks (formerly JSON arrays). Each child
+  // table owns one content type; rows carry a sortOrder to preserve the admin's
+  // ordering. `seo` is a 1:1 row (structuredData JSON-LD is kept as JSON).
+  featureItems      ServiceFeature[]
+  includedItems     ServiceIncludedItem[]
+  processSteps      ServiceProcessStep[]
+  faqItems          ServiceFaq[]
+  testimonialItems  ServiceTestimonial[]
+  seo               ServiceSeo?
+  portfolioProjects PortfolioProject[]
 
   @@index([isActive, archivedAt, deletedAt])
   @@map("services")
@@ -283,53 +277,47 @@ model ServiceMedia {
 // A CMS-managed Sub Service: a distinct offer under a Service, exposed at a
 // public SEO URL like /services/interior-design/false-ceiling. A service can
 // have unlimited sub-services. Structured content (gallery, features,
-// whatsIncluded, process, faqs) is stored as JSON arrays so the admin can
-// edit them without schema churn.
+// whatsIncluded, process, faqs) lives in normalized child tables
+// (SubServiceMedia, SubServiceFeature, SubServiceIncludedItem,
+// SubServiceProcessStep, SubServiceFaq) and SEO in the 1:1 SubServiceSeo row;
+// the API still returns the assembled legacy JSON shape.
 model SubService {
-  id              String   @id @default(uuid())
-  serviceId       String
-  name            String
+  id                 String                   @id @default(uuid())
+  serviceId          String
+  name               String
   // URL segment within the parent service: unique per service, so
   // /services/:serviceSlug/:subSlug always resolves to one row.
-  slug            String
+  slug               String
   // Card copy for the sub-service nav; `description` is the long form
   // (paragraphs are split on blank lines when rendered on the public site).
-  shortDescription String?
-  description     String?
-  icon            String?
-  heroImage       String?
-  gallery         Json     @default("[]")
-  features        Json     @default("[]")
-  whatsIncluded   Json     @default("[]")
-  // [{ title, description }]
-  process         Json     @default("[]")
-  // [{ question, answer }]
-  faqs            Json     @default("[]")
-  startingPrice   String?
-  completionTime  String?
+  shortDescription   String?
+  description        String?
+  icon               String?
+  heroImage          String?
+  startingPrice      String?
+  completionTime     String?
   // Draft/publish workflow, mirroring Service. A DRAFT sub-service never
   // appears on the public site, even when active.
-  publicationState PublicationState @default(PUBLISHED)
-  isActive        Boolean  @default(true)
-  sortOrder       Int      @default(0)
-  // SEO metadata.
-  seoTitle        String?
-  metaDescription String?
-  metaKeywords    String?
-  ogImage         String?
-  canonicalUrl    String?
-  // Optional custom schema.org JSON-LD, mirroring Service. Auto-generated on
-  // the public site when empty.
-  structuredData  Json     @default("{}")
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  archivedAt      DateTime?
+  publicationState   PublicationState         @default(PUBLISHED)
+  isActive           Boolean                  @default(true)
+  sortOrder          Int                      @default(0)
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+  archivedAt         DateTime?
   // Soft delete, mirroring Service. A sub-service is never hard-deleted.
-  deletedAt       DateTime?
-  service           Service           @relation(fields: [serviceId], references: [id], onDelete: Cascade)
-  leadSubServices   LeadSubService[]
-  quotationItems    QuotationItem[]
+  deletedAt          DateTime?
+  service            Service                  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  leadSubServices    LeadSubService[]
+  quotationItems     QuotationItem[]
   projectSubServices ProjectSubService[]
+  // Phase 13: normalized CMS content blocks (formerly JSON arrays). `mediaItems`
+  // replaces the JSON `gallery`; `seo` is a 1:1 row.
+  mediaItems         SubServiceMedia[]
+  featureItems       SubServiceFeature[]
+  includedItems      SubServiceIncludedItem[]
+  processSteps       SubServiceProcessStep[]
+  faqItems           SubServiceFaq[]
+  seo                SubServiceSeo?
 
   @@unique([serviceId, slug])
   @@index([serviceId, isActive, archivedAt, deletedAt])
@@ -548,36 +536,36 @@ model QuotationApproval {
 }
 
 model Project {
-  id              String           @id @default(uuid())
-  projectNumber   String           @unique
-  leadId          String
-  clientId        String
+  id                String           @id @default(uuid())
+  projectNumber     String           @unique
+  leadId            String
+  clientId          String
   // Phase 9: the origin Quotation this Project was created from (the accepted
   // quotation's id). Nullable for projects whose services were assembled
   // manually, and ON DELETE SET NULL because quotations are never hard-deleted
   // in-app anyway. Lets a Project trace its full lineage - Origin Lead,
   // Services, Sub Services, Quotation, Client - without manual re-entry.
-  quotationId     String?
+  quotationId       String?
   // Human-friendly project name shown on the public portfolio. When empty the
   // website falls back to the client's company/contact name.
-  title           String?
+  title             String?
   // Set once by the explicit "mark complete" action. This is the single
   // moment a Project "becomes Completed" for the public portfolio: completed
   // projects (and their completion media) appear automatically on the site.
-  completedAt     DateTime?
+  completedAt       DateTime?
   completedByUserId String?
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-  deletedAt       DateTime?
-  conversations   Conversation[]
-  documents       Document[]
-  invoices        Invoice[]
-  payments        Payment[]
-  projectServices ProjectService[]
-  media           ProjectMedia[]
-  client          Client           @relation(fields: [clientId], references: [id])
-  lead            Lead             @relation(fields: [leadId], references: [id])
-  quotation       Quotation?       @relation(fields: [quotationId], references: [id], onDelete: SetNull)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  deletedAt         DateTime?
+  conversations     Conversation[]
+  documents         Document[]
+  invoices          Invoice[]
+  payments          Payment[]
+  projectServices   ProjectService[]
+  media             ProjectMedia[]
+  client            Client           @relation(fields: [clientId], references: [id])
+  lead              Lead             @relation(fields: [leadId], references: [id])
+  quotation         Quotation?       @relation(fields: [quotationId], references: [id], onDelete: SetNull)
 
   @@map("projects")
 }
@@ -616,18 +604,18 @@ model ProjectMedia {
 }
 
 model ProjectService {
-  id                         String            @id @default(uuid())
+  id                         String              @id @default(uuid())
   projectId                  String
   serviceId                  String
   leadServiceId              String?
-  status                     String            @default("PROJECT CREATED")
+  status                     String              @default("PROJECT CREATED")
   assignedQuotationVersionId String?
-  createdAt                  DateTime          @default(now())
-  updatedAt                  DateTime          @updatedAt
-  assignedQuotationVersion   QuotationVersion? @relation(fields: [assignedQuotationVersionId], references: [id])
-  leadService                LeadService?      @relation(fields: [leadServiceId], references: [id])
-  project                    Project           @relation(fields: [projectId], references: [id])
-  service                    Service           @relation(fields: [serviceId], references: [id])
+  createdAt                  DateTime            @default(now())
+  updatedAt                  DateTime            @updatedAt
+  assignedQuotationVersion   QuotationVersion?   @relation(fields: [assignedQuotationVersionId], references: [id])
+  leadService                LeadService?        @relation(fields: [leadServiceId], references: [id])
+  project                    Project             @relation(fields: [projectId], references: [id])
+  service                    Service             @relation(fields: [serviceId], references: [id])
   // Phase 9: the specific Sub Services this Project Service covers, derived
   // from the accepted quotation's line items (Interior -> Painting,
   // Flooring, Lighting). Normalized junction - a Project Service can carry
@@ -721,9 +709,6 @@ model Payment {
   client               Client        @relation(fields: [clientId], references: [id])
   project              Project       @relation(fields: [projectId], references: [id])
 
-  @@index([clientId])
-  @@index([projectId])
-  @@index([status])
   // Online payments must be idempotent at the database level: one Razorpay
   // transaction (and one manual transaction reference) can never produce more
   // than one Payment record, even under concurrent verification requests.
@@ -731,6 +716,9 @@ model Payment {
   // offline payments without a reference remain unaffected.
   @@unique([gatewayTransactionId])
   @@unique([transactionReference])
+  @@index([clientId])
+  @@index([projectId])
+  @@index([status])
   @@map("payments")
 }
 
@@ -871,21 +859,21 @@ model PasswordResetToken {
 // can reply by email. Deliberately standalone - submissions never auto-create
 // Leads or Clients, keeping the existing Lead -> Client -> Project flow intact.
 model ContactMessage {
-  id         String              @id @default(uuid())
-  name       String
-  email      String
-  phone      String?
-  company    String?
-  subject    String
-  message    String
-  status     ContactMessageStatus @default(NEW)
+  id          String               @id @default(uuid())
+  name        String
+  email       String
+  phone       String?
+  company     String?
+  subject     String
+  message     String
+  status      ContactMessageStatus @default(NEW)
   // Optional admin reply (stored so the inbox shows the full exchange).
-  replyBody  String?
-  repliedAt  DateTime?
+  replyBody   String?
+  repliedAt   DateTime?
   repliedById String?
-  archivedAt DateTime?
-  createdAt  DateTime            @default(now())
-  updatedAt  DateTime            @updatedAt
+  archivedAt  DateTime?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
 
   @@index([status])
   @@index([status, createdAt])
@@ -951,4 +939,247 @@ enum ContactMessageStatus {
   READ
   REPLIED
   ARCHIVED
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PHASE 13 — Service Management / CMS normalization.
+// Rich content that previously lived as JSON blobs on Service / SubService is
+// now stored in normalized tables with real foreign keys. Every child row
+// carries a sortOrder so the admin's ordering survives. Rows are hard-deleted
+// with their parent (Cascade) - services/sub-services themselves stay
+// soft-deletable for historical reference, but their CMS content is throwaway.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// A Service "Features" bullet (formerly Service.features: string[]).
+model ServiceFeature {
+  id        String   @id @default(uuid())
+  serviceId String
+  text      String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  service   Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@index([serviceId, sortOrder])
+  @@map("service_features")
+}
+
+// A Service "What's Included" line item (formerly Service.whatsIncluded: string[]).
+model ServiceIncludedItem {
+  id        String   @id @default(uuid())
+  serviceId String
+  text      String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  service   Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@index([serviceId, sortOrder])
+  @@map("service_included_items")
+}
+
+// A Service process step, { title, description } (formerly Service.process).
+model ServiceProcessStep {
+  id          String   @id @default(uuid())
+  serviceId   String
+  title       String
+  description String?
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  service     Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@index([serviceId, sortOrder])
+  @@map("service_process_steps")
+}
+
+// A Service FAQ, { question, answer } (formerly Service.faqs).
+model ServiceFaq {
+  id        String   @id @default(uuid())
+  serviceId String
+  question  String
+  answer    String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  service   Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@index([serviceId, sortOrder])
+  @@map("service_faqs")
+}
+
+// A Service testimonial (formerly Service.testimonials).
+model ServiceTestimonial {
+  id        String   @id @default(uuid())
+  serviceId String
+  name      String
+  role      String?
+  company   String?
+  content   String
+  rating    Int      @default(5)
+  avatar    String?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  service   Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@index([serviceId, sortOrder])
+  @@map("service_testimonials")
+}
+
+// 1:1 Service SEO row. `structuredData` stays JSON because it is inherently a
+// schema.org JSON-LD blob; everything else moved out of the legacy flat columns.
+model ServiceSeo {
+  id              String   @id @default(uuid())
+  serviceId       String   @unique
+  seoTitle        String?
+  metaDescription String?
+  metaKeywords    String?
+  ogImage         String?
+  canonicalUrl    String?
+  structuredData  Json     @default("{}")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  service         Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@map("service_seo")
+}
+
+// A Sub Service "Features" bullet (formerly SubService.features: string[]).
+model SubServiceFeature {
+  id           String     @id @default(uuid())
+  subServiceId String
+  text         String
+  sortOrder    Int        @default(0)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  subService   SubService @relation(fields: [subServiceId], references: [id], onDelete: Cascade)
+
+  @@index([subServiceId, sortOrder])
+  @@map("sub_service_features")
+}
+
+// A Sub Service "What's Included" line item (formerly SubService.whatsIncluded).
+model SubServiceIncludedItem {
+  id           String     @id @default(uuid())
+  subServiceId String
+  text         String
+  sortOrder    Int        @default(0)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  subService   SubService @relation(fields: [subServiceId], references: [id], onDelete: Cascade)
+
+  @@index([subServiceId, sortOrder])
+  @@map("sub_service_included_items")
+}
+
+// A Sub Service process step, { title, description } (formerly SubService.process).
+model SubServiceProcessStep {
+  id           String     @id @default(uuid())
+  subServiceId String
+  title        String
+  description  String?
+  sortOrder    Int        @default(0)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  subService   SubService @relation(fields: [subServiceId], references: [id], onDelete: Cascade)
+
+  @@index([subServiceId, sortOrder])
+  @@map("sub_service_process_steps")
+}
+
+// A Sub Service FAQ, { question, answer } (formerly SubService.faqs).
+model SubServiceFaq {
+  id           String     @id @default(uuid())
+  subServiceId String
+  question     String
+  answer       String
+  sortOrder    Int        @default(0)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  subService   SubService @relation(fields: [subServiceId], references: [id], onDelete: Cascade)
+
+  @@index([subServiceId, sortOrder])
+  @@map("sub_service_faqs")
+}
+
+// A Sub Service gallery item (formerly SubService.gallery: string[] of URLs).
+// Mirrors ServiceMedia: image URLs with optional caption + a visibility toggle.
+model SubServiceMedia {
+  id           String     @id @default(uuid())
+  subServiceId String
+  url          String
+  altText      String?
+  caption      String?
+  sortOrder    Int        @default(0)
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  subService   SubService @relation(fields: [subServiceId], references: [id], onDelete: Cascade)
+
+  @@index([subServiceId, isActive, sortOrder])
+  @@map("sub_service_media")
+}
+
+// 1:1 Sub Service SEO row, mirroring ServiceSeo.
+model SubServiceSeo {
+  id              String     @id @default(uuid())
+  subServiceId    String     @unique
+  seoTitle        String?
+  metaDescription String?
+  metaKeywords    String?
+  ogImage         String?
+  canonicalUrl    String?
+  structuredData  Json       @default("{}")
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  subService      SubService @relation(fields: [subServiceId], references: [id], onDelete: Cascade)
+
+  @@map("sub_service_seo")
+}
+
+// CMS-managed Portfolio Project. Independent of the read-only /api/portfolio
+// endpoint (which stays derived from completed Projects) - admins can curate
+// showcase work here, optionally tied to a Service so the public site can show
+// "Related Projects". Soft-removal via isActive toggle; never hard-deleted
+// while in use.
+model PortfolioProject {
+  id          String                  @id @default(uuid())
+  // SEO-friendly URL segment, unique across all projects.
+  slug        String                  @unique
+  title       String
+  summary     String?
+  description String?
+  coverImage  String?
+  clientName  String?
+  location    String?
+  projectDate DateTime?
+  link        String?
+  serviceId   String?
+  isActive    Boolean                 @default(true)
+  sortOrder   Int                     @default(0)
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+  service     Service?                @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  media       PortfolioProjectMedia[]
+
+  @@index([serviceId, isActive, sortOrder])
+  @@map("portfolio_projects")
+}
+
+// A Portfolio Project showcase image/video (gallery).
+model PortfolioProjectMedia {
+  id                 String           @id @default(uuid())
+  portfolioProjectId String
+  url                String
+  altText            String?
+  caption            String?
+  sortOrder          Int              @default(0)
+  isActive           Boolean          @default(true)
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  portfolioProject   PortfolioProject @relation(fields: [portfolioProjectId], references: [id], onDelete: Cascade)
+
+  @@index([portfolioProjectId, sortOrder])
+  @@map("portfolio_project_media")
 }
