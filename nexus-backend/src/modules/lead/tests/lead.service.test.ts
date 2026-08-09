@@ -19,6 +19,7 @@ jest.mock('../../client/client.repository', () => ({
     findByPhone: jest.fn(),
     generateClientNumber: jest.fn(),
     create: jest.fn(),
+    update: jest.fn(),
   },
 }));
 jest.mock('../lead.repository', () => ({
@@ -452,6 +453,99 @@ describe('leadService.createLead - existing client (clientId)', () => {
     expect(result.lead.id).toBe('lead3');
     // clientId takes precedence — no new Client created
     expect(clientRepository.create).not.toHaveBeenCalled();
+  });
+
+  it('never updates the Client master profile when the returning request carries different values', async () => {
+    // The existing Client's master profile (the authoritative record).
+    (clientRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'existing-client',
+      clientNumber: 'C-00001',
+      contactName: 'Saurabh Kushwaha',
+      email: 'adgraphic4@gmail.com',
+      phone: '8765139978',
+      companyName: 'ABC',
+    });
+    (leadRepository.create as jest.Mock).mockResolvedValue({
+      id: 'lead2',
+      leadNumber: 'L-00004',
+      email: 'adgraphic4@gmail.com',
+      clientId: 'existing-client',
+    });
+    (serviceRepository.findById as jest.Mock).mockImplementation((id: string) =>
+      Promise.resolve({ id, isActive: true, name: 'Some Service' })
+    );
+    (leadServiceRepository.createMany as jest.Mock).mockResolvedValue([
+      { id: 'ls1', serviceId: 'svc-interior' },
+    ]);
+
+    const result = await leadService.createLead({
+      // Different values than the master profile - they belong to the LEAD.
+      contactName: 'Another Name',
+      phone: '9999999999',
+      email: 'adgraphic4@gmail.com',
+      companyName: 'XYZ',
+      clientId: 'existing-client',
+      services: [{ serviceId: 'svc-interior' }],
+    });
+
+    // The Client master profile is NEVER written during returning-Lead creation.
+    expect(clientRepository.update).not.toHaveBeenCalled();
+    expect(clientRepository.create).not.toHaveBeenCalled();
+
+    // The submitted values are preserved as request-specific data ON the Lead.
+    expect(leadRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clientId: 'existing-client',
+        contactName: 'Another Name',
+        phone: '9999999999',
+        email: 'adgraphic4@gmail.com',
+        companyName: 'XYZ',
+      }),
+      expect.anything()
+    );
+
+    expect(result.lead.id).toBe('lead2');
+  });
+
+  it('links a wizard-created Client to its originating Lead in both directions without overwriting the Lead values', async () => {
+    (leadRepository.create as jest.Mock).mockResolvedValue({
+      id: 'lead1',
+      leadNumber: 'L-00001',
+      email: 'client-a@example.com',
+    });
+    (serviceRepository.findById as jest.Mock).mockResolvedValue({ id: 'svc-1', isActive: true });
+    (leadServiceRepository.createMany as jest.Mock).mockResolvedValue([{ id: 'ls1', serviceId: 'svc-1' }]);
+    (clientRepository.findByEmail as jest.Mock).mockResolvedValue(null);
+    (clientRepository.findByPhone as jest.Mock).mockResolvedValue(null);
+    (clientRepository.generateClientNumber as jest.Mock).mockResolvedValue('C-00001');
+    (clientRepository.create as jest.Mock).mockResolvedValue({ id: 'client1', clientNumber: 'C-00001' });
+    (leadRepository.update as jest.Mock).mockResolvedValue({
+      id: 'lead1',
+      clientId: 'client1',
+    });
+
+    const result = await leadService.createLead({
+      contactName: 'Name A',
+      phone: '1111111111',
+      email: 'client-a@example.com',
+      password: 'password123',
+      services: [{ serviceId: 'svc-1' }],
+    });
+
+    expect(clientRepository.create).toHaveBeenCalledTimes(1);
+    expect(clientRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        contactName: 'Name A',
+        phone: '1111111111',
+        email: 'client-a@example.com',
+        sourceLeadId: 'lead1',
+      }),
+      expect.anything()
+    );
+    // The originating Lead now points back at the newly-created Client, exactly
+    // like a returning-client Lead does (lead.clientId = existingClient.id).
+    expect(leadRepository.update).toHaveBeenCalledWith('lead1', { clientId: 'client1' }, {});
+    expect(result.client?.id).toBe('client1');
   });
 });
 

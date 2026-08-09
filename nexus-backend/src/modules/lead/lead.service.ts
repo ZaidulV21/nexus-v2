@@ -143,6 +143,15 @@ export const leadService = {
           },
           tx
         );
+
+        // Link the newly-created Client back to its originating Lead so the
+        // Client master profile and the service-request Lead are connected in
+        // both directions (Lead.clientId + Client.sourceLeadId). This mirrors
+        // the returning-client link (lead.clientId = existingClient.id) and
+        // keeps Service History resolution uniform across first-time and
+        // returning requests. The Lead's submitted values are NEVER copied
+        // back into the Client - the Client was just created from them.
+        await leadRepository.update(lead.id, { clientId: client.id }, tx);
       }
 
       return { lead, leadServices, client };

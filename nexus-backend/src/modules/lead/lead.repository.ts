@@ -28,8 +28,9 @@ export const leadRepository = {
     });
   },
 
-  update(id: string, data: Partial<{ contactName: string; phone: string; email: string; companyName: string }>) {
-    return prisma.lead.update({ where: { id }, data });
+  update(id: string, data: Partial<{ contactName: string; phone: string; email: string; companyName: string; clientId: string }>, tx?: Prisma.TransactionClient) {
+    const client = tx ?? prisma;
+    return client.lead.update({ where: { id }, data });
   },
 
   markConverted(id: string, tx?: Prisma.TransactionClient) {
