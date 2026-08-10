@@ -60,13 +60,18 @@ export const conversationService = {
 
   async listAllConversations() {
     const conversations = await conversationRepository.listAllWithLastMessage();
-    // Attach the Admin-perspective unread count (client-sent, unread) so
-    // the inbox can badge conversations without N extra requests.
-    return Promise.all(
-      conversations.map(async (conversation: any) => ({
-        ...conversation,
-        unreadCount: await messageRepository.countUnreadForConversation(conversation.id, 'ADMIN'),
-      }))
+    // Phase 16 (performance): the Admin inbox previously issued one
+    // message.count() per conversation (N+1). Batch the unread counts into a
+    // single groupBy query and join them in memory.
+    const unreadCounts = await messageRepository.countUnreadForConversations(
+      conversations.map((conversation: any) => conversation.id),
+      'ADMIN'
     );
+    const unreadByConversation = new Map<number, number>();
+    unreadCounts.forEach((row: any) => unreadByConversation.set(row.conversationId, row._count._all));
+    return conversations.map((conversation: any) => ({
+      ...conversation,
+      unreadCount: unreadByConversation.get(conversation.id) ?? 0,
+    }));
   },
 };

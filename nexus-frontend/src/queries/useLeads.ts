@@ -4,11 +4,12 @@ import { serviceCatalogService } from '@/services/serviceCatalogService';
 import { clientService } from '@/services/clientService';
 import { queryKeys } from './keys';
 
-export function useLeadsList(params: LeadListParams) {
+export function useLeadsList(params: LeadListParams, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: queryKeys.leads.list(params),
     queryFn: () => leadService.list(params),
     placeholderData: (prev) => prev, // keep old page visible while the next page loads
+    enabled: options?.enabled,
   });
 }
 

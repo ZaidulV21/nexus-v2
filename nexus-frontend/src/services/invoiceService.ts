@@ -52,7 +52,12 @@ export const invoiceService = {
   getById: (id: string) => api.get<Invoice>(`/invoices/${id}`),
 
   /** Client-portal: only the authenticated client's own invoices. */
-  listMine: () => api.get<Invoice[]>('/invoices/me'),
+  /** Client-portal: the authenticated client's own invoices.
+   *  Supports optional pagination (page/pageSize) - the backend returns
+   *  { items, total } when paginated and a plain array otherwise, so callers
+   *  must normalize with toClientList(). */
+  listMine: (pagination?: { page?: number; pageSize?: number }) =>
+    api.get<Invoice[] | { items: Invoice[]; total: number }>('/invoices/me', pagination),
 
   /** Client-portal: summary totals (excludes cancelled invoices). */
   getMineSummary: () => api.get<ClientInvoiceSummary>('/invoices/me/summary'),

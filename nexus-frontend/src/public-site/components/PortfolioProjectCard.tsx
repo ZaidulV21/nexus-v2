@@ -187,6 +187,7 @@ function PortfolioMediaView({ project }: { project: PublicPortfolioProject }) {
                 <img
                   src={active.url}
                   alt={active.altText || project.title}
+                  loading="lazy"
                   className="max-h-[80vh] w-auto rounded-xl object-contain"
                 />
               )}

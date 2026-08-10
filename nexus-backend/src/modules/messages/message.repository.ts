@@ -43,4 +43,20 @@ export const messageRepository = {
       },
     });
   },
+
+  // Phase 16 (performance): batch unread-count for a whole inbox in ONE
+  // groupBy query instead of one count() per conversation (the previous
+  // listAllConversations ran N+1 queries on the messages table).
+  countUnreadForConversations(conversationIds: string[], forActorType: 'ADMIN' | 'CLIENT') {
+    if (conversationIds.length === 0) return Promise.resolve([]);
+    return prisma.message.groupBy({
+      by: ['conversationId'],
+      where: {
+        conversationId: { in: conversationIds },
+        senderType: forActorType === 'ADMIN' ? 'CLIENT' : 'ADMIN',
+        isRead: false,
+      },
+      _count: { _all: true },
+    });
+  },
 };

@@ -27,8 +27,15 @@ export const documentsRepository = {
     });
   },
 
-  listForClient(clientId: string) {
-    return prisma.document.findMany({ where: { clientId, deletedAt: null }, orderBy: { createdAt: 'desc' } });
+  listForClient(clientId: string, pagination?: { skip: number; take: number; search?: string }) {
+    const where: any = { clientId, deletedAt: null };
+    if (pagination?.search) where.fileName = { contains: pagination.search, mode: 'insensitive' };
+    const base = { where, orderBy: { createdAt: 'desc' as const } };
+    if (!pagination) return prisma.document.findMany(base);
+    return Promise.all([
+      prisma.document.findMany({ ...base, skip: pagination.skip, take: pagination.take }),
+      prisma.document.count({ where }),
+    ]).then(([items, total]) => ({ items, total }));
   },
 
   // Global admin listing across every Lead and Project, paginated,

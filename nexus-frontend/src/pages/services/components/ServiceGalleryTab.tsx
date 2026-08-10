@@ -154,7 +154,7 @@ function GalleryItemCard({
             className="h-full w-full object-cover"
           />
         ) : (
-          <img src={item.url} alt={item.altText || ''} className="h-full w-full object-cover" />
+          <img src={item.url} alt={item.altText || ''} loading="lazy" className="h-full w-full object-cover" />
         )}
         {item.type === 'VIDEO' && (
           <div className="absolute left-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white">
@@ -606,6 +606,7 @@ export function ServiceGalleryTab({ service }: { service: Service }) {
                   <img
                     src={previewItem.url}
                     alt={previewItem.altText || ''}
+                    loading="lazy"
                     className="max-h-[60vh] w-full bg-black object-contain"
                   />
                 )}

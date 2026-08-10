@@ -69,12 +69,15 @@ function uniqueServiceRecordsFromQuotationVersion(version: any): Array<{ service
   }));
 }
 
-async function attachAggregateStatus(project: any) {
+async function attachAggregateStatus(project: any, statusHistory?: any[]) {
   if (!project) return project;
   const projectServices = project.projectServices || [];
-  const statusHistory = await projectRepository.listStatusHistoryForServiceIds(projectServices.map((ps: any) => ps.id));
+  // Phase 16 (performance): callers may pass a pre-fetched page-wide history
+  // so list endpoints run ONE status-transition query instead of one per
+  // project (N+1). Single-record callers omit it and fetch as before.
+  const history = statusHistory ?? (await projectRepository.listStatusHistoryForServiceIds(projectServices.map((ps: any) => ps.id)));
   const historyByServiceId = new Map<string, any[]>();
-  statusHistory.forEach((entry: any) => {
+  history.forEach((entry: any) => {
     const entries = historyByServiceId.get(entry.entityId) || [];
     entries.push(entry);
     historyByServiceId.set(entry.entityId, entries);
@@ -103,6 +106,16 @@ async function attachAggregateStatus(project: any) {
       ? Math.round(activeServices.reduce((sum: number, ps: any) => sum + completionPercentage(ps.status), 0) / activeServices.length)
       : 0,
   };
+}
+
+// Phase 16 (performance): batch version of attachAggregateStatus for list
+// endpoints. Collects every Project Service id across the page and fetches all
+// status-transition history in ONE query, then distributes it per project.
+async function attachAggregateStatuses(projects: any[]) {
+  if (projects.length === 0) return [];
+  const allServiceIds = projects.flatMap((project: any) => (project.projectServices || []).map((ps: any) => ps.id));
+  const statusHistory = await projectRepository.listStatusHistoryForServiceIds(allServiceIds);
+  return Promise.all(projects.map((project: any) => attachAggregateStatus(project, statusHistory)));
 }
 
 export const projectService = {
@@ -405,13 +418,14 @@ export const projectService = {
 
   async list(pagination: any) {
     const { items, total } = await projectRepository.list(pagination);
-    const withStatus = await Promise.all(items.map(attachAggregateStatus));
+    const withStatus = await attachAggregateStatuses(items);
     return { items: withStatus, total };
   },
 
-  async listForClient(clientId: string) {
-    const projects = await projectRepository.listForClient(clientId);
-    return Promise.all(projects.map(attachAggregateStatus));
+  async listForClient(clientId: string, pagination?: any) {
+    const projects = await projectRepository.listForClient(clientId, pagination);
+    if (Array.isArray(projects)) return attachAggregateStatuses(projects);
+    return { items: await attachAggregateStatuses(projects.items), total: projects.total };
   },
 
   async getForClient(id: string, clientId: string) {

@@ -120,11 +120,20 @@ export const projectRepository = {
     });
   },
 
-  listForClient(clientId: string) {
-    return prisma.project.findMany({
-      where: { clientId, deletedAt: null },
-      include: PROJECT_INCLUDE,
-    });
+  listForClient(clientId: string, pagination?: { skip: number; take: number; search?: string }) {
+    const where: any = { clientId, deletedAt: null };
+    if (pagination?.search) {
+      where.OR = [
+        { projectNumber: { contains: pagination.search, mode: 'insensitive' } },
+        { title: { contains: pagination.search, mode: 'insensitive' } },
+      ];
+    }
+    const base = { where, include: PROJECT_INCLUDE, orderBy: { createdAt: 'desc' as const } };
+    if (!pagination) return prisma.project.findMany(base);
+    return Promise.all([
+      prisma.project.findMany({ ...base, skip: pagination.skip, take: pagination.take }),
+      prisma.project.count({ where }),
+    ]).then(([items, total]) => ({ items, total }));
   },
 
   async generateProjectNumber(tx: Prisma.TransactionClient): Promise<string> {

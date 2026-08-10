@@ -2,11 +2,18 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { documentService, type DocumentListParams, type UploadDocumentInput } from '@/services/documentService';
 import { queryKeys } from './keys';
 
-/** Client-portal: every document attached to the authenticated client's records. */
-export function useMyDocuments() {
+/** Client-portal: documents attached to the authenticated client's records.
+ *  Fetches the first page (max 100, most recent first) - the portal list and
+ *  dashboard only render recent records. The backend returns a paginated
+ *  { items, total } shape, normalized here to the array the pages expect. */
+export function useMyDocuments(options?: { pageSize?: number }) {
+  const pageSize = options?.pageSize ?? 100;
   return useQuery({
-    queryKey: queryKeys.documents.clientList,
-    queryFn: () => documentService.listMine(),
+    queryKey: [...queryKeys.documents.clientList, { pageSize }],
+    queryFn: async () => {
+      const data = await documentService.listMine({ page: 1, pageSize });
+      return Array.isArray(data) ? data : data.items;
+    },
   });
 }
 

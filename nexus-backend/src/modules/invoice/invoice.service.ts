@@ -514,13 +514,15 @@ export const invoiceService = {
     return { items: items.map(enrichInvoice), total };
   },
 
-  async listForClient(clientId: string) {
-    const invoices = await invoiceRepository.listForClient(clientId);
-    return invoices.map(enrichInvoice);
+  async listForClient(clientId: string, pagination?: any) {
+    const invoices = await invoiceRepository.listForClient(clientId, pagination);
+    if (Array.isArray(invoices)) return invoices.map(enrichInvoice);
+    return { items: invoices.items.map(enrichInvoice), total: invoices.total };
   },
 
   async getClientInvoiceSummary(clientId: string) {
-    const invoices = await invoiceRepository.listForClient(clientId);
+    const rows = await invoiceRepository.listForClient(clientId);
+    const invoices = Array.isArray(rows) ? rows : rows.items;
     const activeInvoices = invoices.filter((inv) => inv.status !== 'CANCELLED');
 
     const totalInvoiced = activeInvoices.reduce((sum, inv) => sum + Number(inv.grandTotal), 0);

@@ -377,3 +377,68 @@ describe('projectService.updateProjectServiceStatus - timeline sync', () => {
     );
   });
 });
+
+describe('projectService.list / listForClient - batched aggregate enrichment (Phase 16)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('resolves list() items to plain enriched objects (not Promises) and batches history in ONE query', async () => {
+    (projectRepository.list as jest.Mock).mockResolvedValue({
+      items: [
+        {
+          id: 'proj1',
+          projectNumber: 'P-00001',
+          projectServices: [
+            { id: 'ps1', status: 'IN PROGRESS' },
+            { id: 'ps2', status: 'COMPLETED' },
+          ],
+        },
+        {
+          id: 'proj2',
+          projectNumber: 'P-00002',
+          projectServices: [{ id: 'ps3', status: 'PROJECT CREATED' }],
+        },
+      ],
+      total: 2,
+    });
+    (projectRepository.listStatusHistoryForServiceIds as jest.Mock).mockResolvedValue([
+      { entityId: 'ps1', status: 'COMPLETED' },
+    ]);
+
+    const result = await projectService.list({ page: 1, pageSize: 20 });
+
+    expect(result.total).toBe(2);
+    expect(result.items).toHaveLength(2);
+    for (const item of result.items) {
+      // Regression guard: the batch helper must resolve inner promises so
+      // every item is a real object that survives res.json serialization.
+      expect(typeof item).toBe('object');
+      expect(item.id).toBeDefined();
+      expect(item.aggregateStatus).toBeDefined();
+      expect(item.projectServices[0].statusHistory).toEqual(expect.any(Array));
+    }
+    // One history query for the whole page, covering every project service.
+    expect(projectRepository.listStatusHistoryForServiceIds).toHaveBeenCalledTimes(1);
+    expect(projectRepository.listStatusHistoryForServiceIds).toHaveBeenCalledWith(['ps1', 'ps2', 'ps3']);
+  });
+
+  it('resolves listForClient() items to plain enriched objects when called without pagination', async () => {
+    (projectRepository.listForClient as jest.Mock).mockResolvedValue([
+      {
+        id: 'proj1',
+        projectNumber: 'P-00001',
+        projectServices: [{ id: 'ps1', status: 'IN PROGRESS' }],
+      },
+    ]);
+    (projectRepository.listStatusHistoryForServiceIds as jest.Mock).mockResolvedValue([]);
+
+    const result = await projectService.listForClient('client1');
+
+    expect(Array.isArray(result)).toBe(true);
+    const items = result as Array<Record<string, any>>;
+    expect(items[0].id).toBe('proj1');
+    expect(items[0].aggregateStatus).toBeDefined();
+    expect(typeof items[0]).toBe('object');
+  });
+});

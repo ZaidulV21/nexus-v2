@@ -55,10 +55,15 @@ export const dashboardRepository = {
     return prisma.projectService.count({ where: { status: 'ON HOLD' } });
   },
 
+  // Phase 16 (performance): these two KPI/chart queries previously fetched
+  // EVERY issued invoice with FULL payment rows (including gatewayMetadata
+  // JSON blobs) and reduced in JS. The consumers only read grandTotal,
+  // issuedAt and payment.amount, so project only those fields - far less
+  // bytes over the wire and less JSON to parse on large datasets.
   invoicesAwaitingPayment() {
     return prisma.invoice.findMany({
       where: { status: 'ISSUED' },
-      include: { payments: true },
+      select: { id: true, grandTotal: true, payments: { select: { amount: true } } },
     });
   },
 
@@ -70,7 +75,7 @@ export const dashboardRepository = {
 
     return prisma.invoice.findMany({
       where: { status: 'ISSUED', issuedAt: { gte: startDate } },
-      include: { payments: true },
+      select: { issuedAt: true, grandTotal: true, payments: { select: { amount: true } } },
       orderBy: { issuedAt: 'asc' },
     });
   },

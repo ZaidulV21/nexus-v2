@@ -8,11 +8,12 @@ import {
 } from '@/services/projectService';
 import { queryKeys } from './keys';
 
-export function useProjectsList(params: ProjectListParams) {
+export function useProjectsList(params: ProjectListParams, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: queryKeys.projects.list(params),
     queryFn: () => projectService.list(params),
     placeholderData: (prev) => prev,
+    enabled: options?.enabled,
   });
 }
 
@@ -24,11 +25,18 @@ export function useProject(id: string | undefined) {
   });
 }
 
-/** Client-portal: the authenticated client's own projects. */
-export function useMyProjects() {
+/** Client-portal: the authenticated client's own projects.
+ *  Fetches the first page (max 100, most recent first) - the portal list and
+ *  dashboard only render recent records. The backend returns a paginated
+ *  { items, total } shape, normalized here to the array the pages expect. */
+export function useMyProjects(options?: { pageSize?: number }) {
+  const pageSize = options?.pageSize ?? 100;
   return useQuery({
-    queryKey: queryKeys.projects.clientList,
-    queryFn: () => projectService.listMine(),
+    queryKey: [...queryKeys.projects.clientList, { pageSize }],
+    queryFn: async () => {
+      const data = await projectService.listMine({ page: 1, pageSize });
+      return Array.isArray(data) ? data : data.items;
+    },
   });
 }
 

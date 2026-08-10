@@ -165,6 +165,7 @@ export function MarketingGallery({ items, alt, className }: MarketingGalleryProp
                 <img
                   src={active.url}
                   alt={active.altText || alt}
+                  loading="lazy"
                   className="max-h-[80vh] w-auto rounded-xl object-contain"
                 />
               )}

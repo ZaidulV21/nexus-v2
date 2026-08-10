@@ -79,8 +79,8 @@ export const documentsService = {
     return documentsRepository.listForEntity(entityType, entityId);
   },
 
-  async listForClient(clientId: string) {
-    return documentsRepository.listForClient(clientId);
+  async listForClient(clientId: string, pagination?: any) {
+    return documentsRepository.listForClient(clientId, pagination);
   },
 
   async listAll(params: {

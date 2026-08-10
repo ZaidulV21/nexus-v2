@@ -117,11 +117,24 @@ export const invoiceRepository = {
     });
   },
 
-  listForClient(clientId: string) {
-    return prisma.invoice.findMany({
-      where: { clientId, status: { not: 'DRAFT' } },
+  listForClient(clientId: string, pagination?: { skip: number; take: number; search?: string }) {
+    const where: any = { clientId, status: { not: 'DRAFT' } };
+    if (pagination?.search) {
+      where.OR = [
+        { invoiceNumber: { contains: pagination.search, mode: 'insensitive' } },
+        { project: { projectNumber: { contains: pagination.search, mode: 'insensitive' } } },
+      ];
+    }
+    const base = {
+      where,
       include: { items: true, payments: true, client: true, project: true },
-    });
+      orderBy: { issuedAt: 'desc' as const },
+    };
+    if (!pagination) return prisma.invoice.findMany(base);
+    return Promise.all([
+      prisma.invoice.findMany({ ...base, skip: pagination.skip, take: pagination.take }),
+      prisma.invoice.count({ where }),
+    ]).then(([items, total]) => ({ items, total }));
   },
 };
 

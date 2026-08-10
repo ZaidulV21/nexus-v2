@@ -48,8 +48,12 @@ export const projectService = {
 
   getById: (id: string) => api.get<Project>(`/projects/${id}`),
 
-  /** Client-portal: only the authenticated client's own projects. */
-  listMine: () => api.get<Project[]>('/projects/me'),
+  /** Client-portal: only the authenticated client's own projects.
+   *  Supports optional pagination (page/pageSize) - the backend returns
+   *  { items, total } when paginated and a plain array otherwise, so callers
+   *  must normalize with toClientList(). */
+  listMine: (pagination?: { page?: number; pageSize?: number }) =>
+    api.get<Project[] | { items: Project[]; total: number }>('/projects/me', pagination),
 
   getMine: (id: string) => api.get<Project>(`/projects/me/${id}`),
 

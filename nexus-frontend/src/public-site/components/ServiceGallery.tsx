@@ -104,7 +104,7 @@ export function ServiceGallery({ images, alt, className }: ServiceGalleryProps) 
                   : 'border-transparent opacity-60 hover:opacity-100'
               )}
             >
-              <img src={src} alt="" className="h-full w-full object-cover" />
+              <img src={src} alt="" loading="lazy" className="h-full w-full object-cover" />
             </button>
           ))}
         </div>

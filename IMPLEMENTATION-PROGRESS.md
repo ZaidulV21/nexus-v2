@@ -2096,3 +2096,59 @@ Projects now automatically know their **full lineage — Origin Lead, Service, S
 | No regressions to auth, RBAC, leads, clients, quotations, invoices, payments, portfolio, timeline, audit | ✅ |
 
 > **Note:** the backend dev server was stopped to unlock the Prisma engine DLL for `migrate deploy`, then restarted (PID logged in `dev-server.log`, which is cleaned up). Vite on port 5173 was untouched.
+
+# Phase 16 - Performance Optimization (Queries, Bundle, Portal Pagination)
+
+**Date**: 2026-08-11
+**Status**: PHASE 16 COMPLETE
+
+## Summary
+
+Phase 16 targets measurable latency and payload costs across the stack with **zero business-workflow change**: (A) N+1 query elimination in list endpoints, (B) dead-code removal and projection narrowing on the dashboard, (C) Vite route-level code splitting plus lazy image loading, (D) pagination for the remaining client-portal `/me` list endpoints (quotations already had it), and (E) a targeted index migration for the hot query paths. All existing API contracts are preserved: endpoints called without pagination params still return the original array shape.
+
+## Backend Changes
+
+### A. N+1 query elimination
+
+1. `src/modules/project/project.service.ts` - NEW batch `attachAggregateStatuses(projects)`: collects every Project Service id across the page, runs ONE `listStatusHistoryForServiceIds` query, and distributes the history per project. Used by `list()` and `listForClient()` (was one status-history query per project). Fixes a latent bug where the batch returned an array of Promises that serialized to `[{}]`.
+2. `src/modules/quotation/quotation.repository.ts` - NEW `enrichItemsWithServiceNamesForVersions(versions)` resolves service names page-wide with AT MOST ONE catalog query (was one `serviceRepository.findById` per line item). Applied in `findById`, `list`, `listForClient`. Old per-version helper removed from the repository (write-path helper in `quotation.service.ts` untouched).
+3. `src/modules/messages/message.repository.ts` - NEW `countUnreadForConversations(ids, forActorType)` groupBy batch; `conversation.service.ts listAllConversations` joins the counts in memory (was one `count()` per conversation for the admin inbox).
+
+### B. Dashboard projections & dead code
+
+4. `src/modules/dashboard/dashboard.repository.ts` - `invoicesAwaitingPayment()` / `monthlyRevenue()` narrowed from `include: { payments: true }` to `select` projections (`id`, `grandTotal`, `payments: { select: { amount: true } }`); consumers (`adminDashboard.service.ts`) verified compatible.
+5. `sumInvoicedAndPaid()` - confirmed dead code (no callers, no tests) and deliberately left untouched (costs nothing, avoids churn).
+
+### C. Index migration
+
+6. `prisma/migrations/20260810201946_phase16_performance_indexes/` - 26 indexes on hot paths: timeline_events/audit_logs `[entityType, entityId, createdAt]`; leads `[createdAt]`,`[source]`; lead_services `[leadId]`; clients `[createdAt]`; quotations `[clientId]`,`[status]`,`[leadId]`; quotation_versions `[quotationId]`; quotation_items `[quotationVersionId]`; projects `[clientId, deletedAt]`,`[leadId]`,`[createdAt]`; project_services `[projectId]`; invoices `[clientId]`,`[projectId]`,`[status]`; invoice_items `[invoiceId]`; payments `[invoiceId]`,`[paidAt]`; in_app_notifications `[recipientId, recipientType, createdAt]`; documents `[clientId]`; conversations `[clientId]`; messages `[conversationId, createdAt]`. Applied; DB in sync (5 migrations total in this lineage).
+
+### D. Client-portal pagination (contract-preserving)
+
+7. `project.repository.ts`, `invoice.repository.ts`, `documents.repository.ts` - `listForClient(clientId, pagination?)`: NO pagination arg -> original array; with `{ skip, take, search? }` -> `{ items, total }`.
+8. `project/invoice/documents` services + controllers - pass the pagination through; controllers use conditional `parsePagination(req)` only when `page`/`pageSize` are present. `getClientInvoiceSummary` narrows the union with `Array.isArray`.
+
+## Frontend Changes
+
+9. `src/App.tsx` - every admin/portal/public page is now `React.lazy` + `Suspense`; layouts, route guards, auth pages and NotFoundPage stay eager. `RouteFallback` spinner; `LegacyAdminRedirect` preserved. Export names verified for all pages.
+10. `src/queries/useLeads.ts` / `useProjects.ts` - optional `options?: { enabled?: boolean }`; `DocumentsPage.tsx` gates the drawer's picker queries with `{ enabled: open }` (drawer stays mounted, no prefetch on page load).
+11. `src/queries/useInvoices.ts` / `useDocuments.ts` / `useProjects.ts` - `useMy*` hooks accept `pageSize` (default 100), fetch page 1, normalize array|`{items,total}` to arrays, extend query keys with `{ pageSize }` (prefix preserved for invalidation).
+12. `src/services/projectService.ts` / `invoiceService.ts` / `documentService.ts` - `listMine(pagination?)`.
+13. Lazy images: `loading="lazy"` added in ServiceGalleryTab (2), MarketingGallery lightbox, ServiceCard, ServiceGallery, ProjectCompletionTab (PortfolioProjectCard already lazy).
+
+## Verification
+
+| Check | Result |
+|-------|--------|
+| Backend tests: 467/467 (28 suites; +2 regression-guard tests for batched list enrichment) | PASS |
+| Backend `npx tsc -p tsconfig.json` | PASS, 0 errors |
+| Frontend `npx tsc -b` | PASS, 0 errors |
+| `npx prisma validate` + `prisma migrate status` (DB up to date) | PASS |
+| Frontend `npx vite build`: main chunk 2,222.78 kB (615.92 gzip) -> **714.52 kB (223.92 gzip)** | -68% / -64% |
+| Build wall time: ~103 s -> **~63 s** (Vite); backend `tsc` ~38 s -> ~7 s (warm) | -39% / -82% |
+| Smoke test | 25/25 |
+| Regression suite | 83/83 (1 failure during work = the batch-Promises bug, fixed) |
+| Backward-compat (43/43) + data-ownership | PASS |
+| Portal `/me` arrays unchanged when no pagination params sent | PASS |
+
+> **Note:** the backend dev server held the Prisma engine DLL (EPERM on `prisma generate`), was restarted with user approval, and is running detached (ts-node-dev, port 4000). Vite dev server untouched. Portal search remains client-side over the first page (pageSize 100).

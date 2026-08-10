@@ -23,11 +23,18 @@ export function useInvoice(id: string | undefined) {
   });
 }
 
-/** Client-portal: the authenticated client's own invoices. */
-export function useMyInvoices() {
+/** Client-portal: the authenticated client's own invoices.
+ *  Fetches the first page (max 100, most recent first) - the portal list and
+ *  dashboard only render recent records. The backend returns a paginated
+ *  { items, total } shape, normalized here to the array the pages expect. */
+export function useMyInvoices(options?: { pageSize?: number }) {
+  const pageSize = options?.pageSize ?? 100;
   return useQuery({
-    queryKey: queryKeys.invoices.clientList,
-    queryFn: () => invoiceService.listMine(),
+    queryKey: [...queryKeys.invoices.clientList, { pageSize }],
+    queryFn: async () => {
+      const data = await invoiceService.listMine({ page: 1, pageSize });
+      return Array.isArray(data) ? data : data.items;
+    },
   });
 }
 

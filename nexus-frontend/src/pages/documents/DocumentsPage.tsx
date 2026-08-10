@@ -171,8 +171,16 @@ function UploadDocumentDrawer({ open, onOpenChange }: { open: boolean; onOpenCha
   // Lightweight pickers: first page of leads/projects is enough for the
   // common case; the backend list endpoints already support search if
   // this ever needs a typeahead.
-  const { data: leads } = useLeadsList({ page: 1, pageSize: 100, sortBy: 'createdAt', sortOrder: 'desc' });
-  const { data: projects } = useProjectsList({ page: 1, pageSize: 100, sortBy: 'createdAt', sortOrder: 'desc' });
+  // Phase 16 (performance): only fetch the picker lists while the drawer is
+  // actually open, instead of firing 2 extra list requests on every page load.
+  const { data: leads } = useLeadsList(
+    { page: 1, pageSize: 100, sortBy: 'createdAt', sortOrder: 'desc' },
+    { enabled: open }
+  );
+  const { data: projects } = useProjectsList(
+    { page: 1, pageSize: 100, sortBy: 'createdAt', sortOrder: 'desc' },
+    { enabled: open }
+  );
 
   const targets =
     entityType === 'LEAD'

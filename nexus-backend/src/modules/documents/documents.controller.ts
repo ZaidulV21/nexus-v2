@@ -91,7 +91,13 @@ export const documentsController = {
   async listForClient(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.user || req.user.type !== 'CLIENT') throw new UnauthorizedError();
-      const docs = await documentsService.listForClient(req.user.id);
+      // Optional pagination: when page/pageSize are absent the endpoint keeps
+      // its original array response for backward compatibility.
+      const hasPagination = req.query.page !== undefined || req.query.pageSize !== undefined;
+      const docs = await documentsService.listForClient(
+        req.user.id,
+        hasPagination ? parsePagination(req) : undefined
+      );
       return ok(res, docs);
     } catch (err) {
       next(err);

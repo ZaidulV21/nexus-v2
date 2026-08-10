@@ -19,8 +19,12 @@ export interface UploadDocumentInput {
 }
 
 export const documentService = {
-  /** Client-portal: every document attached to the authenticated client's records. */
-  listMine: () => api.get<NexusDocument[]>('/documents/me'),
+  /** Client-portal: documents attached to the authenticated client's records.
+   *  Supports optional pagination (page/pageSize) - the backend returns
+   *  { items, total } when paginated and a plain array otherwise, so callers
+   *  must normalize with toClientList(). */
+  listMine: (pagination?: { page?: number; pageSize?: number }) =>
+    api.get<NexusDocument[] | { items: NexusDocument[]; total: number }>('/documents/me', pagination),
 
   /** Admin: paginated listing across all leads and projects. */
   listAll: (params: DocumentListParams) =>

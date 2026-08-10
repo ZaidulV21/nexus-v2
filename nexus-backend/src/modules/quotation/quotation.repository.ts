@@ -17,19 +17,29 @@ export const CLIENT_VISIBLE_QUOTATION_STATUSES: QuotationStatus[] = [
 // Populates the denormalized field from the catalog at read time for
 // backward compatibility with older quotations created before the field
 // was populated.
-async function enrichItemsWithServiceNames(items: any[]): Promise<any[]> {
-  const missing = items.filter((item) => !item.serviceName && item.serviceId);
-  if (missing.length === 0) return items;
-  const uniqueIds = [...new Set(missing.map((item) => item.serviceId))];
+
+// Phase 16 (performance): page-wide enrichment. The read paths previously
+// called a per-version enrichment once per (quotation x version) - each
+// call was internally batched but the outer loop made N x M async hops. This
+// hoists the missing-item scan to the whole page and issues AT MOST ONE
+// catalog query, then fills serviceName back onto every version's items.
+async function enrichItemsWithServiceNamesForVersions(versions: any[]): Promise<any[]> {
+  const allItems = versions.flatMap((version: any) => version.items ?? []);
+  const missing = allItems.filter((item: any) => !item.serviceName && item.serviceId);
+  if (missing.length === 0) return versions;
+  const uniqueIds = [...new Set(missing.map((item: any) => item.serviceId))];
   const services = await prisma.service.findMany({
     where: { id: { in: uniqueIds } },
     select: { id: true, name: true },
   });
   const nameMap = new Map(services.map((s) => [s.id, s.name]));
-  return items.map((item) => ({
-    ...item,
-    serviceName: item.serviceName || nameMap.get(item.serviceId) || null,
-  }));
+  versions.forEach((version: any) => {
+    version.items = (version.items ?? []).map((item: any) => ({
+      ...item,
+      serviceName: item.serviceName || nameMap.get(item.serviceId) || null,
+    }));
+  });
+  return versions;
 }
 
 // Business-facing summaries of the related Lead / Client. Only these fields
@@ -115,9 +125,7 @@ export const quotationRepository = {
     });
     if (!quotation) return null;
     // Backward compatibility: fill serviceName for older items where it is NULL
-    for (const version of quotation.versions) {
-      (version as any).items = await enrichItemsWithServiceNames((version as any).items);
-    }
+    quotation.versions = await enrichItemsWithServiceNamesForVersions(quotation.versions as any);
     return quotation;
   },
 
@@ -144,11 +152,10 @@ export const quotationRepository = {
       prisma.quotation.count({ where }),
     ]);
     // Backward compatibility: fill serviceName for older items
-    for (const quotation of items) {
-      for (const version of quotation.versions) {
-        (version as any).items = await enrichItemsWithServiceNames((version as any).items);
-      }
-    }
+    items.forEach((quotation: any) => {
+      quotation.versions = quotation.versions ?? [];
+    });
+    await enrichItemsWithServiceNamesForVersions(items.flatMap((quotation: any) => quotation.versions));
     return { items, total };
   },
 
@@ -191,11 +198,10 @@ export const quotationRepository = {
     ]);
 
     // Backward compatibility: fill serviceName for older items
-    for (const quotation of items) {
-      for (const version of quotation.versions) {
-        (version as any).items = await enrichItemsWithServiceNames((version as any).items);
-      }
-    }
+    items.forEach((quotation: any) => {
+      quotation.versions = quotation.versions ?? [];
+    });
+    await enrichItemsWithServiceNamesForVersions(items.flatMap((quotation: any) => quotation.versions));
 
     return { items, total };
   },
