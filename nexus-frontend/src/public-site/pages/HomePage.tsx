@@ -37,7 +37,7 @@ export function HomePage() {
       <ProjectsSection />
       <IndustriesSection />
       <TestimonialsSection />
-      <FAQSection />
+      <FAQSection /> 
       <CTASection />
     </>
   );
