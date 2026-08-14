@@ -71,6 +71,16 @@ export function useWizardState() {
     }));
   }, []);
 
+  /**
+   * Unlocks the Services step after a deep-link preselection so the visitor
+   * can keep their pinned service/sub-services AND add further services on the
+   * same request (e.g. Interior Design -> Painting + Flooring, plus Electrical
+   * Work -> Wiring). Existing selections are preserved.
+   */
+  const clearPreselect = useCallback(() => {
+    setState((s) => ({ ...s, preselected: false, currentStep: 0 }));
+  }, []);
+
   const setAnswer = useCallback((serviceId: string, questionId: string, value: string | string[]) => {
     setState((s) => ({
       ...s,
@@ -160,6 +170,7 @@ export function useWizardState() {
     toggleService,
     toggleSubService,
     preselect,
+    clearPreselect,
     setAnswer,
     addFiles,
     removeFile,

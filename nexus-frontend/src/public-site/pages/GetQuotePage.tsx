@@ -519,6 +519,7 @@ export function GetQuotePage() {
                       subServices={preselectedSubs}
                       selectedSubServiceIds={state.selectedSubServices[preselectedService?.id ?? ''] ?? []}
                       onToggleSubService={(subId) => wizard.toggleSubService(preselectedService?.id ?? '', subId)}
+                      onAddService={wizard.clearPreselect}
                     />
                   ) : (
                     <StepServices

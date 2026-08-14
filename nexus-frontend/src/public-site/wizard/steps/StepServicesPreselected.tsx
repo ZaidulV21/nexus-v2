@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Lock, Layers, Check, Wrench } from 'lucide-react';
+import { Lock, Layers, Check, Wrench, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface SubServiceOption {
@@ -16,6 +16,8 @@ interface StepServicesPreselectedProps {
   /** Currently checked sub-service ids. */
   selectedSubServiceIds: string[];
   onToggleSubService: (subServiceId: string) => void;
+  /** Unlocks the full services picker so more services can be added. */
+  onAddService: () => void;
 }
 
 /**
@@ -30,6 +32,7 @@ export function StepServicesPreselected({
   subServices,
   selectedSubServiceIds,
   onToggleSubService,
+  onAddService,
 }: StepServicesPreselectedProps) {
   if (!service) {
     return (
@@ -120,6 +123,17 @@ export function StepServicesPreselected({
           </p>
         </div>
       )}
+
+      {/* Add more services — keeps the pinned service and its sub-options,
+          then unlocks the full services picker for additional services. */}
+      <button
+        type="button"
+        onClick={onAddService}
+        className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border-strong px-4 py-3 text-sm font-medium text-ink transition-all hover:border-accent hover:text-accent"
+      >
+        <Plus className="h-4 w-4" />
+        Add another service
+      </button>
     </div>
   );
 }

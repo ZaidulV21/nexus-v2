@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { motion, AnimatePresence, useScroll, useSpring } from 'framer-motion';
 import {
@@ -14,7 +14,6 @@ import {
   Quote,
   Sparkles,
   Users,
-  Wrench,
 } from 'lucide-react';
 import { usePublicServiceBySlug, usePublicServices } from '@/queries/usePublicServices';
 import { usePublicSubServices } from '@/queries/usePublicSubServices';
@@ -25,13 +24,13 @@ import { cn } from '@/lib/utils';
 import { RichTextContent } from '@/components/rich-text/RichTextContent';
 import { richTextToPlainText } from '@/lib/richText';
 import { ServiceCard } from '../components/ServiceCard';
+import { SubServiceSelectCard } from '../components/SubServiceSelectCard';
 import { ServiceGallery } from '../components/ServiceGallery';
 import { MarketingGallery } from '../components/MarketingGallery';
 import { PortfolioProjectCard } from '../components/PortfolioProjectCard';
 import { FAQAccordion } from '../components/FAQAccordion';
 import { TestimonialCard } from '../components/TestimonialCard';
 import { FadeIn, StaggerGroup, StaggerItem } from '../components/motion';
-import { subServiceIconMap } from '../components/subServiceIcons';
 import { toServiceDetailContent, toSubServiceDetailContent } from '../lib/serviceDetailContent';
 import { SeoHead, siteUrl, absoluteUrl, buildServiceJsonLd, buildBreadcrumbJsonLd, buildFaqJsonLd } from '../seo';
 import type { ServiceDetailContent } from '../lib/serviceDetailContent';
@@ -125,15 +124,23 @@ interface ActiveContent {
   detail: ServiceDetailContent;
 }
 
-/** The "service family" grid: the parent service plus every sub-service. */
+/** The selectable "service family" grid of sub-services. */
 function SubServicesSection({
   service,
   subServices,
   activeSubSlug,
+  selectedSubIds,
+  selectionCount,
+  onToggleSub,
+  quoteHref,
 }: {
   service: ServiceItem;
   subServices: SubService[];
   activeSubSlug?: string;
+  selectedSubIds: string[];
+  selectionCount: number;
+  onToggleSub: (subId: string) => void;
+  quoteHref: string;
 }) {
   if (subServices.length === 0) return null;
 
@@ -143,58 +150,54 @@ function SubServicesSection({
         <SectionHeading
           tag="Service Options"
           title={`${service.name} — Sub Services`}
-          description="Pick the specific option that fits your requirement. Each option has its own details, pricing and process."
+          description="Pick one or more options to add to your quote. Each option has its own details, pricing and process."
         />
-        <StaggerGroup className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <StaggerItem>
-            <Link
-              to={`/services/${service.slug}`}
-              className={cn(
-                'group flex h-full flex-col gap-3 rounded-2xl border bg-surface p-6 transition-all duration-300 hover:-translate-y-1 hover:border-accent/30 hover:shadow-lg hover:shadow-accent/5',
-                !activeSubSlug ? 'border-accent ring-2 ring-accent/30 shadow-lg shadow-accent/10' : 'border-border'
-              )}
-            >
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-subtle text-accent transition-colors group-hover:bg-accent group-hover:text-white">
-                <Layers className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-ink">{service.name}</p>
-                <p className="mt-1 text-xs text-ink-muted">All options</p>
-              </div>
-            </Link>
-          </StaggerItem>
 
-          {subServices.map((sub) => {
-            const Icon = subServiceIconMap[sub.icon ?? 'Wrench'] ?? Wrench;
-            const isActive = sub.slug === activeSubSlug;
-            return (
-              <StaggerItem key={sub.slug}>
-                <div
-                  className={cn(
-                    'group flex h-full flex-col rounded-2xl border bg-surface p-6 transition-all duration-300 hover:-translate-y-1 hover:border-accent/30 hover:shadow-lg hover:shadow-accent/5',
-                    isActive ? 'border-accent ring-2 ring-accent/30 shadow-lg shadow-accent/10' : 'border-border'
-                  )}
-                >
-                  <Link to={`/services/${service.slug}/${sub.slug}`} className="flex-1">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-subtle text-accent transition-colors group-hover:bg-accent group-hover:text-white">
-                      <Icon className="h-5 w-5" />
-                    </div>
-                    <div className="mt-3">
-                      <p className="text-sm font-semibold text-ink transition-colors group-hover:text-accent">{sub.name}</p>
-                      <p className="mt-1 text-xs text-ink-muted line-clamp-2">{sub.shortDescription ?? sub.name}</p>
-                    </div>
-                  </Link>
-                  <Link
-                    to={`/get-quote?service=${service.id}&subService=${sub.id}`}
-                    className="mt-4 inline-flex items-center justify-center gap-1.5 rounded-xl bg-accent px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-accent-hover"
-                  >
-                    Get Quote
-                    <ArrowRight className="h-3.5 w-3.5" />
-                  </Link>
-                </div>
-              </StaggerItem>
-            );
-          })}
+        {/* Selection summary + Get Quote CTA */}
+        <div className="mb-6 flex flex-col gap-4 rounded-2xl border border-border bg-surface p-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent-subtle text-accent">
+              <Layers className="h-5 w-5" />
+            </span>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-ink">
+                {selectionCount > 0
+                  ? `${selectionCount} option${selectionCount === 1 ? '' : 's'} selected`
+                  : 'No options selected yet'}
+              </p>
+              <p className="mt-0.5 text-xs text-ink-muted">
+                {selectionCount > 0
+                  ? 'Every selected option is included in your quote request.'
+                  : 'Select options below, or request a quote for the full service.'}
+              </p>
+            </div>
+          </div>
+          <Link
+            to={quoteHref}
+            className={cn(
+              'inline-flex shrink-0 items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold shadow-sm transition-all',
+              selectionCount > 0
+                ? 'bg-accent text-white hover:bg-accent-hover'
+                : 'border border-border bg-canvas text-ink hover:border-accent/40 hover:bg-surface'
+            )}
+          >
+            Get Quote
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
+
+        <StaggerGroup className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {subServices.map((sub) => (
+            <StaggerItem key={sub.id} className="h-full">
+              <SubServiceSelectCard
+                serviceSlug={service.slug}
+                sub={sub}
+                selected={selectedSubIds.includes(sub.id)}
+                onToggle={onToggleSub}
+                viewing={sub.slug === activeSubSlug}
+              />
+            </StaggerItem>
+          ))}
         </StaggerGroup>
       </FadeIn>
     </section>
@@ -302,6 +305,21 @@ export function ServiceDetailPage() {
 
   const [showStickyCta, setShowStickyCta] = useState(false);
 
+  // Multi-select state for sub-services (Urban-Company style). Selection is
+  // local to this component so it survives sub-service ↔ service navigation
+  // (both routes render the same component instance) and is reset when the
+  // user moves to a different service.
+  const [selectedSubIds, setSelectedSubIds] = useState<string[]>([]);
+  const serviceId = service?.id;
+
+  useEffect(() => {
+    setSelectedSubIds([]);
+  }, [serviceId]);
+
+  const toggleSub = useCallback((subId: string) => {
+    setSelectedSubIds((prev) => (prev.includes(subId) ? prev.filter((id) => id !== subId) : [...prev, subId]));
+  }, []);
+
   useEffect(() => {
     const onScroll = () => setShowStickyCta(window.scrollY > 520);
     onScroll();
@@ -312,17 +330,26 @@ export function ServiceDetailPage() {
   const subServices = cmsSubs;
   const activeSub = subServices.find((sub) => sub.slug === subSlug);
 
-  // Phase 6: every "Request Quote" CTA on this page carries the current
-  // Service (and Sub Service) id, so the quote wizard opens pre-selected and
-  // the client never picks again. The backend stores these ids verbatim.
+  // The sub-options that will be pinned on Get Quote: every explicitly
+  // selected sub-service plus the one currently being viewed (this keeps the
+  // pre-existing "sub-service detail → Request Quote" deep-link behaviour).
+  const quoteSelection = useMemo(() => {
+    const ids = new Set(selectedSubIds);
+    if (activeSub) ids.add(activeSub.id);
+    return Array.from(ids);
+  }, [selectedSubIds, activeSub?.id]);
+
+  // Phase 6/7: every "Request Quote" CTA carries the Service id plus ALL
+  // selected Sub Service ids (repeated `subService` query params), so the
+  // existing quote wizard opens pre-selected. The backend stores these ids
+  // verbatim — names are never used to identify records.
   const quoteHref = useMemo(() => {
     const params = new URLSearchParams();
     if (service?.id) params.set('service', service.id);
-    if (activeSub) params.set('subService', activeSub.id);
+    for (const subId of quoteSelection) params.append('subService', subId);
     const qs = params.toString();
     return qs ? `/get-quote?${qs}` : '/get-quote';
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [service?.id, activeSub?.id]);
+  }, [service?.id, quoteSelection]);
 
   let content: ActiveContent | null = null;
   if (service) {
@@ -663,7 +690,15 @@ export function ServiceDetailPage() {
 
             {/* Sub Services */}
             {visible['sub-services'] && (
-              <SubServicesSection service={service} subServices={subServices} activeSubSlug={activeSub?.slug} />
+              <SubServicesSection
+                service={service}
+                subServices={subServices}
+                activeSubSlug={activeSub?.slug}
+                selectedSubIds={selectedSubIds}
+                selectionCount={quoteSelection.length}
+                onToggleSub={toggleSub}
+                quoteHref={quoteHref}
+              />
             )}
 
             {/* Gallery */}
@@ -889,6 +924,11 @@ export function ServiceDetailPage() {
             <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3 sm:px-6 lg:px-8">
               <div className="hidden min-w-0 flex-1 sm:block">
                 <p className="truncate text-sm font-semibold text-ink">{content.name}</p>
+                {quoteSelection.length > 0 && (
+                  <p className="text-xs font-medium text-accent">
+                    {quoteSelection.length} option{quoteSelection.length === 1 ? '' : 's'} selected
+                  </p>
+                )}
                 {content.detail.startingPrice && <p className="text-xs text-ink-muted">From {content.detail.startingPrice}</p>}
               </div>
               <div className="flex flex-1 gap-2 sm:flex-none sm:gap-3">
