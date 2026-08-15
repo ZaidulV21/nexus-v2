@@ -1,10 +1,17 @@
 # Nexus — Business Service Management Platform (Backend, V1)
 
-This is the complete V1 backend implementation, built module-by-module exactly per `docs/Technical-Blueprint-Development-Roadmap-V1.md`, following the decisions locked in `docs/PRD-Business-Service-Management-Platform-V1.md`.
+This is the V1 backend implementation, built module-by-module exactly per `docs/Technical-Blueprint-Development-Roadmap-V1.md`, following the decisions locked in `docs/PRD-Business-Service-Management-Platform-V1.md`.
+
+> **Phase 17 note:** this README was written in an earlier, backend-only era and contains
+> outdated claims (a missing frontend, "cannot compile", single baseline migration). The
+> current repo has a full frontend (`../nexus-frontend`) and a verified build/test suite.
+> The authoritative, up-to-date reference is **`../ARCHITECTURE.md`** (repo root).
 
 ## ⚠️ There is no frontend in this zip
 
-Per the PRD, the frontend is explicitly deferred — it will be built after this backend is verified, matching a pre-existing design you provide separately. This zip is a **REST API only**. There is nothing to view in a browser as a UI; you "preview" it by sending HTTP requests and reading JSON responses, or by running the automated tests.
+This statement is outdated. The repository root now contains `nexus-frontend/` — the
+React 18 + Vite + Tailwind 3 SPA with the public website, admin CRM and client portal.
+This README's backend instructions below remain valid for the API alone.
 
 ## How to test and preview this in VS Code
 
@@ -64,11 +71,18 @@ All 15 modules across 8 dependency layers:
 | 6 — Supporting | M11 Documents, M12 Messages |
 | 7 — Platform | M13 Global Search, M14 Dashboards |
 
-Every module follows the same structure (`.routes.ts` → `.controller.ts` → `.service.ts` → `.repository.ts` → `.validation.ts` → `.types.ts`), and every state-changing action follows the mandatory lifecycle: **Validation → Authorization → Transaction → Timeline → Audit → Notification → Response**.
+> The M0–M14 numbering is the original build plan. The current `src/modules/` contains 23
+> modules — the original set plus `company`, `contact`, `email`, `entity-ref`, `otp`, `payments`,
+> `pdf`, `search`, `seo` and more — each following `.routes.ts → .controller.ts → .service.ts →
+> .repository.ts → .validation.ts → .types.ts`. See `../ARCHITECTURE.md` §7.3 for the full inventory.
+
+Every state-changing action follows the mandatory lifecycle: **Validation → Authorization → Transaction → Timeline → Audit → Notification → Response**.
 
 ## ⚠️ Important: this environment could not install dependencies or compile the code
 
-This project was built in a network-isolated sandbox. I could not run `npm install`, `tsc`, or the Jest test suite here to confirm a clean compile — **you must do this as the first step** after unzipping, before assuming the code is runnable as-is. I've reviewed every file for correctness and internal consistency, and the architecture/logic faithfully implements every PRD and blueprint decision, but a first local build is the only way to catch environment-specific TypeScript issues (e.g. minor type mismatches Prisma's generated client introduces) that only surface at compile time.
+This note is outdated. The backend builds cleanly (`npm run build`) and the Jest unit suite
+passes (**28 suites / 467 tests**, re-verified in Phase 17; no database needed). The
+end-to-end harnesses below require a running server on `:4000` and a real Postgres.
 
 ## Setup
 
@@ -80,11 +94,9 @@ npm install
 cp .env.example .env
 # Edit .env: set DATABASE_URL to your Postgres instance, set JWT_SECRET
 
-# 3. Apply the baseline migration and generate the Prisma client
-#    The migration history is a single machine-generated baseline
-#    (prisma/migrations/20260701000000_initial_baseline). On a brand-new DB,
-#    `migrate deploy` applies it; to rebuild an existing dev DB from scratch,
-#    use `npx prisma migrate reset --force --skip-seed` instead.
+# 3. Apply the migrations and generate the Prisma client
+#    The migration history is: baseline + phase 12 (admin UX) + phase 13a/13b (CMS
+#    normalization) + phase 16 (indexes) — see ARCHITECTURE.md §6.
 npx prisma migrate deploy
 npx prisma generate
 
@@ -107,7 +119,9 @@ Three tiers, fastest/cheapest first. Stop and fix before moving to the next tier
 ```bash
 npm test
 ```
-Validates every module's business logic in isolation (~35 test files: status transitions, GST math, versioning, aggregate status, permission checks, etc.). Run this first, always — it's the cheapest signal.
+Validates every module's business logic in isolation (**28 test suites / 467 tests**:
+status transitions, GST math, versioning, aggregate status, payment idempotency, permission
+checks, etc.). Run this first, always — it's the cheapest signal.
 
 ### Tier 2 — Automated end-to-end smoke test (one command, real database)
 ```bash

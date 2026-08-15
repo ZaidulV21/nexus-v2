@@ -2667,3 +2667,25 @@ Integrated the **Razorpay payment gateway** so Clients can pay invoice outstandi
 ## Audit findings for the payments stack
 
 Documented in [PAYMENTS.md §12](../PAYMENTS.md#12-known-limitations--audit-findings): (1) the `payment.successful` email payload lacks `paymentId`, so the online-payment email renders the invoice template rather than the receipt template; (2) no unique index on `gatewayTransactionId`; (3) no webhook reconciliation; (4) refunds are enum-only; (5) `OVERDUE` reserved.
+
+---
+
+# Phase 17 — Documentation (System Reference)
+
+**Date:** 2026-08-15
+**Status:** ✅ PHASE 17 COMPLETE (documentation only)
+
+## Summary
+
+Documentation-only phase. No source, schema, migration, API or behavior changes were made.
+It produced `ARCHITECTURE.md` — the authoritative, implementation-accurate system reference
+(stack with real dependency pins, database + migrations, full API surface, frontend
+architecture, CMS, public flow, admin guide, client-portal data ownership, Phase 16
+performance work, testing status, known limitations) — and corrected stale facts in the root
+`README.md` (React 18/Router 6/Tailwind 3, backend tests now **467/467 across 28 suites**,
+public-auth endpoints). See `IMPLEMENTATION-PROGRESS.md` Phase 17 for the verification table
+and the Phase 12–17 history.
+
+> **Note:** per-phase test counts throughout this file (e.g. "253/253") are historical
+> snapshots. The current backend unit suite is **467/467 across 28 suites** (re-verified in
+> Phase 17).

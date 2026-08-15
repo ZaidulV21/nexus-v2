@@ -8,6 +8,7 @@ A full-stack platform for managing business service operations: lead capture, cl
 Nexus/
 ├── nexus-backend/      Node.js + Express + Prisma + PostgreSQL
 ├── nexus-frontend/     React + TypeScript + Vite + TailwindCSS
+├── ARCHITECTURE.md     Authoritative system reference (stack, DB, migrations, APIs, flows)
 ├── IMPLEMENTATION.md   Detailed phase-by-phase implementation docs
 ├── IMPLEMENTATION-PROGRESS.md   Progress tracker
 ├── PAYMENTS.md         Payment architecture & Razorpay integration reference
@@ -25,12 +26,12 @@ Nexus/
 - **Email**: Resend (HTML templates, fire-and-forget delivery)
 - **Storage**: Cloudinary (images, PDFs) with local fallback
 - **PDF**: PDFKit (branded quotation/invoice/receipt generation)
-- **Testing**: Jest (253 tests, 21 suites)
+- **Testing**: Jest (467 tests, 28 suites)
 
 ### Frontend
-- **Framework**: React 19 + TypeScript + Vite 5
-- **Styling**: TailwindCSS v4 with custom design tokens
-- **Routing**: React Router v7
+- **Framework**: React 18.3 + TypeScript + Vite 5
+- **Styling**: TailwindCSS v3 with custom design tokens (config-based, class dark mode)
+- **Routing**: React Router v6
 - **Data**: TanStack React Query
 - **Forms**: React Hook Form + Zod
 - **Charts**: Recharts
@@ -68,7 +69,7 @@ Nexus/
 cd nexus-backend
 npm install
 cp .env.example .env          # configure DATABASE_URL, JWT_SECRET, RAZORPAY_KEY_ID/SECRET, etc.
-npx prisma migrate deploy          # applies the single baseline migration
+npx prisma migrate deploy          # applies all migrations (baseline + phases 12, 13a, 13b, 16)
 npx prisma generate
 npm run prisma:seed            # seeds admin user + baseline services
 npm run dev                    # starts on http://localhost:4000
@@ -85,11 +86,12 @@ npm run dev                    # starts on http://localhost:5173
 
 ## Running Tests
 
-### Backend (253 tests)
+### Backend (467 tests, 28 suites)
 ```bash
 cd nexus-backend
-npm test                       # all unit tests
+npm test                       # all unit tests (no DB needed)
 npm run smoke-test             # end-to-end against running server
+npm run regression:test        # Lead → Client → Quotation → Project lineage (9 tests / 83 checks)
 ```
 
 ### Frontend
@@ -150,10 +152,16 @@ The Get Quote wizard (`/get-quote`) is an 8-step flow that:
 |--------|----------|---------|
 | `POST` | `/api/public/auth/send-otp` | Send 6-digit OTP to email |
 | `POST` | `/api/public/auth/verify-otp` | Verify OTP |
-| `POST` | `/api/public/auth/forgot-password` | Request password reset |
-| `POST` | `/api/public/auth/reset-password` | Set new password |
-| `POST` | `/api/leads` | Create lead (with optional account creation) |
-| `GET` | `/api/services/public` | Public service catalog |
+| `POST` | `/api/public/auth/check-email` | Wizard existing-user detection |
+| `POST` | `/api/public/auth/check-account` | Existing-client detection (repeat enquiries) |
+| `POST` | `/api/public/auth/send-otp-login` | OTP login for existing clients |
+| `POST` | `/api/public/auth/verify-otp-login` | Verify OTP login |
+| `POST` | `/api/auth/forgot-password` | Request password reset |
+| `POST` | `/api/auth/reset-password` | Set new password |
+| `POST` | `/api/leads` | Create lead (wizard submission, optional account creation) |
+| `GET` | `/api/services` | Public service catalog (active + published) |
+| `POST` | `/api/contact-messages` | Contact/support inbox submission |
+| `GET` | `/api/portfolio` | Public portfolio (completed projects) |
 
 ### Admin (requires ADMIN role)
 | Endpoint | Purpose |
@@ -186,11 +194,13 @@ See [PAYMENTS.md](PAYMENTS.md) for the complete payment architecture, lifecycle,
 
 All core features are implemented and verified:
 
-- **253/253 backend tests passing**
+- **467/467 backend tests passing (28 suites)**
 - **Frontend TypeScript: 0 errors**
 - **Frontend production build: clean**
 
-See [IMPLEMENTATION.md](IMPLEMENTATION.md) for detailed phase-by-phase documentation.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the authoritative system reference (stack,
+database, migrations, full API surface, CMS, public flow, admin guide, portal/data
+ownership, testing status, known limitations).
 
 ## License
 

@@ -2152,3 +2152,59 @@ Phase 16 targets measurable latency and payload costs across the stack with **ze
 | Portal `/me` arrays unchanged when no pagination params sent | PASS |
 
 > **Note:** the backend dev server held the Prisma engine DLL (EPERM on `prisma generate`), was restarted with user approval, and is running detached (ts-node-dev, port 4000). Vite dev server untouched. Portal search remains client-side over the first page (pageSize 100).
+
+---
+
+# Phase 17 - Documentation (System Reference)
+
+**Date**: 2026-08-15
+**Status**: PHASE 17 COMPLETE (documentation only — NO source, schema, migration, API or behavior changes)
+
+## Summary
+
+Phase 17 is a **documentation-only** pass. It produces an authoritative, implementation-accurate
+system reference and corrects stale claims in the existing docs. No application source code,
+Prisma schema, migrations, API contracts or frontend behavior were touched.
+
+## Deliverables
+
+1. **NEW `ARCHITECTURE.md`** (repo root) — the canonical reference:
+   - Tech stack (accurate pins: React 18.3, React Router 6, Tailwind 3, Vite 5)
+   - Database architecture (every model/table, enums, key relations, ownership rules)
+   - Full migration history (5 migrations: baseline, phase 12, 13a, 13b, 16)
+   - Backend architecture + complete API surface (all 23 modules, every mounted route)
+   - Frontend architecture (3-area routing, data layer, UI kit, public-site module, wizard)
+   - Public website flows (service discovery, Get Quote wizard steps, contact)
+   - Admin guide, Client portal & data ownership, CMS capabilities, payments summary
+   - Phase 16 performance work, testing & verification status, known limitations
+   - Phase 12–17 timeline from `git log`
+2. **`README.md`** — corrected to the real state: React 18 (not 19), Router 6 (not 7),
+   Tailwind 3 (not 4), backend tests **467/467 across 28 suites** (not 253), public-auth
+   endpoint table fixed (forgot/reset under `/api/auth`, added OTP-login + check-account),
+   `GET /api/services` (not `/services/public`), link to `ARCHITECTURE.md`.
+3. **`IMPLEMENTATION-PROGRESS.md`** — this Phase 17 entry + Phase 12–17 history table (§ below).
+
+## Phase 12–17 history (from `git log`)
+
+| Phase | Commit(s) | What shipped |
+|---|---|---|
+| Phase 12 | `cf4fe3c` | Admin UX: `PublicationState` + `publicationState` on services/sub_services, `contact_messages` inbox (public /contact + admin Support), currency symbol ₹ default. Migration `20260807183241_phase12_admin_ux`. |
+| Phase 13 | `a622a02` | CMS normalization: 13a creates 12 normalized content tables + portfolio tables and backfills legacy JSON in-transaction; 13b drops the legacy JSON/flat SEO columns. Migration `20260809172248_phase13a` + `20260809230124_phase13b`. |
+| Phase 14 | (13/15 lineage) | Backward-compatibility & data-integrity audit: `verify-backward-compat.js`. |
+| Phase 15 | `2f4e2a7`, `212aa1f` | Acceptance-flow verification: `verify-acceptance.js` updated to the client-owned quotation contract. |
+| Phase 16 | `fc21d21`, `32a98ca` | Performance: N+1 fixes, dashboard projections, route-level code splitting, portal pagination, index migration (25 indexes, `20260810201946`). |
+| UI pass (post-16) | `49c7a9f`, `e68278d` | Multiple sub-service selection + UI polish; dropdown/notification-tab hover fixes. Not a numbered phase. |
+| Phase 17 | working tree (uncommitted) | This documentation pass. |
+
+> Note: the Phase 16 progress section above says "26 indexes" — the actual migration contains
+> **25** `CREATE INDEX` statements (the enumeration in that section sums to 25). `ARCHITECTURE.md`
+> records the correct count.
+
+## Verification
+
+| Check | Result |
+|-------|--------|
+| Backend unit tests (`npm test`, no DB): **467/467 across 28 suites** | PASS (re-run this phase) |
+| `git status` — only documentation files changed | PASS |
+| No source / schema / migration / API / behavior changes | PASS (docs-only diff) |
+
