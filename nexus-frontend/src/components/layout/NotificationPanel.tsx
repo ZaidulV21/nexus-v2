@@ -1,7 +1,8 @@
-import { AnimatePresence, motion } from 'framer-motion';
+import { useState } from 'react';
+import * as PopoverPrimitive from '@radix-ui/react-popover';
 import { useNavigate } from 'react-router-dom';
-import { BellOff, Info, AlertTriangle, CheckCircle, AlertCircle } from 'lucide-react';
-import { useNotifications, useMarkNotificationAsRead, useMarkAllNotificationsAsRead } from '@/queries/useNotifications';
+import { Bell, BellOff, Info, AlertTriangle, CheckCircle, AlertCircle } from 'lucide-react';
+import { useNotifications, useMarkNotificationAsRead, useMarkAllNotificationsAsRead, useUnreadCount } from '@/queries/useNotifications';
 import { formatRelativeTime } from '@/lib/format';
 import { ROUTES } from '@/routes/routes';
 import type { InAppNotification, NotificationType } from '@/services/notificationService';
@@ -55,82 +56,87 @@ function PanelNotificationItem({
   );
 }
 
-export function NotificationPanel({
-  open,
-  onClose,
-}: {
-  open: boolean;
-  onClose: () => void;
-}) {
+export function NotificationPanel() {
+  const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const { data } = useNotifications(1, 8);
   const markAsRead = useMarkNotificationAsRead();
   const markAllAsRead = useMarkAllNotificationsAsRead();
+  const { data: unreadData } = useUnreadCount();
 
+  const unreadCount = unreadData?.count ?? 0;
   const notifications = data?.items ?? [];
 
   function handleNotificationClick(id: string, actionUrl?: string | null) {
     markAsRead.mutate(id);
-    onClose();
+    setOpen(false);
     if (actionUrl) {
       navigate(actionUrl);
     }
   }
 
   function handleViewAll() {
-    onClose();
+    setOpen(false);
     navigate(ROUTES.admin.notifications);
   }
 
   return (
-    <AnimatePresence>
-      {open && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={onClose} />
-          <motion.div
-            initial={{ opacity: 0, y: -6, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -6, scale: 0.98 }}
-            transition={{ duration: 0.15 }}
-            className="absolute right-0 top-11 z-50 w-80 overflow-hidden rounded-lg border border-border bg-surface-raised shadow-lg"
-          >
-            <div className="flex items-center justify-between border-b border-border px-4 py-3">
-              <p className="text-sm font-semibold text-ink">Notifications</p>
-              <button
-                onClick={() => markAllAsRead.mutate()}
-                className="text-xs text-accent hover:text-accent/80 transition-colors"
-              >
-                Mark all read
-              </button>
-            </div>
+    <PopoverPrimitive.Root open={open} onOpenChange={setOpen}>
+      <PopoverPrimitive.Trigger asChild>
+        <button
+          type="button"
+          aria-label="Notifications"
+          className="relative rounded-md p-2 text-ink-muted transition-colors hover:bg-canvas hover:text-ink"
+        >
+          <Bell className="h-4 w-4" />
+          {unreadCount > 0 && (
+            <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold text-white">
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+          )}
+        </button>
+      </PopoverPrimitive.Trigger>
 
-            {notifications.length === 0 ? (
-              <div className="flex flex-col items-center gap-2 px-4 py-10 text-center">
-                <BellOff className="h-5 w-5 text-ink-faint" strokeWidth={1.75} />
-                <p className="text-sm text-ink-muted">You&apos;re all caught up</p>
-              </div>
-            ) : (
-              <>
-                <ul className="max-h-80 overflow-y-auto scrollbar-thin">
-                  {notifications.map((n) => (
-                    <PanelNotificationItem
-                      key={n.id}
-                      notification={n}
-                      onRead={handleNotificationClick}
-                    />
-                  ))}
-                </ul>
-                <button
-                  onClick={handleViewAll}
-                  className="w-full border-t border-border px-4 py-2.5 text-center text-xs font-medium text-accent transition-colors hover:bg-canvas"
-                >
-                  View all notifications
-                </button>
-              </>
-            )}
-          </motion.div>
-        </>
-      )}
-    </AnimatePresence>
+      <PopoverPrimitive.Content
+        align="end"
+        sideOffset={8}
+        className="z-50 w-80 max-w-[calc(100vw-1rem)] overflow-hidden rounded-lg border border-border bg-surface-raised shadow-lg animate-scale-in"
+      >
+        <div className="flex items-center justify-between border-b border-border px-4 py-3">
+          <p className="text-sm font-semibold text-ink">Notifications</p>
+          <button
+            onClick={() => markAllAsRead.mutate()}
+            className="text-xs text-accent hover:text-accent/80 transition-colors"
+          >
+            Mark all read
+          </button>
+        </div>
+
+        {notifications.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 px-4 py-10 text-center">
+            <BellOff className="h-5 w-5 text-ink-faint" strokeWidth={1.75} />
+            <p className="text-sm text-ink-muted">You&apos;re all caught up</p>
+          </div>
+        ) : (
+          <>
+            <ul className="max-h-80 overflow-y-auto scrollbar-thin">
+              {notifications.map((n) => (
+                <PanelNotificationItem
+                  key={n.id}
+                  notification={n}
+                  onRead={handleNotificationClick}
+                />
+              ))}
+            </ul>
+            <button
+              onClick={handleViewAll}
+              className="w-full border-t border-border px-4 py-2.5 text-center text-xs font-medium text-accent transition-colors hover:bg-canvas"
+            >
+              View all notifications
+            </button>
+          </>
+        )}
+      </PopoverPrimitive.Content>
+    </PopoverPrimitive.Root>
   );
 }

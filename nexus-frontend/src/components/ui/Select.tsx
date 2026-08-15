@@ -34,13 +34,14 @@ export function SelectContent({ className, children, ...props }: SelectPrimitive
       <SelectPrimitive.Content
         className={cn(
           'z-50 overflow-hidden rounded-lg border border-border bg-surface-raised shadow-lg animate-scale-in',
+          'max-h-[min(var(--radix-select-content-available-height),20rem)] max-w-[calc(100vw-2rem)]',
           className
         )}
         position="popper"
         sideOffset={6}
         {...props}
       >
-        <SelectPrimitive.Viewport className="p-1">{children}</SelectPrimitive.Viewport>
+        <SelectPrimitive.Viewport className="max-h-full overflow-y-auto p-1">{children}</SelectPrimitive.Viewport>
       </SelectPrimitive.Content>
     </SelectPrimitive.Portal>
   );

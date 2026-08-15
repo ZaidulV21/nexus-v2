@@ -89,7 +89,7 @@ export function Navbar() {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: 8 }}
                     transition={{ duration: 0.15 }}
-                    className="absolute left-0 top-full z-50 mt-1 w-64 rounded-xl border border-border bg-surface-raised p-2 shadow-lg"
+                    className="absolute left-0 top-full z-50 mt-1 w-64 max-h-[min(60vh,24rem)] overflow-y-auto rounded-xl border border-border bg-surface-raised p-2 shadow-lg"
                   >
                     <Link
                       to="/services"
@@ -181,7 +181,7 @@ export function Navbar() {
                       exit={{ opacity: 0, height: 0 }}
                       className="overflow-hidden"
                     >
-                      <div className="pl-4 pb-2">
+                      <div className="max-h-[60vh] overflow-y-auto pl-4 pb-2">
                         <Link
                           to="/services"
                           className="block rounded-lg px-3 py-2 text-sm font-medium text-ink hover:bg-accent-subtle hover:text-accent"

@@ -4,8 +4,6 @@ import { cn } from '@/lib/utils';
 import { ROUTES } from '@/routes/routes';
 import { CompanyLogo, CompanyName } from '@/components/layout/CompanyLogo';
 import { NotificationPanel } from '@/components/layout/NotificationPanel';
-import { useDisclosure } from '@/hooks/useDisclosure';
-import { useUnreadCount } from '@/queries/useNotifications';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/app/AuthContext';
@@ -28,9 +26,6 @@ const PORTAL_NAV = [
 export function PortalLayout() {
   const { actor, logout } = useAuth();
   const navigate = useNavigate();
-  const notifications = useDisclosure(false);
-  const { data: unreadData } = useUnreadCount();
-  const unreadCount = unreadData?.count ?? 0;
 
   function handleLogout() {
     logout();
@@ -51,20 +46,7 @@ export function PortalLayout() {
         </div>
         <div className="flex items-center gap-2">
           <ThemeToggle />
-          <div className="relative">
-            <button
-              onClick={notifications.toggle}
-              className="relative rounded-md p-2 text-ink-muted transition-colors hover:bg-canvas hover:text-ink"
-            >
-              <Bell className="h-4 w-4" />
-              {unreadCount > 0 && (
-                <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold text-white">
-                  {unreadCount > 99 ? '99+' : unreadCount}
-                </span>
-              )}
-            </button>
-            <NotificationPanel open={notifications.isOpen} onClose={notifications.close} />
-          </div>
+          <NotificationPanel />
           <div className="hidden text-right sm:block">
             <p className="text-sm font-medium text-ink">{userName}</p>
             <p className="text-xs text-ink-faint">Signed in</p>

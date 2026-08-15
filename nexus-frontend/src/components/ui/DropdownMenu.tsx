@@ -14,7 +14,8 @@ export function DropdownMenuContent({ className, sideOffset = 6, ...props }: Dro
       <DropdownPrimitive.Content
         sideOffset={sideOffset}
         className={cn(
-          'z-50 min-w-[180px] overflow-hidden rounded-lg border border-border bg-surface-raised p-1 shadow-lg animate-scale-in',
+          'z-50 min-w-[180px] overflow-x-hidden overflow-y-auto rounded-lg border border-border bg-surface-raised p-1 shadow-lg animate-scale-in',
+          'max-h-[min(var(--radix-dropdown-menu-content-available-height),20rem)]',
           className
         )}
         {...props}
@@ -67,7 +68,7 @@ export function DropdownMenuSubContent({ className, ...props }: DropdownPrimitiv
   return (
     <DropdownPrimitive.Portal>
       <DropdownPrimitive.SubContent
-        className={cn('z-50 min-w-[160px] rounded-lg border border-border bg-surface-raised p-1 shadow-lg', className)}
+        className={cn('z-50 min-w-[160px] overflow-x-hidden overflow-y-auto rounded-lg border border-border bg-surface-raised p-1 shadow-lg', className)}
         {...props}
       />
     </DropdownPrimitive.Portal>

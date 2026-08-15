@@ -1,4 +1,4 @@
-import { Menu, Search, Bell, ChevronDown, LogOut, Settings, User } from 'lucide-react';
+import { Menu, Search, ChevronDown, LogOut, Settings, User } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Breadcrumbs, type BreadcrumbItem } from '@/components/ui/Breadcrumbs';
 import { Avatar } from '@/components/ui/Avatar';
@@ -10,11 +10,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuLabel,
 } from '@/components/ui/DropdownMenu';
-import { useDisclosure } from '@/hooks/useDisclosure';
 import { useAuth } from '@/app/AuthContext';
 import { ROUTES } from '@/routes/routes';
 import { NotificationPanel } from './NotificationPanel';
-import { useUnreadCount } from '@/queries/useNotifications';
 import { ThemeToggle } from '@/components/theme/ThemeToggle';
 
 export function TopNav({
@@ -24,12 +22,8 @@ export function TopNav({
   breadcrumbs: BreadcrumbItem[];
   onOpenMobileSidebar: () => void;
 }) {
-  const notifications = useDisclosure(false);
   const { actor, logout } = useAuth();
   const navigate = useNavigate();
-  const { data: unreadData } = useUnreadCount();
-
-  const unreadCount = unreadData?.count ?? 0;
 
   const userName = actor?.email.split('@')[0] ?? 'Admin';
   const userEmail = actor?.email ?? '';
@@ -65,20 +59,7 @@ export function TopNav({
 
         <ThemeToggle />
 
-        <div className="relative">
-          <button
-            onClick={notifications.toggle}
-            className="relative rounded-md p-2 text-ink-muted transition-colors hover:bg-canvas hover:text-ink"
-          >
-            <Bell className="h-4 w-4" />
-            {unreadCount > 0 && (
-              <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold text-white">
-                {unreadCount > 99 ? '99+' : unreadCount}
-              </span>
-            )}
-          </button>
-          <NotificationPanel open={notifications.isOpen} onClose={notifications.close} />
-        </div>
+        <NotificationPanel />
 
         <DropdownMenu>
           <DropdownMenuTrigger className="flex items-center gap-2 rounded-md p-1 pr-2 transition-colors hover:bg-canvas">
