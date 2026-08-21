@@ -178,7 +178,7 @@ export function HeroSection() {
       <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-20 sm:py-28 lg:py-36 lg:pt-10">
         <div className="grid gap-14 lg:grid-cols-2 lg:gap-20 items-end lg:items-center">
           {/* Left: Text content with AnimatePresence for slide transitions */}
-          <div className="relative min-h-[360px] sm:min-h-[420px]">
+          <div className="relative min-h-[420px]">
             <AnimatePresence mode="wait">
               <motion.div
                 key={activeIndex}
@@ -186,7 +186,7 @@ export function HeroSection() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
                 transition={{ duration: 0.5, ease: [0.25, 0.1, 0.25, 1] }}
-                className="absolute inset-0"
+                className="sm:absolute sm:inset-0 pb-2 sm:pb-0"
               >
                 {/* Badge */}
                 <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-xs font-medium text-white/60 backdrop-blur-sm">
@@ -317,7 +317,7 @@ export function HeroSection() {
         </div>
 
         {/* Navigation — labeled slide tabs with autoplay progress, arrows, trust badges */}
-        <div className="mt-12 flex flex-col gap-6 lg:mt-16">
+        <div className="mt-14 flex flex-col gap-8 sm:mt-12 sm:gap-6 lg:mt-16">
           <div className="flex items-center gap-1.5 sm:gap-2">
             {SLIDES.map((s, i) => (
               <button
